@@ -2,11 +2,22 @@ dns.alidns.com
 doh.pub
 dns.cloudflare.com
 dns.twnic.tw
+doh.dns.sb
 mobile.events.data.microsoft.com
 natfrp-api.globalslb.net
+natfrp-rm.globalslb.net
 default.exp-tas.com
 us-mobile.events.data.microsoft.com
 eu-mobile.events.data.microsoft.com
 au-mobile.events.data.microsoft.com
 jp-mobile.events.data.microsoft.com
 browser.events.data.microsoft.com
+api.snapcraft.io # Ubuntu auto-updates
+motd.ubuntu.com
+launchpad.proxy.ustclug.org
+esm.ubuntu.com
+update.code.visualstudio.com
+main.vscode-cdn.net
+storage.codegpt.co
+go.dev
+goproxy.cn
