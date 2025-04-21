@@ -272,6 +272,21 @@ class Cell():
 
 
 class CellExtractor(object):
+    """
+    Select the reassemble info related field for each protocol in DATA layer.
+    """
+    protocol_reassemble_field = {
+        "tls": "tls_segments",
+        "tcp": "tcp_segments",
+        "vmess": "vmess_segments",
+    }
+
+    protocol_byte_counter = {
+        "tls": TLSByteCounter(),
+        "tcp": TCPByteCounter(),
+        "http2": HTTP2ByteCounter(),
+    }
+
     def __init__(self):
         self._name = "abstract" 
 
@@ -279,19 +294,41 @@ class CellExtractor(object):
     def name(self):
         return self._name
     
-    def layer_extract(self, layer) -> Cell:
-        raise NotImplementedError()
+    def layer_extract(self, layer, frame_number: int, lower_protocol) -> Cell:
+        cell = Cell(self.name, frame_number)
+        
+        if layer.layer_name == "DATA":
+            # Make tls_segments to more generic.
+            for segment_frame_number, segment_size in match_segment_number(
+                layer.get_field(
+                    self.protocol_reassemble_field[lower_protocol]
+                    )
+                ):
+
+                cell.abs_reassemble_info["segment_frame_number"].append(segment_frame_number)
+                cell.abs_reassemble_info["segment_size"].append(segment_size)
+
+        elif layer.layer_name == self.name:
+            counter = self.protocol_byte_counter[self.name]
+            cell.abs_reassemble_info["segment_frame_number"].append(frame_number)
+            cell.abs_reassemble_info["segment_size"].append(counter.layer_count(layer))
+
+        else:
+            raise ValueError(f"Protocol mismatch: only support {self.name} and DATA layer, but got {layer.layer_name}")
+        
+        return cell
     
     def extract(self, pkt, lower_protocol) -> List[Cell]:
         """
         Extract reassembly information from the given packet with the given protocol.
         """
+        lower_protocol = lower_protocol.lower()
         layers = layer_extractor(pkt, self.name, lower_protocol)
         filtered_layers = seq_filter(layers, layer_label_func, annoying_reverse=True)
         cells = []
 
         for layer in filtered_layers:
-            cell = self.layer_extract(layer, int(pkt.number))
+            cell = self.layer_extract(layer, int(pkt.number), lower_protocol)
             cells.append(cell)
         
         return cells
@@ -301,26 +338,8 @@ class HTTP2CellExtractor(CellExtractor):
     def __init__(self):
         self._name = "http2"
 
-    def layer_extract(self, layer, frame_number: int) -> Cell:
-        cell = Cell("http2", frame_number)
-        
-        if layer.layer_name == "DATA":
-            for segment_frame_number, segment_size in match_segment_number(layer.tls_segments):
-                cell.abs_reassemble_info["segment_frame_number"].append(segment_frame_number)
-                cell.abs_reassemble_info["segment_size"].append(segment_size)
-
-        elif layer.layer_name == "http2":
-            counter = HTTP2ByteCounter()
-            cell.abs_reassemble_info["segment_frame_number"].append(frame_number)
-            cell.abs_reassemble_info["segment_size"].append(counter.layer_count(layer))
-
-        else:
-            raise ValueError(f"Protocol mismatch: only support {self.name} and DATA layer, but got {layer.layer_name}")
-        
-        return cell
-
     def extract(self, pkt, lower_protocol="TLS") -> List[Cell]:
-        return super().extract(pkt, lower_protocol=lower_protocol)
+        return super().extract(pkt, lower_protocol)
     
 
 def layer_extractor(pkt, upper_protocol, lower_protocol):
