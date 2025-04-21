@@ -273,25 +273,33 @@ class Cell():
 
 class CellExtractor(object):
     def __init__(self):
-        pass 
+        self._name = "abstract" 
 
+    @property
+    def name(self):
+        return self._name
+    
     def layer_extract(self, layer) -> Cell:
         raise NotImplementedError()
     
-    def extract(self, pkt) -> List[Cell]:
+    def extract(self, pkt, lower_protocol) -> List[Cell]:
         """
         Extract reassembly information from the given packet with the given protocol.
         """
-        raise NotImplementedError()
+        layers = layer_extractor(pkt, self.name, lower_protocol)
+        filtered_layers = seq_filter(layers, layer_label_func, annoying_reverse=True)
+        cells = []
+
+        for layer in filtered_layers:
+            cell = self.layer_extract(layer, int(pkt.number))
+            cells.append(cell)
+        
+        return cells
     
 
 class HTTP2CellExtractor(CellExtractor):
     def __init__(self):
         self._name = "http2"
-
-    @property
-    def name(self):
-        return self._name
 
     def layer_extract(self, layer, frame_number: int) -> Cell:
         cell = Cell("http2", frame_number)
@@ -312,18 +320,7 @@ class HTTP2CellExtractor(CellExtractor):
         return cell
 
     def extract(self, pkt, lower_protocol="TLS") -> List[Cell]:
-        """
-        Extract reassembly information from the given packet with the given protocol.
-        """
-        layers = layer_extractor(pkt, self.name, lower_protocol)
-        filtered_layers = seq_filter(layers, layer_label_func, annoying_reverse=True)
-        cells = []
-
-        for layer in filtered_layers:
-            cell = self.layer_extract(layer, int(pkt.number))
-            cells.append(cell)
-        
-        return cells
+        return super().extract(pkt, lower_protocol=lower_protocol)
     
 
 def layer_extractor(pkt, upper_protocol, lower_protocol):
@@ -476,10 +473,7 @@ def match_segment_number(s: str):
 
 def get_reassemble_info(cap: pyshark.FileCapture, protocol_stack: List[str] = ['TCP', 'TLS',]): 
     """
-    Extract the reassemble information for each packet given the protocol stack. In PyShark, the reassembly
-    information is wrapped in the DATA layer, which is a fake-field-wrapper. When there are multiple upper
-    layers, multiple DATA layer might be used. For example, given a packet TCP/TLS/HTTP2, there are 3 possible
-    cases, we list the corresponding layers for each of them:
+    Extract the reassemble information for each packet given the protocol stack. In PyShark, the reassembly information is wrapped in the DATA layer, which is a fake-field-wrapper. When there are multiple upper layers, multiple DATA layer might be used. For example, given a packet TCP/TLS/HTTP2, there are 3 possible cases, we list the corresponding layers for each of them:
 
     + 1. The TLS layer is reassembled, but HTTP2 layer is not (TCP/DATA/TLS/HTTP2/DATA);
     + 2. The TLS layer is not reassembled, but HTTP2 layer is (TCP/TLS/DATA/HTTP2/DATA);
