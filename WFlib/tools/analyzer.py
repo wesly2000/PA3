@@ -316,7 +316,7 @@ class HTTP2CellExtractor(CellExtractor):
         Extract reassembly information from the given packet with the given protocol.
         """
         layers = layer_extractor(pkt, self.name, lower_protocol)
-        filtered_layers = seq_filter(layers, layer_label_func)
+        filtered_layers = seq_filter(layers, layer_label_func, annoying_reverse=True)
         cells = []
 
         for layer in filtered_layers:
@@ -371,7 +371,7 @@ def layer_label_func(layer):
     return 0 if layer.layer_name == 'DATA' else 1
 
 
-def seq_filter(seq: List[object], label_func: Callable[[object], str]):
+def seq_filter(seq: List[object], label_func: Callable[[object], str], annoying_reverse=False):
     """
     A generic algorithm to solve the following abstract problem:
 
@@ -408,21 +408,12 @@ def seq_filter(seq: List[object], label_func: Callable[[object], str]):
         first_y = 0
         for i in range(len(generic_seq)):
             if generic_seq[i] == 0:
-                tmp_x_idx_pool = []
-                while generic_seq[i] == 0:
-                    tmp_x_idx_pool.append(i)
-                    i += 1
-
-                i -= 1  # for-loop move forward i by 1, we need to minus 1 to remove the affect
-
-                new_seq_idx += tmp_x_idx_pool.reverse()
-
                 if first_y <= i:  # Fast-forward
                     # Prepend all un-eliminated y before the current x.
                     for j in range(first_y, i):
                         new_seq_idx.append(j)
                     first_y = i + 1
-                # new_seq_idx.append(i)
+                new_seq_idx.append(i)
                 # Search for the first y that right follows x.
                 for j in range(first_y, len(generic_seq)):
                     if generic_seq[j] == 1:
@@ -434,11 +425,42 @@ def seq_filter(seq: List[object], label_func: Callable[[object], str]):
             new_seq_idx.append(i)
 
         return new_seq_idx
+    
+    def generic_annoying_reverse(generic_seq, seq_idx):
+        """
+        Given sequence [x_1, x_2, x_3, y_1, y_2, y_3, y_4], after generic_seq_filter,
+        the result should be [x_1, x_2, x_3, y_4]. But in Wireshark, each consecutive x's,
+        their order needs to be reversed, i.e., the result should be [x_3, x_2, x_1, y_4].
+        """
+        i = 0
+        reversed_seq_idx = []
+        while i < len(seq_idx):
+            if generic_seq[seq_idx[i]] == 0:
+                tmp_seq_idx_pool = []
+                j = i
+                while j < len(seq_idx) and generic_seq[seq_idx[j]] == 0:
+                    tmp_seq_idx_pool.append(seq_idx[j])
+                    j += 1  # Out-of-bound error should not happen, since sequence does not with 0
+
+                i = j
+                tmp_seq_idx_pool.reverse()
+                reversed_seq_idx += tmp_seq_idx_pool
+
+            else:
+                reversed_seq_idx.append(seq_idx[i])
+                i += 1
+
+        return reversed_seq_idx
+
     if len(seq) == 0:
         return []
 
     generic_seq = [label_func(elem) for elem in seq]
     new_seq_idx = generic_seq_filter(generic_seq)
+
+    if annoying_reverse:
+        new_seq_idx = generic_annoying_reverse(generic_seq, new_seq_idx)
+
     new_seq = [seq[i] for i in new_seq_idx]
     return new_seq
 

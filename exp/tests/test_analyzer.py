@@ -325,11 +325,69 @@ def test_seq_filter_02():
             
     cap.close()
 
+def test_seq_filter_03():
+    """
+    This test covers seq_filter with different type of labels.
+    """
+    seq = [0, 1, 0, 0, 0, 1, 1, 1, 1]
+    target = [0, 0, 0, 0, 1]
+    result = seq_filter(seq, label_func=lambda x: x, annoying_reverse=True)
+
+    assert target == result
+
+    seq = ['x', 'y', 'x', 'x', 'x', 'y', 'y', 'y', 'y']
+    target = ['x', 'x', 'x', 'x', 'y']
+    result = seq_filter(seq, label_func=lambda x: 0 if x == 'x' else 1, annoying_reverse=True)
+
+    seq = ['y', 'y', 'y', 'y']
+    target = ['y', 'y', 'y', 'y']
+    result = seq_filter(seq, label_func=lambda x: 0 if x == 'x' else 1, annoying_reverse=True)
+
+    seq = []
+    target = []
+    result = seq_filter(seq, label_func=lambda x: 0 if x == 'x' else 1, annoying_reverse=True)
+
+    seq = ['x', 'y', 'x', 'y', 'x', 'y', 'x', 'x', 'y', 'y']
+    target = ['x', 'x', 'x', 'x', 'x']
+    result = seq_filter(seq, label_func=lambda x: 0 if x == 'x' else 1, annoying_reverse=True)
+    assert target == result
+
+    seq = ['y', 'x', 'y']
+    target = ['y', 'x']
+    result = seq_filter(seq, label_func=lambda x: 0 if x == 'x' else 1, annoying_reverse=True)
+    assert target == result
+
+def test_HTTP2CellExtractor_01():
+    cell_extractor = HTTP2CellExtractor()
+    tcp_filter = "tcp.stream == 0"
+    keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
+    cap = pyshark.FileCapture(input_file=apple_file, display_filter=tcp_filter, 
+                                custom_parameters=["-C", "Customized", "-2"],
+                                override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
+    for pkt in cap:
+        if pkt.number == "104":  # This packet contains a DATA layer and multiple HTTP2 layers.
+            cells = cell_extractor.extract(pkt)
+            assert len(cells) == 2 and \
+            cells[0].abs_frame_number == 104 and \
+            cells[0].abs_reassemble_info == {"segment_frame_number": [104], "segment_size": [7706]} and \
+            cells[1].abs_frame_number == 104 and \
+            cells[1].abs_reassemble_info == {"segment_frame_number": [104, 104], "segment_size": [16384, 9]}
+            
+        if pkt.number == "212":  # This packet contains a DATA layer and multiple HTTP2 layers.
+            cells = cell_extractor.extract(pkt)
+            assert len(cells) == 2 and \
+            cells[0].abs_frame_number == 212 and \
+            cells[0].abs_reassemble_info == {"segment_frame_number": [211, 212], "segment_size": [16384, 9]} and \
+            cells[1].abs_frame_number == 212 and \
+            cells[1].abs_reassemble_info == {"segment_frame_number": [212, 212], "segment_size": [16384, 9]}
+            
+    cap.close()
+
 def test_match_segment_number_01():
     """
     This test covers matching needed fields.
     """
-    msg = "#12(2345), #23(333)"
+    msg = "2 Reassembled TLS segments (16393 bytes): #12(2345), #23(333)"
 
     target = [(12, 2345), (23, 333)]
     result = match_segment_number(msg)
