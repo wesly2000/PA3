@@ -270,6 +270,7 @@ class Cell():
         self.rel_frame_number = None
         self.rel_reassemble_info = {"segment_frame_number": [], "segment_size": []}
 
+
 class CellExtractor(object):
     def __init__(self):
         pass 
@@ -292,20 +293,23 @@ class HTTP2CellExtractor(CellExtractor):
     def name(self):
         return self._name
 
-    def layer_extract(self, layer, frame_number) -> Cell:
+    def layer_extract(self, layer, frame_number: int) -> Cell:
         cell = Cell("http2", frame_number)
         
         if layer.layer_name == "DATA":
-            for segment_frame_number, segment_size in match_segment_number(layer.tls_segment):
+            for segment_frame_number, segment_size in match_segment_number(layer.tls_segments):
                 cell.abs_reassemble_info["segment_frame_number"].append(segment_frame_number)
                 cell.abs_reassemble_info["segment_size"].append(segment_size)
 
         elif layer.layer_name == "http2":
-            cell.abs_reassemble_info["segment_frame_number"].append(layer.stream_frame_number)
-            cell.abs_reassemble_info["segment_size"].append(layer.length)
+            counter = HTTP2ByteCounter()
+            cell.abs_reassemble_info["segment_frame_number"].append(frame_number)
+            cell.abs_reassemble_info["segment_size"].append(counter.layer_count(layer))
 
         else:
             raise ValueError(f"Protocol mismatch: only support {self.name} and DATA layer, but got {layer.layer_name}")
+        
+        return cell
 
     def extract(self, pkt, lower_protocol="TLS") -> List[Cell]:
         """
@@ -316,7 +320,7 @@ class HTTP2CellExtractor(CellExtractor):
         cells = []
 
         for layer in filtered_layers:
-            cell = self.layer_extract(layer, layer.frame_number)
+            cell = self.layer_extract(layer, int(pkt.number))
             cells.append(cell)
         
         return cells
@@ -404,12 +408,21 @@ def seq_filter(seq: List[object], label_func: Callable[[object], str]):
         first_y = 0
         for i in range(len(generic_seq)):
             if generic_seq[i] == 0:
+                tmp_x_idx_pool = []
+                while generic_seq[i] == 0:
+                    tmp_x_idx_pool.append(i)
+                    i += 1
+
+                i -= 1  # for-loop move forward i by 1, we need to minus 1 to remove the affect
+
+                new_seq_idx += tmp_x_idx_pool.reverse()
+
                 if first_y <= i:  # Fast-forward
                     # Prepend all un-eliminated y before the current x.
                     for j in range(first_y, i):
                         new_seq_idx.append(j)
                     first_y = i + 1
-                new_seq_idx.append(i)
+                # new_seq_idx.append(i)
                 # Search for the first y that right follows x.
                 for j in range(first_y, len(generic_seq)):
                     if generic_seq[j] == 1:
