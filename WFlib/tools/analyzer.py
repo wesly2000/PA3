@@ -263,6 +263,11 @@ class CaptureCounter():
     
 
 class Cell():
+    """
+    Abstraction of Wireshark PDU for any protocol. The comparison (<, >, ==, <=, >=) is for partial order.
+    Especially, the == operator checks if two cells have the same abs_frame_number and abs_segment_frame_number.
+    Don't use it as a check for all the attributes of two cells.
+    """
     def __init__(self, proto, abs_frame_number):
         self.proto = proto
         self.abs_frame_number = abs_frame_number 
@@ -272,6 +277,68 @@ class Cell():
         self.segment_size = []
         self.size = 0
 
+    def __eq__(self, other):
+        if not isinstance(other, Cell):
+            raise TypeError("Can only compare with another Cell object")
+        if self.proto != other.proto:
+            raise ValueError(f"Cannot compare {self} with {other}, since they are not from the same protocol.")
+        if self.abs_frame_number == other.abs_frame_number and \
+            self.abs_segment_frame_number == other.abs_segment_frame_number:
+            return True
+        else:
+            return False
+        
+    def __lt__(self, other):
+        if not isinstance(other, Cell):
+            raise TypeError("Can only compare with another Cell object")
+        
+        if self.proto != other.proto:
+            raise ValueError(f"Cannot compare {self} with {other}, since they are not from the same protocol.")
+        
+        if self.abs_frame_number < other.abs_frame_number:
+            assert max(self.abs_segment_frame_number) <= max(other.abs_segment_frame_number), "Bad Order: Previous frame has segments beyond the next frame."
+            return True
+
+        elif self.abs_frame_number > other.abs_frame_number:
+            assert max(self.abs_segment_frame_number) >= max(other.abs_segment_frame_number), "Bad Order: Next frame has segments before the previous frame."
+            return False
+        
+        else:  # If the two cells are from the same frame, compare there segment number.
+            if self == other:
+                return False
+            else:  # Their segment number are not the same.
+                # TODO: more complicated check, for sanity check here, e.g., self.abs_segment_frame_number = [2, 3] and other.abs_segment_frame_number = [1, 2, 3, 4], such case MUST NOT happen.
+                if max(self.abs_segment_frame_number) < max(other.abs_segment_frame_number):
+                    return True
+                elif max(self.abs_segment_frame_number) > max(other.abs_segment_frame_number):
+                    return False
+                else:  # Their segment number are the same.
+                    raise ValueError(f"Cannot compare {self} with {other}, since they are not adjacent.")
+                
+    def __gt__(self, other):
+        if not isinstance(other, Cell):
+            raise TypeError("Can only compare with another Cell object")
+
+        if self.proto!= other.proto:
+            raise ValueError(f"Cannot compare {self} with {other}, since they are not from the same protocol.")
+
+        if self.abs_frame_number > other.abs_frame_number:
+            assert max(self.abs_segment_frame_number) >= max(other.abs_segment_frame_number), "Bad Order: Next frame has segments before the previous frame."
+            return True 
+
+        elif self.abs_frame_number < other.abs_frame_number:
+            assert max(self.abs_segment_frame_number) <= max(other.abs_segment_frame_number), "Bad Order: Previous frame has segments beyond the next frame."
+            return False
+
+        else:  # If the two cells are from the same frame, compare there segment number.
+            if self == other:
+                return False
+            else:  # Their segment number are not the same.
+                # TODO: more complicated check, for sanity check here, e.g., self.abs_segment_frame_number = [2, 3] and other.abs_segment_frame_number = [1, 2, 3, 4], such case MUST NOT happen.
+                if max(self.abs_segment_frame_number) > max(other.abs_segment_frame_number):
+                    return True
+                elif max(self.abs_segment_frame_number) < max(other.abs_segment_frame_number):
+                    return False
 
 class CellExtractor(object):
     """

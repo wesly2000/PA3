@@ -391,6 +391,32 @@ def test_HTTP2CellExtractor_01():
             
     cap.close()
 
+
+def test_cell_comparison():
+    """
+    This test covers the partial order comparison of cells.
+    """
+    cell_1 = Cell(proto="http2", abs_frame_number=104)
+    cell_1.abs_segment_frame_number = [104, 106]
+    cell_2 = Cell(proto="http2", abs_frame_number=104)
+    cell_2.abs_segment_frame_number = [106, 108]
+
+    assert cell_1 < cell_2 and cell_2 > cell_1
+
+    cell_1 = Cell(proto="http2", abs_frame_number=104)
+    cell_1.abs_segment_frame_number = [101, 102, 104]
+    cell_2 = Cell(proto="http2", abs_frame_number=104)
+    cell_2.abs_segment_frame_number = [101, 102, 104]
+
+    assert cell_1 == cell_2 and cell_2 == cell_1
+
+    cell_1 = Cell(proto="http2", abs_frame_number=106)
+    cell_1.abs_segment_frame_number = [104, 106]
+    cell_2 = Cell(proto="http2", abs_frame_number=108)
+    cell_2.abs_segment_frame_number = [104, 106]
+
+    assert cell_1 < cell_2 and cell_2 > cell_1
+
 def test_match_segment_number_01():
     """
     This test covers matching needed fields.
