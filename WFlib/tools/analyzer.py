@@ -270,6 +270,7 @@ class Cell():
         self.rel_frame_number = None
         self.rel_segment_frame_number = []
         self.segment_size = []
+        self.size = 0
 
 
 class CellExtractor(object):
@@ -316,6 +317,8 @@ class CellExtractor(object):
 
         else:
             raise ValueError(f"Protocol mismatch: only support {self.name} and DATA layer, but got {layer.layer_name}")
+        
+        cell.size = sum(cell.segment_size)
         
         return cell
     
