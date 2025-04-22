@@ -84,7 +84,7 @@ def test_tls_bytes_count():
         byte_count += counter.packet_count(pkt)
         pkt_count += 1
 
-    byte_target, packet_target = 10347, 16
+    byte_target, packet_target = 10368, 16
 
     capture.close()
     
@@ -391,6 +391,47 @@ def test_HTTP2CellExtractor_01():
             
     cap.close()
 
+def test_TLSCellExtractor_01():
+    cell_extractor = TLSCellExtractor()
+    tcp_filter = "tcp.stream == 0"
+    keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
+    cap = pyshark.FileCapture(input_file=apple_file, display_filter=tcp_filter, 
+                                custom_parameters=["-C", "Customized", "-2"],
+                                override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
+    for pkt in cap:
+        if pkt.number == "211":  # This packet contains a DATA layer and multiple HTTP2 layers.
+            cells = cell_extractor.extract(pkt)
+            assert len(cells) == 2 and \
+            cells[0].abs_frame_number == 211 and \
+            cells[0].segment_size == [15641, 765] and \
+            cells[0].abs_segment_frame_number == [210, 211] and \
+            cells[0].size == 16406 and \
+            cells[1].abs_frame_number == 211 and \
+            cells[1].segment_size == [16437] and \
+            cells[1].abs_segment_frame_number == [211] and \
+            cells[1].size == 16437
+
+        if pkt.number == "220":  # This packet contains a DATA layer and multiple HTTP2 layers.
+            cells = cell_extractor.extract(pkt)
+            assert len(cells) == 2 and \
+            cells[0].abs_frame_number == 220 and \
+            cells[0].segment_size == [13365, 3041] and \
+            cells[0].abs_segment_frame_number == [219, 220] and \
+            cells[0].size == 16406 and \
+            cells[1].abs_frame_number == 220 and \
+            cells[1].segment_size == [31] and \
+            cells[1].abs_segment_frame_number == [220] and \
+            cells[1].size == 31
+            
+        if pkt.number == "66":  # This packet contains a DATA layer and multiple HTTP2 layers.
+            cells = cell_extractor.extract(pkt)
+            assert len(cells) == 1 and \
+            cells[0].abs_frame_number == 66 and \
+            cells[0].segment_size == [3838, 4236, 2824, 1412, 4096] and \
+            cells[0].abs_segment_frame_number == [60, 61, 63, 65, 66] and \
+            cells[0].size == 16406 
+            
+    cap.close()
 
 def test_cell_comparison():
     """

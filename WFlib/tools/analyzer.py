@@ -164,7 +164,7 @@ class TLSByteCounter(ByteCounter):
         super().__init__(name)
         self.type_len = 1  # TLS record type
         self.ver_len = 2  # TLS version
-        self.length_len = 1  # TLS record length
+        self.length_len = 2  # TLS record length
 
     def layer_count(self, layer, extra_data = None) -> int:
         cnt = 0
