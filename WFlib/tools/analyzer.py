@@ -266,9 +266,10 @@ class Cell():
     def __init__(self, proto, abs_frame_number):
         self.proto = proto
         self.abs_frame_number = abs_frame_number 
-        self.abs_reassemble_info = {"segment_frame_number": [], "segment_size": []}
+        self.abs_segment_frame_number = []
         self.rel_frame_number = None
-        self.rel_reassemble_info = {"segment_frame_number": [], "segment_size": []}
+        self.rel_segment_frame_number = []
+        self.segment_size = []
 
 
 class CellExtractor(object):
@@ -305,13 +306,13 @@ class CellExtractor(object):
                     )
                 ):
 
-                cell.abs_reassemble_info["segment_frame_number"].append(segment_frame_number)
-                cell.abs_reassemble_info["segment_size"].append(segment_size)
+                cell.abs_segment_frame_number.append(segment_frame_number)
+                cell.segment_size.append(segment_size)
 
         elif layer.layer_name == self.name:
             counter = self.protocol_byte_counter[self.name]
-            cell.abs_reassemble_info["segment_frame_number"].append(frame_number)
-            cell.abs_reassemble_info["segment_size"].append(counter.layer_count(layer))
+            cell.abs_segment_frame_number.append(frame_number)
+            cell.segment_size.append(counter.layer_count(layer))
 
         else:
             raise ValueError(f"Protocol mismatch: only support {self.name} and DATA layer, but got {layer.layer_name}")

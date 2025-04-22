@@ -369,17 +369,21 @@ def test_HTTP2CellExtractor_01():
             cells = cell_extractor.extract(pkt)
             assert len(cells) == 2 and \
             cells[0].abs_frame_number == 104 and \
-            cells[0].abs_reassemble_info == {"segment_frame_number": [104], "segment_size": [7706]} and \
+            cells[0].segment_size == [7706] and \
+            cells[0].abs_segment_frame_number == [104] and \
             cells[1].abs_frame_number == 104 and \
-            cells[1].abs_reassemble_info == {"segment_frame_number": [104, 104], "segment_size": [16384, 9]}
+            cells[1].segment_size == [16384, 9] and \
+            cells[1].abs_segment_frame_number == [104, 104]
             
         if pkt.number == "212":  # This packet contains a DATA layer and multiple HTTP2 layers.
             cells = cell_extractor.extract(pkt)
             assert len(cells) == 2 and \
             cells[0].abs_frame_number == 212 and \
-            cells[0].abs_reassemble_info == {"segment_frame_number": [211, 212], "segment_size": [16384, 9]} and \
+            cells[0].segment_size == [16384, 9] and \
+            cells[0].abs_segment_frame_number == [211, 212] and \
             cells[1].abs_frame_number == 212 and \
-            cells[1].abs_reassemble_info == {"segment_frame_number": [212, 212], "segment_size": [16384, 9]}
+            cells[1].segment_size == [16384, 9] and \
+            cells[1].abs_segment_frame_number == [212, 212]
             
     cap.close()
 
