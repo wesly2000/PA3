@@ -499,6 +499,14 @@ class HTTP2CellExtractor(CellExtractor):
         return super().extract(pkt, lower_protocol)
     
 
+class TLSCellExtractor(CellExtractor):
+    def __init__(self):
+        self._name = "tls"
+
+    def extract(self, pkt, lower_protocol="TCP") -> List[Cell]:
+        return super().extract(pkt, lower_protocol)
+    
+
 def layer_extractor(pkt, upper_protocol, lower_protocol):
     """
     Extract all layers of the given protocol, if the layer is built upon a DATA layer, 
