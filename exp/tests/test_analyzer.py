@@ -399,7 +399,7 @@ def test_TLSCellExtractor_01():
                                 custom_parameters=["-C", "Customized", "-2"],
                                 override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
     for pkt in cap:
-        if pkt.number == "211":  # This packet contains a DATA layer and multiple HTTP2 layers.
+        if pkt.number == "211": 
             cells = cell_extractor.extract(pkt)
             assert len(cells) == 2 and \
             cells[0].abs_frame_number == 211 and \
@@ -411,7 +411,7 @@ def test_TLSCellExtractor_01():
             cells[1].abs_segment_frame_number == [211] and \
             cells[1].size == 16437
 
-        if pkt.number == "220":  # This packet contains a DATA layer and multiple HTTP2 layers.
+        if pkt.number == "220":  
             cells = cell_extractor.extract(pkt)
             assert len(cells) == 2 and \
             cells[0].abs_frame_number == 220 and \
@@ -423,13 +423,47 @@ def test_TLSCellExtractor_01():
             cells[1].abs_segment_frame_number == [220] and \
             cells[1].size == 31
             
-        if pkt.number == "66":  # This packet contains a DATA layer and multiple HTTP2 layers.
+        if pkt.number == "66":  
             cells = cell_extractor.extract(pkt)
             assert len(cells) == 1 and \
             cells[0].abs_frame_number == 66 and \
             cells[0].segment_size == [3838, 4236, 2824, 1412, 4096] and \
             cells[0].abs_segment_frame_number == [60, 61, 63, 65, 66] and \
             cells[0].size == 16406 
+            
+    cap.close()
+
+def test_TCPCellExtractor_01():
+    cell_extractor = TCPCellExtractor()
+    tcp_filter = "tcp.stream == 0"
+    keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
+    cap = pyshark.FileCapture(input_file=apple_file, display_filter=tcp_filter, 
+                                custom_parameters=["-C", "Customized", "-2"],
+                                override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
+    for pkt in cap:
+        if pkt.number == "1":  
+            cells = cell_extractor.extract(pkt)
+            assert len(cells) == 1 and \
+            cells[0].abs_frame_number == 1 and \
+            cells[0].segment_size == [40] and \
+            cells[0].abs_segment_frame_number == [1] and \
+            cells[0].size == 40
+
+        if pkt.number == "220": 
+            cells = cell_extractor.extract(pkt)
+            assert len(cells) == 1 and \
+            cells[0].abs_frame_number == 220 and \
+            cells[0].segment_size == [9916] and \
+            cells[0].abs_segment_frame_number == [220] and \
+            cells[0].size == 9916
+            
+        if pkt.number == "288": 
+            cells = cell_extractor.extract(pkt)
+            assert len(cells) == 1 and \
+            cells[0].abs_frame_number == 288 and \
+            cells[0].segment_size == [44] and \
+            cells[0].abs_segment_frame_number == [288] and \
+            cells[0].size == 44 
             
     cap.close()
 

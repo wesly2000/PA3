@@ -465,7 +465,7 @@ class CellExtractor(object):
         
         return cell
     
-    def extract(self, pkt, lower_protocol: str) -> List[Cell]:
+    def extract(self, pkt, lower_protocol: Optional[str]=None) -> List[Cell]:
         """
         Extract reassemble information from the given packet with the given protocol.
 
@@ -479,7 +479,8 @@ class CellExtractor(object):
             not None value unless you are extracting the reassemble info for the lowest protocol
             in a protocol stack, whose reassemble info is not needed or not implemented.
         """
-        lower_protocol = lower_protocol.lower()
+        if lower_protocol is not None:
+            lower_protocol = lower_protocol.lower()
         layers = layer_extractor(pkt, self.name, lower_protocol)
         filtered_layers = seq_filter(layers, layer_label_func, annoying_reverse=True)
         cells = []
@@ -507,6 +508,14 @@ class TLSCellExtractor(CellExtractor):
         return super().extract(pkt, lower_protocol)
     
 
+class TCPCellExtractor(CellExtractor):
+    def __init__(self):
+        self._name = "tcp"
+
+    def extract(self, pkt, lower_protocol=None) -> List[Cell]:
+        return super().extract(pkt, lower_protocol)
+    
+
 def layer_extractor(pkt, upper_protocol, lower_protocol):
     """
     Extract all layers of the given protocol, if the layer is built upon a DATA layer, 
@@ -524,20 +533,28 @@ def layer_extractor(pkt, upper_protocol, lower_protocol):
     If the packet does not contain either upper_protocol or lower_protocol, return an empty list.
     """
     upper_protocol = upper_protocol.lower()
-    lower_protocol = lower_protocol.lower()
+    if lower_protocol is not None:
+        lower_protocol = lower_protocol.lower()
 
     supported_protocols = ['tcp', 'tls', 'http2', 'vmess']
-    if upper_protocol not in supported_protocols or lower_protocol not in supported_protocols:
+    if upper_protocol not in supported_protocols:
         raise ValueError(f"Unsupported protocol: only the following protocols are supported: {supported_protocols}")
+    
+    if lower_protocol is not None and lower_protocol not in supported_protocols:
+        raise ValueError(f"Unsupported protocol: only the following protocols are supported: {supported_protocols}")
+
     # Assure the packet protocol stack contains both upper and lower protocols.
-    if upper_protocol not in pkt or lower_protocol not in pkt:
+    if upper_protocol not in pkt:
         return []  
+    
+    if lower_protocol is not None and lower_protocol not in pkt:
+        return []
     
     layers = []
     data_layer_marker = {'tcp': 'tcp_segments', 'tls': 'tls_segments'}
 
     for layer in pkt.layers:
-        if layer.layer_name == 'DATA':
+        if lower_protocol is not None and layer.layer_name == 'DATA':
             if data_layer_marker[lower_protocol] in layer.field_names:
                 layers.append(layer)
         elif layer.layer_name == upper_protocol:
