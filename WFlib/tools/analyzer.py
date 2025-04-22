@@ -339,6 +339,82 @@ class Cell():
                     return True
                 elif max(self.abs_segment_frame_number) < max(other.abs_segment_frame_number):
                     return False
+                
+
+class Line():
+    """
+    The compound of two list of Cells, each line is the abstract representation of a stream byte-segment map 
+    between the given upper layer and lower layer. 
+    
+    For example, a line with upper layer HTTP/2 and lower layer TLS within stream 1 represents the following:
+
+    HTTP/2 Layer     -------------       ---------------      --------     ----------------------
+                     |     |\     \      |  | \       \   
+                     |     | \     \     |  |  \       \ 
+                     |     |  \     \    |  |   \       \     ...  
+                     |     |   \     \   |  |    \       \ 
+                     |     |    \     \ /   /     \       \ 
+    TLS Layer     ----------  --------------    -----------      --------------      --------------------
+    """
+    def __init__(self, 
+                 upper_layer: str, upper_cells: List[Cell], 
+                 lower_layer: str, lower_cells: List[Cell], 
+                 sanity_check = False
+                 ):
+        self.upper_layer = upper_layer
+        self.upper_cells = upper_cells
+        self.lower_layer = lower_layer 
+        self.lower_cells = lower_cells
+
+        if sanity_check:
+            self.sanity_check()
+
+        self.lower_rel_frame_number_map = dict()
+        self.upper_abs_byte_map = dict()
+
+    
+    def sanity_check(self):
+        """
+        Check if the line is valid.
+        
+        TODO: Implement cell_order_check and frame_contain_check.
+        """
+        def cell_order_check(cells):
+            raise NotImplementedError() 
+
+        def frame_contain_check(lower_abs_frame_numbers, upper_abs_frame_numbers):
+            raise NotImplementedError()
+        
+        
+    def lower_rel_building(self):
+        """
+        Build the relative reassemble information for lower layer according to their absolute frame number.
+        Lower relative reassemble only contains the frame number map.
+        """
+        # COMMENT: shall we start the rel frame count from 0 or 1?
+        for i, cell in enumerate(self.lower_cells):
+            self.lower_rel_frame_number_map[cell.abs_frame_number] = i
+
+
+    def upper_rel_building(self):
+        """
+        Build the relative reassemble information for upper layer according to their absolute frame number.
+        Upper relative reassemble contains which lower frame (abs) contains which bytes in upper layer.
+        """
+        byte_counter = 0  # Count how many bytes in the upper layer in total
+        # COMMENT: shall we explicitly create closed-interval or right-open interval then use for-loop 
+        #          to implicitly ignore the last byte index?
+        for i in range(len(self.upper_cells)):
+            for segment_frame_number, segment_size in zip(self.upper_cells[i].abs_segment_frame_number, self.upper_cells[i].segment_size):
+                if segment_frame_number in self.upper_abs_byte_map:
+                    self.upper_abs_byte_map[segment_frame_number] = (  # If the segment frame number is already in the map, update the byte range
+                        self.upper_abs_byte_map[segment_frame_number][0],
+                        self.upper_abs_byte_map[segment_frame_number][1] + segment_size
+                    )
+                else:  # If the segment frame number is not in the map, create the entry
+                    self.upper_abs_byte_map[segment_frame_number] = (byte_counter, byte_counter + segment_size)
+
+                byte_counter += segment_size  # Update the byte counter
 
 class CellExtractor(object):
     """

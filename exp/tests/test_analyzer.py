@@ -396,9 +396,9 @@ def test_cell_comparison():
     """
     This test covers the partial order comparison of cells.
     """
-    cell_1 = Cell(proto="http2", abs_frame_number=104)
+    cell_1 = Cell(proto="http2", abs_frame_number=106)
     cell_1.abs_segment_frame_number = [104, 106]
-    cell_2 = Cell(proto="http2", abs_frame_number=104)
+    cell_2 = Cell(proto="http2", abs_frame_number=108)
     cell_2.abs_segment_frame_number = [106, 108]
 
     assert cell_1 < cell_2 and cell_2 > cell_1
@@ -416,6 +416,41 @@ def test_cell_comparison():
     cell_2.abs_segment_frame_number = [104, 106]
 
     assert cell_1 < cell_2 and cell_2 > cell_1
+
+def test_line_rel_building():
+    """
+    This test covers building the lower relation of a line using artificial data.
+    """
+    # Upper layer PDUs
+    http2_cell_1 = Cell(proto="http2", abs_frame_number=106)
+    http2_cell_1.abs_segment_frame_number = [104, 106]
+    http2_cell_1.segment_size = [114, 514]
+    http2_cell_2 = Cell(proto="http2", abs_frame_number=106)
+    http2_cell_2.abs_segment_frame_number = [106]
+    http2_cell_2.segment_size = [1919]
+    http2_cell_3 = Cell(proto="http2", abs_frame_number=109)
+    http2_cell_3.abs_segment_frame_number = [106, 108, 109]
+    http2_cell_3.segment_size = [8, 10, 1145]
+
+    # Lower layer PDUs
+    tls_cell_1 = Cell(proto="tls", abs_frame_number=104)
+    tls_cell_2 = Cell(proto="tls", abs_frame_number=106)
+    tls_cell_3 = Cell(proto="tls", abs_frame_number=107)
+    tls_cell_4 = Cell(proto="tls", abs_frame_number=108)
+    tls_cell_5 = Cell(proto="tls", abs_frame_number=109)
+
+    line = Line(upper_layer="http2", upper_cells=[http2_cell_1, http2_cell_2, http2_cell_3], 
+                lower_layer="tls", lower_cells=[tls_cell_1, tls_cell_2, tls_cell_3, tls_cell_4, tls_cell_5])
+    
+    line.lower_rel_building()
+    line.upper_rel_building()
+
+    target_lower_rel_frame_number_map = {104: 0, 106: 1, 107: 2, 108: 3, 109: 4}
+    target_upper_rel_frame_number_map = {104: (0, 114), 106: (114, 2555), 108: (2555, 2565), 109: (2565, 3710)}
+
+    assert line.lower_rel_frame_number_map == target_lower_rel_frame_number_map 
+
+    assert line.upper_abs_byte_map == target_upper_rel_frame_number_map
 
 def test_match_segment_number_01():
     """
