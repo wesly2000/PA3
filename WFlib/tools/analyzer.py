@@ -442,7 +442,7 @@ class CellExtractor(object):
     def layer_extract(self, layer, frame_number: int, lower_protocol) -> Cell:
         cell = Cell(self.name, frame_number)
         
-        if layer.layer_name == "DATA":
+        if lower_protocol is not None and layer.layer_name == "DATA":
             # Make tls_segments to more generic.
             for segment_frame_number, segment_size in match_segment_number(
                 layer.get_field(
@@ -465,9 +465,19 @@ class CellExtractor(object):
         
         return cell
     
-    def extract(self, pkt, lower_protocol) -> List[Cell]:
+    def extract(self, pkt, lower_protocol: str) -> List[Cell]:
         """
-        Extract reassembly information from the given packet with the given protocol.
+        Extract reassemble information from the given packet with the given protocol.
+
+        Params
+        ------
+        pkt: 
+            The packet to extract reassemble information from.
+        lower_protocol: str | None
+            The protocol to extract reassemble information from. If None, this function does not
+            extract reassemble information from the given packet. Please always set it to
+            not None value unless you are extracting the reassemble info for the lowest protocol
+            in a protocol stack, whose reassemble info is not needed or not implemented.
         """
         lower_protocol = lower_protocol.lower()
         layers = layer_extractor(pkt, self.name, lower_protocol)
