@@ -545,7 +545,8 @@ def layer_extractor(pkt, upper_protocol, lower_protocol):
     data_layer_marker = {'tcp': 'tcp_segments', 'tls': 'tls_segments'}
 
     for layer in pkt.layers:
-        if layer.layer_name == 'DATA':
+        # When upper_protocol == lower_protocol, no need to extract reassemble info
+        if layer.layer_name == 'DATA' and upper_protocol != lower_protocol:
             if data_layer_marker[lower_protocol] in layer.field_names:
                 layers.append(layer)
         elif layer.layer_name == upper_protocol:
