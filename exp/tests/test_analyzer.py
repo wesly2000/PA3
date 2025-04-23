@@ -511,23 +511,13 @@ def test_line_rel_building_01():
     http2_cell_3.abs_segment_frame_number = [106, 108, 109]
     http2_cell_3.segment_size = [8, 10, 1145]
 
-    # Lower layer PDUs
-    tls_cell_1 = Cell(proto="tls", abs_frame_number=104)
-    tls_cell_2 = Cell(proto="tls", abs_frame_number=106)
-    tls_cell_3 = Cell(proto="tls", abs_frame_number=107)
-    tls_cell_4 = Cell(proto="tls", abs_frame_number=108)
-    tls_cell_5 = Cell(proto="tls", abs_frame_number=109)
 
-    line = Line(upper_protocol="http2", upper_cells=[http2_cell_1, http2_cell_2, http2_cell_3], 
-                lower_protocol="tls", lower_cells=[tls_cell_1, tls_cell_2, tls_cell_3, tls_cell_4, tls_cell_5])
+    line = Line(upper_protocol="http2", upper_cells=[http2_cell_1, http2_cell_2, http2_cell_3])
     
-    line.lower_rel_building()
     line.upper_rel_building()
 
-    target_lower_rel_frame_number_map = {104: 0, 106: 1, 107: 2, 108: 3, 109: 4}
     target_upper_abs_byte_map = {104: (0, 114), 106: (114, 2555), 108: (2555, 2565), 109: (2565, 3710)}
 
-    assert line.lower_rel_frame_number_map == target_lower_rel_frame_number_map 
 
     assert line.upper_abs_byte_map == target_upper_abs_byte_map
     
@@ -541,18 +531,46 @@ def test_line_rel_building_02():
                                 custom_parameters=["-C", "Customized", "-2"],
                                 override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
     
-    lower_rel_frame_number_map, upper_abs_byte_map = get_adjacent_protocol_reassemble_info(cap=cap, 
-                                                                                           upper_protocol="tls", 
-                                                                                           lower_protocol="tcp")
+    upper_abs_byte_map = get_adjacent_protocol_reassemble_info(cap=cap, upper_protocol="tls", lower_protocol="tcp")
     cap.close()
-
-    target_frame_number_map = {223: 0, 224: 1, 225: 2, 226: 3, 227: 4, 228: 5, 229: 6, 230: 7, 231: 8, 232: 9, 233: 10, 234: 11, 235: 12, 236: 13, 237: 14, 238: 15, 239: 16, 240: 17, 241: 18, 242: 19, 243: 20, 244: 21, 245: 22, 246: 23, 257: 24, 258: 25, 280: 26, 281: 27, 282: 28, 296: 29, 297: 30, 298: 31}
 
     target_upper_abs_byte_map = {226: (0, 1908), 228: (1908, 3320), 230: (3320, 6004), 232: (6004, 6218), 234: (6218, 6298), 235: (6298, 6390), 236: (6390, 7436), 237: (7436, 7739), 238: (7739, 8042), 239: (8042, 8104), 241: (8104, 8135), 242: (8135, 8166), 244: (8166, 9096), 246: (9096, 9700), 257: (9700, 10305), 280: (10305, 10344), 281: (10344, 10368)}
     
-
-    assert lower_rel_frame_number_map == target_frame_number_map
     assert upper_abs_byte_map == target_upper_abs_byte_map
+
+
+def test_line_rel_building_03():
+    """
+    This test covers building the lower relation of a line using MORE COMPLEX real-world data.
+    """
+    tcp_filter = "tcp.stream == 0"
+    keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
+    cap = pyshark.FileCapture(input_file=apple_file, display_filter=tcp_filter, 
+                                custom_parameters=["-C", "Customized", "-2"],
+                                override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
+    
+    upper_abs_byte_map = get_adjacent_protocol_reassemble_info(cap=cap, upper_protocol="http2", lower_protocol="tls")
+    
+    cap.close()
+
+    
+    counter = HTTP2ByteCounter()
+    cnt = 0
+
+    cap = pyshark.FileCapture(input_file=apple_file, display_filter=tcp_filter, 
+                                custom_parameters=["-C", "Customized", "-2"],
+                                override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
+    for pkt in cap:
+
+        if "HTTP2" in pkt:
+            cnt += counter.packet_count(pkt)
+    
+    cap.close()
+
+    # If the first and last elements of upper_abs_byte_map is correct, the whole map should be correct.
+    assert  upper_abs_byte_map[278] == (cnt - 17, cnt) and \
+            upper_abs_byte_map[32] == (0, 70)
+
 
 def test_match_segment_number_01():
     """
