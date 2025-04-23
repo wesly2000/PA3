@@ -433,6 +433,40 @@ def test_TLSCellExtractor_01():
             
     cap.close()
 
+def test_TCPCellExtractor_01():
+    cell_extractor = TCPCellExtractor()
+    tcp_filter = "tcp.stream == 0"
+    keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
+    cap = pyshark.FileCapture(input_file=apple_file, display_filter=tcp_filter, 
+                                custom_parameters=["-C", "Customized", "-2"],
+                                override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
+    for pkt in cap:
+        if pkt.number == "1":  
+            cells = cell_extractor.extract(pkt)
+            assert len(cells) == 1 and \
+            cells[0].abs_frame_number == 1 and \
+            cells[0].segment_size == [40] and \
+            cells[0].abs_segment_frame_number == [1] and \
+            cells[0].size == 40
+
+        if pkt.number == "220": 
+            cells = cell_extractor.extract(pkt)
+            assert len(cells) == 1 and \
+            cells[0].abs_frame_number == 220 and \
+            cells[0].segment_size == [9916] and \
+            cells[0].abs_segment_frame_number == [220] and \
+            cells[0].size == 9916
+            
+        if pkt.number == "288": 
+            cells = cell_extractor.extract(pkt)
+            assert len(cells) == 1 and \
+            cells[0].abs_frame_number == 288 and \
+            cells[0].segment_size == [44] and \
+            cells[0].abs_segment_frame_number == [288] and \
+            cells[0].size == 44 
+            
+    cap.close()
+
 def test_cell_comparison():
     """
     This test covers the partial order comparison of cells.

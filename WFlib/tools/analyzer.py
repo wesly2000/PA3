@@ -507,6 +507,14 @@ class TLSCellExtractor(CellExtractor):
         return super().extract(pkt, lower_protocol)
     
 
+class TCPCellExtractor(CellExtractor):
+    def __init__(self):
+        self._name = "tcp"
+
+    def extract(self, pkt, lower_protocol='tcp') -> List[Cell]:
+        return super().extract(pkt, lower_protocol)
+    
+
 def layer_extractor(pkt, upper_protocol, lower_protocol):
     """
     Extract all layers of the given protocol, if the layer is built upon a DATA layer, 
