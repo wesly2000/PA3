@@ -245,6 +245,12 @@ class UDPByteCounter(ByteCounter):
         return cnt
     
 
+PROTOCOL_BYTE_COUNTER = {
+    "tls": TLSByteCounter(),
+    "tcp": TCPByteCounter(),
+    "http2": HTTP2ByteCounter(),
+}
+
 class CaptureCounter():
     def __init__(self, *counters: ByteCounter):
         self.counters = counters
@@ -546,31 +552,14 @@ def layer_label_func(layer):
     return 0 if layer.layer_name == 'DATA' else 1
 
 
-def seq_filter(seq: List[object], label_func: Callable[[object], str], annoying_reverse=False):
+def seq_filter(seq, lower_protocol):
     """
-    A generic algorithm to solve the following abstract problem:
+    Filter the redundant layers from the original list of layers. For example, if the original list of layers is:
+    [DATA, DATA, TLS, TLS, TLS], then according to Wireshark dissection result, one DATA would cover the same
+    byte range as one TLS layer. 
 
-    There is a sequence of label x, y with the rules that:
-
-    1. When there is an x, there must be at least one y after it;
-    2. x could not be the last element.
-
-    The filter will return a new sequence that eliminates all the first y that right follows the x.
-    For example, given a sequence [x_1, y_1, x_2, x_3, x_4, y_2, y_3, y_4, y_5], since y_1 is the first y that
-    right follows x_1, y_2 is the first y that right follows x_2, y_3 is the first y that right follows x_3, and so on,
-    the filter will return a new sequence [x_1, x_2, x_3, x_4, y_5], since y_5 does not follow any x.
-
-    In practice, using int 0, 1 to represent 'x', 'y' respectively may be more intuitive. Therefore, we adopt 0, 1 
-    as the abstract labels.
-
-    Parameters
-    ----------
-    seq: List[object]
-        The sequence to be filtered, it could contain any object.
-
-    label_func: Callable[[object], str]:
-        The function to map each object to a label, note that the caller is responsible to assign the correct label
-        to each object.
+    The correspondence between DATA and TLS layers seem to be random (MAYBE there is some algorithm), since we do
+    not concern about the real content of the data contained, we remove the TLS which has the same size as the DATA.
     """
     def generic_seq_filter(generic_seq: list):
         assert generic_seq[-1] != 0, "The last element of the sequence should not be 0."
@@ -630,13 +619,24 @@ def seq_filter(seq: List[object], label_func: Callable[[object], str], annoying_
     if len(seq) == 0:
         return []
 
-    generic_seq = [label_func(elem) for elem in seq]
-    new_seq_idx = generic_seq_filter(generic_seq)
+    to_remove = set()
 
-    if annoying_reverse:
-        new_seq_idx = generic_annoying_reverse(generic_seq, new_seq_idx)
+    for layer in seq:
+        if layer.layer_name == 'DATA':
+            for i in range(len(seq)):
+                if i not in to_remove and seq[i].layer_name != 'DATA':
+                    # Compute current layer size
+                    layer_size = PROTOCOL_BYTE_COUNTER[seq[i].layer_name].layer_count(seq[i])
+                    data_layer_size = 0
+                    # Compute DATA layer size
+                    for _, segment_size in match_segment_number(
+                        layer.get_field(PROTOCOL_REASSEMBLE_FIELD[lower_protocol])):
+                        data_layer_size += segment_size
 
-    new_seq = [seq[i] for i in new_seq_idx]
+                    if layer_size == data_layer_size:
+                        to_remove.add(i)
+
+    new_seq = [seq[i] for i in range(len(seq)) if i not in to_remove]
     return new_seq
 
 def match_segment_number(s: str): 

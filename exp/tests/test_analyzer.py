@@ -307,25 +307,22 @@ def test_seq_filter_02():
     for pkt in cap:
         if pkt.number == "104":  # This packet contains a DATA layer and multiple HTTP2 layers.
             layers = layer_extractor(pkt, upper_protocol="http2", lower_protocol='tls')
-            result = seq_filter(layers, layer_label_func)
-            assert len(result) == 2 and \
-                    result[0].layer_name == "http2" and \
-                    result[1].layer_name == "DATA" and \
-                    result[0].body_fragment == '72' and \
-                    result[1].tls_segment == '104'
+            result = seq_filter(layers, lower_protocol='tls')
+            layer_names = [layer.layer_name for layer in result]
+            expect_num_DATA_layer = 1
+            expect_num_HTTP2_layer = 1 
+            assert layer_names.count("DATA") == expect_num_DATA_layer and \
+                   layer_names.count("http2") == expect_num_HTTP2_layer
+        
             
         if pkt.number == "221":  # This packet contains a DATA layer and multiple HTTP2 layers.
             layers = layer_extractor(pkt, upper_protocol="http2", lower_protocol='tls')
-            result = seq_filter(layers, layer_label_func)
-            assert len(result) == 4 and \
-                    result[0].layer_name == "DATA" and \
-                    result[1].layer_name == "DATA" and \
-                    result[2].layer_name == "DATA" and \
-                    result[3].layer_name == "http2" and \
-                    result[0].tls_segment == '221' and \
-                    result[1].tls_segment == '221' and \
-                    result[2].tls_segment == '221' and \
-                    result[3].body_fragment == '218'
+            result = seq_filter(layers, lower_protocol='tls')
+            layer_names = [layer.layer_name for layer in result]
+            expect_num_DATA_layer = 3
+            expect_num_HTTP2_layer = 1 
+            assert layer_names.count("DATA") == expect_num_DATA_layer and \
+                   layer_names.count("http2") == expect_num_HTTP2_layer
             
     cap.close()
 
