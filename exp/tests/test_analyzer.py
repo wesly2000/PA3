@@ -6,6 +6,9 @@ from pathlib import Path
 import pyshark
 import os
 
+import nest_asyncio 
+nest_asyncio.apply()
+
 baidu_proxied_file = "exp/test_dataset/realworld_dataset/www.baidu.com_proxied.pcapng"
 google_file = "exp/test_dataset/realworld_dataset/www.google.com.pcapng"
 apple_file = "exp/test_dataset/realworld_dataset/decryption/www.apple.com.pcapng"
@@ -136,6 +139,7 @@ def test_http3_bytes_count():
         byte_count += counter.packet_count(pkt)
         pkt_count += 1
 
+    capture.close()
     byte_target, packet_target = 42925, 22
 
     assert byte_target == byte_count and packet_target == pkt_count
