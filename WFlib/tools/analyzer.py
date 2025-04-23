@@ -314,12 +314,10 @@ class Cell():
                 return False
             else:  # Their segment number are not the same.
                 # TODO: more complicated check, for sanity check here, e.g., self.abs_segment_frame_number = [2, 3] and other.abs_segment_frame_number = [1, 2, 3, 4], such case MUST NOT happen.
-                if max(self.abs_segment_frame_number) < max(other.abs_segment_frame_number):
+                if min(self.abs_segment_frame_number) < min(other.abs_segment_frame_number):
                     return True
-                elif max(self.abs_segment_frame_number) > max(other.abs_segment_frame_number):
+                else:
                     return False
-                else:  # Their segment number are the same.
-                    raise ValueError(f"Cannot compare {self} with {other}, since they are not adjacent.")
                 
     def __gt__(self, other):
         if not isinstance(other, Cell):
@@ -343,7 +341,7 @@ class Cell():
                 # TODO: more complicated check, for sanity check here, e.g., self.abs_segment_frame_number = [2, 3] and other.abs_segment_frame_number = [1, 2, 3, 4], such case MUST NOT happen.
                 if max(self.abs_segment_frame_number) > max(other.abs_segment_frame_number):
                     return True
-                elif max(self.abs_segment_frame_number) < max(other.abs_segment_frame_number):
+                else:
                     return False
                 
 
@@ -467,12 +465,15 @@ class CellExtractor(object):
         """
         lower_protocol = lower_protocol.lower()
         layers = layer_extractor(pkt, self.name, lower_protocol)
-        filtered_layers = seq_filter(layers, layer_label_func, annoying_reverse=True)
+        filtered_layers = seq_filter(layers, lower_protocol)
         cells = []
 
         for layer in filtered_layers:
             cell = self.layer_extract(layer, int(pkt.number), lower_protocol)
             cells.append(cell)
+
+        # Defer the sorting work to the Cell instead of layers.
+        cells.sort()
         
         return cells
     
@@ -547,11 +548,11 @@ def layer_extractor(pkt, upper_protocol, lower_protocol):
 
     return layers
 
-def layer_label_func(layer):
-    """
-    This function maps a layer to the label. Note that DATA layer is the x (or 0) in seq_filter.
-    """
-    return 0 if layer.layer_name == 'DATA' else 1
+# def layer_label_func(layer):
+#     """
+#     This function maps a layer to the label. Note that DATA layer is the x (or 0) in seq_filter.
+#     """
+#     return 0 if layer.layer_name == 'DATA' else 1
 
 
 def seq_filter(seq, lower_protocol):
@@ -563,61 +564,6 @@ def seq_filter(seq, lower_protocol):
     The correspondence between DATA and TLS layers seem to be random (MAYBE there is some algorithm), since we do
     not concern about the real content of the data contained, we remove the TLS which has the same size as the DATA.
     """
-    def generic_seq_filter(generic_seq: list):
-        assert generic_seq[-1] != 0, "The last element of the sequence should not be 0."
-        
-        num_of_x = sum([int(elem == 0) for elem in generic_seq])
-        num_of_y = sum([int(elem == 1) for elem in generic_seq])
-        assert num_of_x <= num_of_y, "The number of x MUST NOT be more than that of y."
-
-        new_seq_idx = []
-        first_y = 0
-        for i in range(len(generic_seq)):
-            if generic_seq[i] == 0:
-                if first_y <= i:  # Fast-forward
-                    # Prepend all un-eliminated y before the current x.
-                    for j in range(first_y, i):
-                        new_seq_idx.append(j)
-                    first_y = i + 1
-                new_seq_idx.append(i)
-                # Search for the first y that right follows x.
-                for j in range(first_y, len(generic_seq)):
-                    if generic_seq[j] == 1:
-                        first_y = j + 1
-                        break
-                
-                
-        for i in range(first_y, len(generic_seq)):
-            new_seq_idx.append(i)
-
-        return new_seq_idx
-    
-    def generic_annoying_reverse(generic_seq, seq_idx):
-        """
-        Given sequence [x_1, x_2, x_3, y_1, y_2, y_3, y_4], after generic_seq_filter,
-        the result should be [x_1, x_2, x_3, y_4]. But in Wireshark, each consecutive x's,
-        their order needs to be reversed, i.e., the result should be [x_3, x_2, x_1, y_4].
-        """
-        i = 0
-        reversed_seq_idx = []
-        while i < len(seq_idx):
-            if generic_seq[seq_idx[i]] == 0:
-                tmp_seq_idx_pool = []
-                j = i
-                while j < len(seq_idx) and generic_seq[seq_idx[j]] == 0:
-                    tmp_seq_idx_pool.append(seq_idx[j])
-                    j += 1  # Out-of-bound error should not happen, since sequence does not with 0
-
-                i = j
-                tmp_seq_idx_pool.reverse()
-                reversed_seq_idx += tmp_seq_idx_pool
-
-            else:
-                reversed_seq_idx.append(seq_idx[i])
-                i += 1
-
-        return reversed_seq_idx
-
     if len(seq) == 0:
         return []
 
@@ -657,12 +603,6 @@ def get_adjacent_protocol_reassemble_info(cap: pyshark.FileCapture, upper_protoc
     """
     upper_protocol = upper_protocol.lower()
     lower_protocol = lower_protocol.lower()
-
-    protocol_cell_extractor = {
-        "tcp": TCPCellExtractor(),  
-        "tls": TLSCellExtractor(),
-        "http2": HTTP2CellExtractor(),
-    }
 
     upper_cells = []
 
