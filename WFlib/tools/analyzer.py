@@ -5,7 +5,7 @@ import numpy as np
 import pyshark 
 from pathlib import Path
 import re
-from typing import List, Callable
+from typing import List, Callable, Optional
 
 def feature_attr(model, attr_method, X, y, num_classes):
     """
@@ -671,6 +671,37 @@ def match_segment_number(s: str):
     res = [(int(idx), int(size)) for idx, size in results]
     return res
 
+def get_adjacent_protocol_reassemble_info(cap: pyshark.FileCapture, upper_protocol: str, lower_protocol: str):
+    """
+    Extract the reassemble information for each packet given the adjacent upper_protocol and lower_protocol, e.g.,
+    TLS over TCP, HTTP2 over TLS. This function is a component of get_reassemble_info.
+    """
+    upper_protocol = upper_protocol.lower()
+    lower_protocol = lower_protocol.lower()
+
+    protocol_cell_extractor = {
+        "tls": TLSCellExtractor(),
+        "http2": HTTP2CellExtractor(),
+    }
+
+    upper_protocol_cell = []
+    lower_protocol_cell = []
+
+    for pkt in cap:
+        if upper_protocol in pkt:
+            upper_protocol_cell += protocol_cell_extractor[upper_protocol].extract(pkt)
+        if lower_protocol in pkt:
+            lower_protocol_cell += protocol_cell_extractor[lower_protocol].extract(pkt)
+
+    line = Line(
+        upper_protocol=upper_protocol, upper_cells=upper_protocol_cell, 
+        lower_protocol=lower_protocol, lower_cells=lower_protocol_cell
+        )
+
+    line.lower_rel_building()
+    line.upper_rel_building()
+
+    return line.lower_rel_frame_number_map, line.upper_abs_byte_map
 
 def get_reassemble_info(cap: pyshark.FileCapture, protocol_stack: List[str] = ['TCP', 'TLS',]): 
     """

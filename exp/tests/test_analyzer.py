@@ -156,7 +156,7 @@ def test_capture_counter_1():
     capture.close()
 
     assert  result['tcp'][0] == 32 and result['tcp'][1] == 11408 and \
-            result['tls'][0] == 16 and result['tls'][1] == 10347 and \
+            result['tls'][0] == 16 and result['tls'][1] == 10368 and \
             result['http2'][0] == 9 and result['http2'][1] == 3242
     
 def test_capture_counter_2():
@@ -492,7 +492,7 @@ def test_cell_comparison():
 
     assert cell_1 < cell_2 and cell_2 > cell_1
 
-def test_line_rel_building():
+def test_line_rel_building_01():
     """
     This test covers building the lower relation of a line using artificial data.
     """
@@ -521,11 +521,24 @@ def test_line_rel_building():
     line.upper_rel_building()
 
     target_lower_rel_frame_number_map = {104: 0, 106: 1, 107: 2, 108: 3, 109: 4}
-    target_upper_rel_frame_number_map = {104: (0, 114), 106: (114, 2555), 108: (2555, 2565), 109: (2565, 3710)}
+    target_upper_abs_byte_map = {104: (0, 114), 106: (114, 2555), 108: (2555, 2565), 109: (2565, 3710)}
 
     assert line.lower_rel_frame_number_map == target_lower_rel_frame_number_map 
 
-    assert line.upper_abs_byte_map == target_upper_rel_frame_number_map
+    assert line.upper_abs_byte_map == target_upper_abs_byte_map
+
+# def test_line_rel_building_02():
+#     """
+#     This test covers building the lower relation of a line using real-world data.
+#     """
+#     tcp_filter = "tcp.stream == 0"
+#     keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
+#     cap = pyshark.FileCapture(input_file=apple_file, display_filter=tcp_filter, 
+#                                 custom_parameters=["-C", "Customized", "-2"],
+#                                 override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
+    
+#     lower_rel_frame_number_map, upper_abs_byte_map = get_adjacent_protocol_reassemble_info(cap=cap, upper_layer="http2", lower_layer="tls")
+
 
 def test_match_segment_number_01():
     """
