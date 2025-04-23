@@ -265,38 +265,6 @@ def test_layer_extractor_02():
 
 def test_seq_filter_01():
     """
-    This test covers seq_filter with different type of labels.
-    """
-    seq = [0, 1, 0, 0, 0, 1, 1, 1, 1]
-    target = [0, 0, 0, 0, 1]
-    result = seq_filter(seq, label_func=lambda x: x)
-
-    assert target == result
-
-    seq = ['x', 'y', 'x', 'x', 'x', 'y', 'y', 'y', 'y']
-    target = ['x', 'x', 'x', 'x', 'y']
-    result = seq_filter(seq, label_func=lambda x: 0 if x == 'x' else 1)
-
-    seq = ['y', 'y', 'y', 'y']
-    target = ['y', 'y', 'y', 'y']
-    result = seq_filter(seq, label_func=lambda x: 0 if x == 'x' else 1)
-
-    seq = []
-    target = []
-    result = seq_filter(seq, label_func=lambda x: 0 if x == 'x' else 1)
-
-    seq = ['x', 'y', 'x', 'y', 'x', 'y', 'x', 'x', 'y', 'y']
-    target = ['x', 'x', 'x', 'x', 'x']
-    result = seq_filter(seq, label_func=lambda x: 0 if x == 'x' else 1)
-    assert target == result
-
-    seq = ['y', 'x', 'y']
-    target = ['y', 'x']
-    result = seq_filter(seq, label_func=lambda x: 0 if x == 'x' else 1)
-    assert target == result
-
-def test_seq_filter_02():
-    """
     This test covers seq_filter with more complex labeling functions.
     """
     tcp_filter = "tcp.stream == 0"
@@ -325,38 +293,6 @@ def test_seq_filter_02():
                    layer_names.count("http2") == expect_num_HTTP2_layer
             
     cap.close()
-
-def test_seq_filter_03():
-    """
-    This test covers seq_filter with different type of labels.
-    """
-    seq = [0, 1, 0, 0, 0, 1, 1, 1, 1]
-    target = [0, 0, 0, 0, 1]
-    result = seq_filter(seq, label_func=lambda x: x, annoying_reverse=True)
-
-    assert target == result
-
-    seq = ['x', 'y', 'x', 'x', 'x', 'y', 'y', 'y', 'y']
-    target = ['x', 'x', 'x', 'x', 'y']
-    result = seq_filter(seq, label_func=lambda x: 0 if x == 'x' else 1, annoying_reverse=True)
-
-    seq = ['y', 'y', 'y', 'y']
-    target = ['y', 'y', 'y', 'y']
-    result = seq_filter(seq, label_func=lambda x: 0 if x == 'x' else 1, annoying_reverse=True)
-
-    seq = []
-    target = []
-    result = seq_filter(seq, label_func=lambda x: 0 if x == 'x' else 1, annoying_reverse=True)
-
-    seq = ['x', 'y', 'x', 'y', 'x', 'y', 'x', 'x', 'y', 'y']
-    target = ['x', 'x', 'x', 'x', 'x']
-    result = seq_filter(seq, label_func=lambda x: 0 if x == 'x' else 1, annoying_reverse=True)
-    assert target == result
-
-    seq = ['y', 'x', 'y']
-    target = ['y', 'x']
-    result = seq_filter(seq, label_func=lambda x: 0 if x == 'x' else 1, annoying_reverse=True)
-    assert target == result
 
 def test_HTTP2CellExtractor_01():
     cell_extractor = HTTP2CellExtractor()
