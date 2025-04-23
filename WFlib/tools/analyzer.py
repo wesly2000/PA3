@@ -358,18 +358,14 @@ class Line():
     """
     def __init__(self, 
                  upper_protocol: str, upper_cells: List[Cell], 
-                 lower_protocol: str, lower_cells: List[Cell], 
                  sanity_check = False
                  ):
         self.upper_layer = upper_protocol
         self.upper_cells = upper_cells
-        self.lower_layer = lower_protocol 
-        self.lower_cells = lower_cells
 
         if sanity_check:
             self.sanity_check()
 
-        self.lower_rel_frame_number_map = dict()
         self.upper_abs_byte_map = dict()
 
     
@@ -384,17 +380,6 @@ class Line():
 
         def frame_contain_check(lower_abs_frame_numbers, upper_abs_frame_numbers):
             raise NotImplementedError()
-        
-        
-    def lower_rel_building(self):
-        """
-        Build the relative reassemble information for lower layer according to their absolute frame number.
-        Lower relative reassemble only contains the frame number map.
-        """
-        # COMMENT: shall we start the rel frame count from 0 or 1?
-        for i, cell in enumerate(self.lower_cells):
-            self.lower_rel_frame_number_map[cell.abs_frame_number] = i
-
 
     def upper_rel_building(self):
         """
@@ -678,23 +663,18 @@ def get_adjacent_protocol_reassemble_info(cap: pyshark.FileCapture, upper_protoc
     }
 
     upper_cells = []
-    lower_cells = []
 
     for pkt in cap:
         if upper_protocol in pkt:
-            upper_cells += protocol_cell_extractor[upper_protocol].extract(pkt)
-        if lower_protocol in pkt:
-            lower_cells += protocol_cell_extractor[lower_protocol].extract(pkt)
+            upper_cells += protocol_cell_extractor[upper_protocol].extract(pkt, lower_protocol=lower_protocol)
 
     line = Line(
-        upper_protocol=upper_protocol, upper_cells=upper_cells, 
-        lower_protocol=lower_protocol, lower_cells=lower_cells
+        upper_protocol=upper_protocol, 
+        upper_cells=upper_cells, 
         )
 
-    line.lower_rel_building()
     line.upper_rel_building()
-
-    return line.lower_rel_frame_number_map, line.upper_abs_byte_map
+    return line.upper_abs_byte_map
 
 def get_reassemble_info(cap: pyshark.FileCapture, protocol_stack: List[str] = ['TCP', 'TLS',]): 
     """
