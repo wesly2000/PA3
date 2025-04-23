@@ -407,22 +407,17 @@ class Line():
 
                 byte_counter += segment_size  # Update the byte counter
 
+
+PROTOCOL_REASSEMBLE_FIELD = {
+    "tls": "tls_segments",
+    "tcp": "tcp_segments",
+    "vmess": "vmess_segments",
+}
+
 class CellExtractor(object):
     """
     Select the reassemble info related field for each protocol in DATA layer.
     """
-    protocol_reassemble_field = {
-        "tls": "tls_segments",
-        "tcp": "tcp_segments",
-        "vmess": "vmess_segments",
-    }
-
-    protocol_byte_counter = {
-        "tls": TLSByteCounter(),
-        "tcp": TCPByteCounter(),
-        "http2": HTTP2ByteCounter(),
-    }
-
     def __init__(self):
         self._name = "abstract" 
 
@@ -437,7 +432,7 @@ class CellExtractor(object):
             # Make tls_segments to more generic.
             for segment_frame_number, segment_size in match_segment_number(
                 layer.get_field(
-                    self.protocol_reassemble_field[lower_protocol]
+                    PROTOCOL_REASSEMBLE_FIELD[lower_protocol]
                     )
                 ):
 
@@ -445,7 +440,7 @@ class CellExtractor(object):
                 cell.segment_size.append(segment_size)
 
         elif layer.layer_name == self.name:
-            counter = self.protocol_byte_counter[self.name]
+            counter = PROTOCOL_BYTE_COUNTER[self.name]
             cell.abs_segment_frame_number.append(frame_number)
             cell.segment_size.append(counter.layer_count(layer))
 
@@ -505,6 +500,13 @@ class TCPCellExtractor(CellExtractor):
     def extract(self, pkt, lower_protocol='tcp') -> List[Cell]:
         return super().extract(pkt, lower_protocol)
     
+
+PROCOCOL_CELL_EXTRACTOR = {
+    "tcp": TCPCellExtractor(),  
+    "tls": TLSCellExtractor(),
+    "http2": HTTP2CellExtractor(),
+}
+
 
 def layer_extractor(pkt, upper_protocol, lower_protocol):
     """
@@ -666,7 +668,7 @@ def get_adjacent_protocol_reassemble_info(cap: pyshark.FileCapture, upper_protoc
 
     for pkt in cap:
         if upper_protocol in pkt:
-            upper_cells += protocol_cell_extractor[upper_protocol].extract(pkt, lower_protocol=lower_protocol)
+            upper_cells += PROCOCOL_CELL_EXTRACTOR[upper_protocol].extract(pkt, lower_protocol=lower_protocol)
 
     line = Line(
         upper_protocol=upper_protocol, 
