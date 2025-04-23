@@ -344,9 +344,9 @@ class Cell():
 class Line():
     """
     The compound of two list of Cells, each line is the abstract representation of a stream byte-segment map 
-    between the given upper layer and lower layer. 
+    between the given upper protocol and lower protocol. 
     
-    For example, a line with upper layer HTTP/2 and lower layer TLS within stream 1 represents the following:
+    For example, a line with upper protocol HTTP/2 and lower protocol TLS within stream 1 represents the following:
 
     HTTP/2 Layer     -------------       ---------------      --------     ----------------------
                      |     |\     \      |  | \       \   
@@ -357,13 +357,13 @@ class Line():
     TLS Layer     ----------  --------------    -----------      --------------      --------------------
     """
     def __init__(self, 
-                 upper_layer: str, upper_cells: List[Cell], 
-                 lower_layer: str, lower_cells: List[Cell], 
+                 upper_protocol: str, upper_cells: List[Cell], 
+                 lower_protocol: str, lower_cells: List[Cell], 
                  sanity_check = False
                  ):
-        self.upper_layer = upper_layer
+        self.upper_layer = upper_protocol
         self.upper_cells = upper_cells
-        self.lower_layer = lower_layer 
+        self.lower_layer = lower_protocol 
         self.lower_cells = lower_cells
 
         if sanity_check:
@@ -671,22 +671,23 @@ def get_adjacent_protocol_reassemble_info(cap: pyshark.FileCapture, upper_protoc
     lower_protocol = lower_protocol.lower()
 
     protocol_cell_extractor = {
+        "tcp": TCPCellExtractor(),  
         "tls": TLSCellExtractor(),
         "http2": HTTP2CellExtractor(),
     }
 
-    upper_protocol_cell = []
-    lower_protocol_cell = []
+    upper_cells = []
+    lower_cells = []
 
     for pkt in cap:
         if upper_protocol in pkt:
-            upper_protocol_cell += protocol_cell_extractor[upper_protocol].extract(pkt)
+            upper_cells += protocol_cell_extractor[upper_protocol].extract(pkt)
         if lower_protocol in pkt:
-            lower_protocol_cell += protocol_cell_extractor[lower_protocol].extract(pkt)
+            lower_cells += protocol_cell_extractor[lower_protocol].extract(pkt)
 
     line = Line(
-        upper_protocol=upper_protocol, upper_cells=upper_protocol_cell, 
-        lower_protocol=lower_protocol, lower_cells=lower_protocol_cell
+        upper_protocol=upper_protocol, upper_cells=upper_cells, 
+        lower_protocol=lower_protocol, lower_cells=lower_cells
         )
 
     line.lower_rel_building()
