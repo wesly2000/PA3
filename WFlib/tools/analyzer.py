@@ -616,7 +616,7 @@ def match_segment_number(s: str):
     res = [(int(idx), int(size)) for idx, size in results]
     return res
 
-def get_adjacent_protocol_reassemble_info(cap: pyshark.FileCapture, upper_protocol: str, lower_protocol: str):
+def get_adjacent_protocol_reassemble_info(cap: pyshark.FileCapture, upper_protocol: str, lower_protocol: str) -> Line:
     """
     Extract the reassemble information for each packet given the adjacent upper_protocol and lower_protocol, e.g.,
     TLS over TCP, HTTP2 over TLS. This function is a component of get_reassemble_info.
@@ -635,7 +635,7 @@ def get_adjacent_protocol_reassemble_info(cap: pyshark.FileCapture, upper_protoc
         upper_cells=upper_cells, 
         )
 
-    return line.upper_abs_byte_map
+    return line
 
 def get_reassemble_info(cap: pyshark.FileCapture, protocol_stack: List[str] = ['TCP', 'TLS',]): 
     """

@@ -462,12 +462,13 @@ def test_line_rel_building_02():
                                 custom_parameters=["-C", "Customized", "-2"],
                                 override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
     
-    upper_abs_byte_map = get_adjacent_protocol_reassemble_info(cap=cap, upper_protocol="tls", lower_protocol="tcp")
+    line = get_adjacent_protocol_reassemble_info(cap=cap, upper_protocol="tls", lower_protocol="tcp")
     cap.close()
 
     target_upper_abs_byte_map = {226: (0, 1908), 228: (1908, 3320), 230: (3320, 6004), 232: (6004, 6218), 234: (6218, 6298), 235: (6298, 6390), 236: (6390, 7436), 237: (7436, 7739), 238: (7739, 8042), 239: (8042, 8104), 241: (8104, 8135), 242: (8135, 8166), 244: (8166, 9096), 246: (9096, 9700), 257: (9700, 10305), 280: (10305, 10344), 281: (10344, 10368)}
     
-    assert upper_abs_byte_map == target_upper_abs_byte_map
+    assert line.upper_abs_byte_map == target_upper_abs_byte_map and \
+           line.byte_counter == 10368
 
 
 def test_line_rel_building_03():
@@ -480,7 +481,7 @@ def test_line_rel_building_03():
                                 custom_parameters=["-C", "Customized", "-2"],
                                 override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
     
-    upper_abs_byte_map = get_adjacent_protocol_reassemble_info(cap=cap, upper_protocol="http2", lower_protocol="tls")
+    line = get_adjacent_protocol_reassemble_info(cap=cap, upper_protocol="http2", lower_protocol="tls")
     
     cap.close()
 
@@ -499,8 +500,9 @@ def test_line_rel_building_03():
     cap.close()
 
     # If the first and last elements of upper_abs_byte_map is correct, the whole map should be correct.
-    assert  upper_abs_byte_map[278] == (cnt - 17, cnt) and \
-            upper_abs_byte_map[32] == (0, 70)
+    assert  line.upper_abs_byte_map[278] == (cnt - 17, cnt) and \
+            line.upper_abs_byte_map[32] == (0, 70) and \
+            line.byte_counter == cnt
 
 
 def test_match_segment_number_01():
