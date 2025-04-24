@@ -475,15 +475,18 @@ def SNI_exclude_filter(file, SNIs):
     display_filter = stream_exclude_filter(tcp_stream_numbers, udp_stream_numbers)
     return display_filter
 
-def h2data_SNI_intersect(file, SNIs, keylog_file, custom_parameters = None) -> Tuple[set, set]:
+def h2data_SNI_intersect(file, SNIs, keylog_file, custom_parameters = None, override_prefs = None) -> Tuple[set, set]:
     """
     Util function: for a given file, extract the TCP/UDP streams satisfying:
     1. It is the TLS stream with given SNIs;
     2. It contains HTTP/2 DATA frames.
+
+    If override_prefs is given, keylog_file will be surpressed.
     """
     capture_tls = pyshark.FileCapture(input_file=file, 
                                       display_filter="tls.handshake.type == 1", 
-                                      custom_parameters=custom_parameters)
+                                      custom_parameters=custom_parameters,
+                                      override_prefs=override_prefs)
     tcp_stream_numbers_tls, udp_stream_numbers_tls = stream_number_extract(capture=capture_tls, check=lambda pkt: contains_SNI(SNIs, pkt))
     capture_tls.close()
 
@@ -492,22 +495,25 @@ def h2data_SNI_intersect(file, SNIs, keylog_file, custom_parameters = None) -> T
     capture_h2data = pyshark.FileCapture(input_file=file, 
                                          display_filter=f"({SNI_filter}) and http2.type == 0",
                                          custom_parameters=custom_parameters,
-                                         override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
+                                         override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)} if override_prefs is None else override_prefs)
     tcp_stream_numbers_h2data, udp_stream_numbers_h2data = stream_number_extract(capture=capture_h2data, check=lambda _: True)
     capture_h2data.close()
 
     return tcp_stream_numbers_h2data & tcp_stream_numbers_tls, udp_stream_numbers_h2data & udp_stream_numbers_tls
 
-def h3data_SNI_intersect(file, SNIs, keylog_file, custom_parameters = None) -> Tuple[set, set]:
+def h3data_SNI_intersect(file, SNIs, keylog_file, custom_parameters = None, override_prefs = None) -> Tuple[set, set]:
     """
     Util function: for a given file, extract the TCP/UDP streams satisfying:
     1. It is the QUIC stream with given SNIs;
     2. It contains HTTP/3 DATA frames.
+
+    If override_prefs is given, keylog_file will be surpressed.
     """
     # Note that Client Hello is embedded in QUIC, so we need to use tls.handshake.type == 1 to filter.
     capture_quic = pyshark.FileCapture(input_file=file, 
                                       display_filter="tls.handshake.type == 1", 
-                                      custom_parameters=custom_parameters)
+                                      custom_parameters=custom_parameters,
+                                      override_prefs=override_prefs)
     tcp_stream_numbers_quic, udp_stream_numbers_quic = stream_number_extract(capture=capture_quic, check=lambda pkt: contains_SNI(SNIs, pkt))
     capture_quic.close()
 
@@ -516,7 +522,7 @@ def h3data_SNI_intersect(file, SNIs, keylog_file, custom_parameters = None) -> T
     capture_h3data = pyshark.FileCapture(input_file=file, 
                                          display_filter=f"({SNI_filter}) and http3.frame_type == 0",
                                          custom_parameters=custom_parameters,
-                                         override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
+                                         override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)} if override_prefs is None else override_prefs)
     tcp_stream_numbers_h3data, udp_stream_numbers_h2data = stream_number_extract(capture=capture_h3data, check=lambda _: True)
     capture_h3data.close()
 
