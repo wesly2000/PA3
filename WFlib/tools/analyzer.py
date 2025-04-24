@@ -371,7 +371,7 @@ class Line():
             self.sanity_check()
 
         self._upper_abs_byte_map = None  # COMMENT: shall we build the map in lazy mode?
-        self.byte_counter = 0  # Count how many bytes in the upper layer in total
+        self._byte_counter = 0  # Count how many bytes in the upper layer in total
 
     
     def sanity_check(self):
@@ -386,6 +386,13 @@ class Line():
         def frame_contain_check(lower_abs_frame_numbers, upper_abs_frame_numbers):
             raise NotImplementedError()
         
+    @property
+    def byte_counter(self):
+         # byte_counter needs to iterate through the upper_cells, build the map together.
+        if self._upper_abs_byte_map is None: 
+                self.upper_rel_building()
+        return self._byte_counter
+
     @property
     def upper_abs_byte_map(self):
         if self._upper_abs_byte_map is None:  # Lazy build the map if not built yet.
@@ -414,7 +421,7 @@ class Line():
 
                 byte_counter += segment_size  # Update the byte counter
 
-        self.byte_counter = byte_counter
+        self._byte_counter = byte_counter
 
         self._upper_abs_byte_map = upper_abs_byte_map
 
