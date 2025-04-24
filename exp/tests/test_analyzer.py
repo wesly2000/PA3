@@ -446,8 +446,6 @@ def test_line_rel_building_01():
 
 
     line = Line(upper_protocol="http2", upper_cells=[http2_cell_1, http2_cell_2, http2_cell_3])
-    
-    line.upper_rel_building()
 
     target_upper_abs_byte_map = {104: (0, 114), 106: (114, 2555), 108: (2555, 2565), 109: (2565, 3710)}
 

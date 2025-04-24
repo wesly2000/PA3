@@ -370,7 +370,8 @@ class Line():
         if sanity_check:
             self.sanity_check()
 
-        self.upper_abs_byte_map = dict()
+        self._upper_abs_byte_map = None  # COMMENT: shall we build the map in lazy mode?
+        self.byte_counter = 0  # Count how many bytes in the upper layer in total
 
     
     def sanity_check(self):
@@ -384,6 +385,12 @@ class Line():
 
         def frame_contain_check(lower_abs_frame_numbers, upper_abs_frame_numbers):
             raise NotImplementedError()
+        
+    @property
+    def upper_abs_byte_map(self):
+        if self._upper_abs_byte_map is None:  # Lazy build the map if not built yet.
+            self.upper_rel_building()
+        return self._upper_abs_byte_map
 
     def upper_rel_building(self):
         """
@@ -393,17 +400,23 @@ class Line():
         byte_counter = 0  # Count how many bytes in the upper layer in total
         # COMMENT: shall we explicitly create closed-interval or right-open interval then use for-loop 
         #          to implicitly ignore the last byte index?
+        upper_abs_byte_map = dict()
+
         for i in range(len(self.upper_cells)):
             for segment_frame_number, segment_size in zip(self.upper_cells[i].abs_segment_frame_number, self.upper_cells[i].segment_size):
-                if segment_frame_number in self.upper_abs_byte_map:
-                    self.upper_abs_byte_map[segment_frame_number] = (  # If the segment frame number is already in the map, update the byte range
-                        self.upper_abs_byte_map[segment_frame_number][0],
-                        self.upper_abs_byte_map[segment_frame_number][1] + segment_size
+                if segment_frame_number in upper_abs_byte_map:
+                    upper_abs_byte_map[segment_frame_number] = (  # If the segment frame number is already in the map, update the byte range
+                        upper_abs_byte_map[segment_frame_number][0],
+                        upper_abs_byte_map[segment_frame_number][1] + segment_size
                     )
                 else:  # If the segment frame number is not in the map, create the entry
-                    self.upper_abs_byte_map[segment_frame_number] = (byte_counter, byte_counter + segment_size)
+                    upper_abs_byte_map[segment_frame_number] = (byte_counter, byte_counter + segment_size)
 
                 byte_counter += segment_size  # Update the byte counter
+
+        self.byte_counter = byte_counter
+
+        self._upper_abs_byte_map = upper_abs_byte_map
 
 
 PROTOCOL_REASSEMBLE_FIELD = {
@@ -615,7 +628,6 @@ def get_adjacent_protocol_reassemble_info(cap: pyshark.FileCapture, upper_protoc
         upper_cells=upper_cells, 
         )
 
-    line.upper_rel_building()
     return line.upper_abs_byte_map
 
 def get_reassemble_info(cap: pyshark.FileCapture, protocol_stack: List[str] = ['TCP', 'TLS',]): 
