@@ -43,5 +43,3 @@ def test_generate_byte_segment_01():
                 np.array([0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2])]
     
     assert all(np.array_equal(segment, expected_segment) for segment, expected_segment in zip(byte_segments, expected))
-    
-
