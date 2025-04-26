@@ -31,6 +31,7 @@ baidu_proxied_file = "exp/test_dataset/realworld_dataset/www.baidu.com_proxied.p
 google_file = "exp/test_dataset/realworld_dataset/www.google.com.pcapng"
 apple_file = "exp/test_dataset/realworld_dataset/decryption/www.apple.com.pcapng"
 tiktok_file = "exp/test_dataset/realworld_dataset/decryption/www.tiktok.com.pcapng"
+s_weibo_com_vmess_dir = "exp/test_dataset/realworld_dataset/vmess/s.weibo.com"
 
 def test_packet_count_01():
     target = 8627
@@ -166,6 +167,24 @@ def test_http3_bytes_count():
 def test_vmess_bytes_count():
     counter = VMessByteCounter()
 
+    s_weibo_com_vmess_file = os.path.join(s_weibo_com_vmess_dir, "s.weibo.com.pcapng")
+    proxy_keylog_file = os.path.join(s_weibo_com_vmess_dir, "proxy_keylog.txt")
+    keylog_file = os.path.join(s_weibo_com_vmess_dir, "keylog.txt")
+    vmess_filter = "vmess"
+
+    capture = pyshark.FileCapture(input_file=s_weibo_com_vmess_file, display_filter=vmess_filter, 
+                                  override_prefs={'tls.keylog_file': os.path.abspath(keylog_file),
+                                                  'vmess.keylog_file': os.path.abspath(proxy_keylog_file)})
+
+    byte_count, pkt_count = 0, 0
+    for pkt in capture:
+        byte_count += counter.packet_count(pkt)
+        pkt_count += 1
+
+    capture.close()
+    byte_target, packet_target = 102837, 31
+
+    assert byte_target == byte_count and packet_target == pkt_count
     
 
 

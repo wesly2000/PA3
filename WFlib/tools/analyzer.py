@@ -7,6 +7,8 @@ from pathlib import Path
 import re
 from typing import List, Callable, Optional
 
+AES_128_GCM_TAG_LEN = 16
+
 def feature_attr(model, attr_method, X, y, num_classes):
     """
     Calculate feature attributions for a given model using a specified attribution method.
@@ -244,6 +246,45 @@ class UDPByteCounter(ByteCounter):
 
         return cnt
     
+
+class VMessByteCounter(ByteCounter):
+    TYPE_REQUEST = '1'
+    TYPE_RESPONSE = '2'
+    TYPE_DATA = '3'  # The VMess Data layer, DO NOT confuse with the DATA layer in reassemble.
+    def __init__(self, name='vmess'):
+        super().__init__(name)
+        self.auth_len = 16  # VMess authentication length
+        self.nonce_len = 8   # VMess nonce length
+        # According to Clash Imple., VMess response header contains 4 bytes.
+        # The port command is not used. See https://xtls.github.io/development/protocols/vmess.html
+        self.response_hdr_len = 4  
+        # According to Clash Imple., VMess with AEAD contains a length field of size 2 for each request and response.
+        # Moreover, the size of length field in Data layer coincide with the value, we abuse the notation.
+        self.length_len = 2  
+
+    def layer_count(self, layer, extra_data = None) -> int:
+        cnt = 0
+        if layer.layer_type == self.TYPE_REQUEST:
+            # In AEAD mode of Clash Imple., the length and request are encrypted separately, each of which
+            # contains a 16-byte (AES-128-GCM, which is commonly used) authentication tag.
+            cnt += self.auth_len + self.nonce_len + self.length_len + AES_128_GCM_TAG_LEN + int(layer.request_length) + AES_128_GCM_TAG_LEN
+        elif layer.layer_type == self.TYPE_RESPONSE:  
+            cnt += self.response_hdr_len + AES_128_GCM_TAG_LEN + self.length_len + AES_128_GCM_TAG_LEN
+        elif layer.layer_type == self.TYPE_DATA:
+            cnt += self.length_len + int(layer.payload_length)
+        else:
+            raise ValueError(f"Unknown VMess layer type: {layer.layer_type}")
+
+        return cnt
+
+    def packet_count(self, pkt) -> int:
+        cnt = 0
+        if "VMess" in pkt:  
+            vmess_layers = filter(lambda layer: layer.layer_name == "vmess", pkt.layers)  # One packet may contain multiple TLS layers
+            vmess_layer_lengths = map(self.layer_count, vmess_layers)
+            cnt += sum(vmess_layer_lengths)
+
+        return cnt
 
 PROTOCOL_BYTE_COUNTER = {
     "tls": TLSByteCounter(),
