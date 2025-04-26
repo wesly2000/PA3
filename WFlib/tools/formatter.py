@@ -5,6 +5,9 @@ from pathlib import Path
 import warnings
 import multiprocessing
 from WFlib.tools.capture import SNI_exclude_filter
+from typing import Union, List
+import asyncio
+import os
 
 class Extractor(object):
     """
@@ -33,12 +36,12 @@ class DirectionExtractor(Extractor):
 
     Attributes
     ----------
-    src : str
-        The source IP address for the extractor to decide ingress or egress.
+    src : List[str]
+        The source IP addresses for the extractor to decide ingress or egress.
     """
-    def __init__(self, src, name="direction"):
+    def __init__(self, src: Union[str, List[str]], name="direction"):
         super().__init__(name=name)
-        self._src = src 
+        self._src = src if isinstance(src, list) else [src]
 
     def extract(self, pkt, target : list, only_summaries=True):
         """
@@ -60,7 +63,7 @@ class DirectionExtractor(Extractor):
                 pass  # Add some warning here
             src = pkt['ip'].src
 
-        target.append(1 if src == self._src else -1) # 1 for egress, -1 for ingress
+        target.append(1 if src in self._src else -1) # 1 for egress, -1 for ingress
 
 class TimeExtractor(Extractor):
     """
@@ -73,7 +76,10 @@ class TimeExtractor(Extractor):
     """
     def __init__(self, name="time", src=None):
         super().__init__(name=name)
-        self._src = src
+        if src:
+            self._src = src if isinstance(src, list) else [src]
+        else:
+            self._src = None
 
     def extract(self, pkt, target : list, only_summaries=True):
         """
@@ -103,7 +109,7 @@ class TimeExtractor(Extractor):
                 src = pkt['ip'].src
 
         if self._src:
-            target.append(ts if src == self._src else -1 * ts)
+            target.append(ts if src in self._src else -1 * ts)
         else:
             target.append(ts)
 
@@ -395,7 +401,7 @@ class DistriPcapFormatter(PcapFormatter):
     """
     def __init__(self, length=0, only_summaries=True, keep_packets=True, display_filter=None, num_worker=4):
         super().__init__(length, only_summaries, keep_packets, display_filter)
-        self.num_worker = num_worker
+        self._num_worker = num_worker
 
     def load(self, file):
         raise NotImplementedError()
@@ -404,12 +410,25 @@ class DistriPcapFormatter(PcapFormatter):
         raise NotImplementedError()
     
     def load_and_transform(self, buf, file, *extractors : Extractor):
-        cap = pyshark.FileCapture(  input_file=file, 
-                                    display_filter=self.display_filter,
-                                    only_summaries=self._only_summaries,
-                                    keep_packets=self._keep_packets)
-        
+        # BUG: Running all pytest suite causes DistriPcapFormatter to raise
+        # RuntimeError: Event loop is already running.
+        # This error might raise with the same reason as that in Jupyter Notebook.
+        # Explicitly creating a event loop seems to (partially) solve this issue.
+
+        # This method is mentioned in https://github.com/KimiNewt/pyshark/issues/674,
+        # note that on Linux, SelectorEventLoop should be used, while ProactorEventLoop is used on Windows.
+        # However, on Windows it seems that this error does not occur due to a previous
+        # fix (https://github.com/KimiNewt/pyshark/commit/78b48d65a7b3745456c30e37b1ebac75af984657).
+        # Therefore, we only create explicit event loop when the platform is *nix.
+        # UPDATE: The issue remains, no idea about this:(
+
         tmp_buf = {extractor.name : [] for extractor in extractors}
+
+        cap = pyshark.FileCapture(input_file=file, 
+                                  display_filter=self.display_filter,
+                                  only_summaries=self._only_summaries,
+                                  keep_packets=self._keep_packets)
+        
         for pkt in cap:
             for extractor in extractors:
                 extractor.extract(pkt, tmp_buf[extractor.name], only_summaries=self._only_summaries)
@@ -462,7 +481,7 @@ class DistriPcapFormatter(PcapFormatter):
         # hosts = [subdir.name for subdir in subdir_list]
         with multiprocessing.Manager() as manager:
             self._raw_buf = manager.list()
-            num_workers = 6  # For testing purpose.
+            num_workers = self._num_worker
 
             with multiprocessing.Pool(num_workers) as pool:
                 # Note that multiprocessing uses pickle to dump the single-process task, and it re-import the task

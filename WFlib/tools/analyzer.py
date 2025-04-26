@@ -4,6 +4,8 @@ import torch
 import numpy as np
 import pyshark 
 from pathlib import Path
+import re
+from typing import List, Callable, Optional
 
 def feature_attr(model, attr_method, X, y, num_classes):
     """
@@ -81,7 +83,7 @@ def file_count(base_dir : Path):
 # TODO: Consider replace all the non-HTTP counter's count method to only count the underlying
 # TCP/UDP payload length.
 
-class PacketByteCounter():
+class ByteCounter():
     """
     Abstraction of protocol specific byte counter.
 
@@ -93,92 +95,111 @@ class PacketByteCounter():
     def __init__(self, name):
         self.name = name
 
-    def count(self, pkt) -> int:
+    def layer_count(self, layer, extra_data = None) -> int:
+        """
+        Count the number of layers of the given protocol within the given packet.
+        """
+        raise NotImplementedError()
+
+    def packet_count(self, pkt) -> int:
         """
         Count the byte number of proto layer within the given packet.
         """
         raise NotImplementedError()
     
 
-class HTTP3ByteCounter(PacketByteCounter):
+class HTTP3ByteCounter(ByteCounter):
     def __init__(self, name='http3'):
         super().__init__(name)
         self.uni_stream_hdr_len = 1  # The length of HTTP/3 unidirectional stream type
 
-    def count(self, pkt) -> int:
+    def layer_count(self, layer, extra_data = None) -> int:
         cnt = 0
-        if "HTTP3" in pkt:
-            h3_layers = filter(lambda layer: layer.layer_name == "http3", pkt.layers)
-            for h3_layer in h3_layers:
-                # if hasattr(h3_layer, "stream_uni_type"):
-                #     for sut in h3_layer.stream_uni_type.all_fields:
-                #         cnt += int(sut.size)  # Uni Stream has one extra stream type byte
-                if hasattr(h3_layer, "stream_uni"):
-                    cnt += int(h3_layer.stream_uni.size)
-                    continue  # It seems that in Wireshark, UNI Stream has contained the length including the frames within
-                # Note that HTTP/3 frame length and type are both variable-length integers.
-                if hasattr(h3_layer, "frame_length"):
-                    # Some HTTP/3 packets may not have frame length/type field.
-                    for fl in h3_layer.frame_length.all_fields:
-                        cnt += int(fl.showname_value) + int(fl.size)
-                    for ft in h3_layer.frame_type.all_fields:
-                        cnt += int(ft.size)
-
+        # if hasattr(h3_layer, "stream_uni_type"):
+        #     for sut in h3_layer.stream_uni_type.all_fields:
+        #         cnt += int(sut.size)  # Uni Stream has one extra stream type byte
+        if hasattr(layer, "stream_uni"):
+            cnt += int(layer.stream_uni.size)
+            return cnt  # It seems that in Wireshark, UNI Stream has contained the length including the frames within
+        # Note that HTTP/3 frame length and type are both variable-length integers.
+        if hasattr(layer, "frame_length"):
+            # Some HTTP/3 packets may not have frame length/type field.
+            for fl in layer.frame_length.all_fields:
+                cnt += int(fl.showname_value) + int(fl.size)
+            for ft in layer.frame_type.all_fields:
+                cnt += int(ft.size)
 
         return cnt
 
-class HTTP2ByteCounter(PacketByteCounter):
+    def packet_count(self, pkt) -> int:
+        cnt = 0
+        if "HTTP3" in pkt:
+            h3_layers = filter(lambda layer: layer.layer_name == "http3", pkt.layers)
+            h3_layer_lengths = map(self.layer_count, h3_layers)
+            cnt += sum(h3_layer_lengths)
+
+        return cnt
+
+class HTTP2ByteCounter(ByteCounter):
     def __init__(self, name='http2'):
         super().__init__(name)
         self.preface_len = 24  # HTTP/2 Connection Preface
         self.header_len = 9  # 9-octet header
+
+    def layer_count(self, layer, extra_data = None) -> int:
+        return int(layer.length) + self.header_len if hasattr(layer, "length") else self.preface_len
     
-    def count(self, pkt) -> int:
+    def packet_count(self, pkt) -> int:
         cnt = 0
         if "HTTP2" in pkt:  # Check if HTTP/2 is present in the decrypted packet
             h2_layers = filter(lambda layer: layer.layer_name == "http2", pkt.layers)
-            h2_layer_lengths = map(lambda layer: int(layer.length) + self.header_len if hasattr(layer, "length") else self.preface_len, h2_layers)
+            h2_layer_lengths = map(self.layer_count, h2_layers)
             cnt += sum(h2_layer_lengths)
 
         return cnt
     
 
-class TLSByteCounter(PacketByteCounter):
+class TLSByteCounter(ByteCounter):
     def __init__(self, name='tls'):
         super().__init__(name)
         self.type_len = 1  # TLS record type
         self.ver_len = 2  # TLS version
-        self.length_len = 1  # TLS record length
+        self.length_len = 2  # TLS record length
 
-    def count(self, pkt) -> int:
+    def layer_count(self, layer, extra_data = None) -> int:
+        cnt = 0
+        # The method to iterate through all records within a TLS layer is provided by
+        # https://github.com/KimiNewt/pyshark/issues/419
+        for rl in layer.record_length.all_fields:  # Each TLS layer may contain multiple TLS records
+            cnt += int(rl.showname_value) + self.type_len + self.ver_len + self.length_len
+
+        return cnt
+
+    def packet_count(self, pkt) -> int:
         cnt = 0
         if "TLS" in pkt:  
             tls_layers = filter(lambda layer: layer.layer_name == "tls", pkt.layers)  # One packet may contain multiple TLS layers
-            for tls_layer in tls_layers:  # Each TLS layer may contain multiple TLS records
-                # The method to iterate through all records within a TLS layer is provided by
-                # https://github.com/KimiNewt/pyshark/issues/419
-                try:
-                    for rl in tls_layer.record_length.all_fields:
-                        cnt += int(rl.showname_value) + self.type_len + self.ver_len + self.length_len
-                except AttributeError:
-                    # PyShark may consider some TCP packets as TLS packets (even TShark consider it TCP) the reason remains
-                    # inspected. Currently, we simply skip such packets.
-                    break
-            # tls_layer_lengths = map(lambda layer: int(layer.record_length) + self.type_len + self.ver_len + self.length_len, tls_layers)
-            # cnt += sum(tls_layer_lengths)
+            tls_layer_lengths = map(self.layer_count, tls_layers)
+            cnt += sum(tls_layer_lengths)
 
         return cnt
     
 
-class QUICByteCounter(PacketByteCounter):
+class QUICByteCounter(ByteCounter):
     def __init__(self, name='quic'):
         super().__init__(name)
         self.udp_hdr_len = 8  # UDP header length
 
-    def count(self, pkt) -> int:
+    def layer_count(self, layer, extra_data = None) -> int:
+        """
+        TODO: QUIC leverages UDP to do packet counting, try to isolate this issue.
+        """
+        raise NotImplementedError("QUICByteCounter.layer_count is not implemented, since the isolation of UDP is not done yet.")
+
+    def packet_count(self, pkt) -> int:
         cnt = 0
         if "QUIC" in pkt:  
-            quic_packets = filter(lambda layer: layer.layer_name == "quic", pkt.layers)  # One packet may contain multiple QUIC packets (QUIC uses packet instead of layer)
+            quic_packets = filter(lambda layer: layer.layer_name == "quic", pkt.layers)  # One packet may contain multiple QUIC packets (QUIC uses packet instead of layer as its PDU)
             for quic_packet in quic_packets:  
                 # If the packet has coalesced padding data, the length of the packet is equal to the
                 # UDP payload data length. See the discussions below:
@@ -193,34 +214,45 @@ class QUICByteCounter(PacketByteCounter):
 
         return cnt
 
-class TCPByteCounter(PacketByteCounter):
+class TCPByteCounter(ByteCounter):
     def __init__(self, name='tcp'):
         super().__init__(name)
 
-    def count(self, pkt) -> int:
+    def layer_count(self, layer, extra_data = None) -> int:
+        return int(layer.len) + int(layer.hdr_len)
+    def packet_count(self, pkt) -> int:
         cnt = 0
         if "TCP" in pkt:  
             tcp_layer = pkt['tcp']
-            cnt += int(tcp_layer.len) + int(tcp_layer.hdr_len)
+            cnt += self.layer_count(tcp_layer)
 
         return cnt
     
 
-class UDPByteCounter(PacketByteCounter):
+class UDPByteCounter(ByteCounter):
     def __init__(self, name='udp'):
         super().__init__(name)
 
-    def count(self, pkt) -> int:
+    def layer_count(self, layer, extra_data = None) -> int:
+        return int(layer.length)  # udp.length already contains the length of the UDP header
+ 
+    def packet_count(self, pkt) -> int:
         cnt = 0
         if "UDP" in pkt:  
             udp_layer = pkt['udp']
-            cnt += int(udp_layer.length)  # udp.length already contains the length of the UDP header
+            cnt += self.layer_count(udp_layer)
 
         return cnt
     
 
+PROTOCOL_BYTE_COUNTER = {
+    "tls": TLSByteCounter(),
+    "tcp": TCPByteCounter(),
+    "http2": HTTP2ByteCounter(),
+}
+
 class CaptureCounter():
-    def __init__(self, *counters: PacketByteCounter):
+    def __init__(self, *counters: ByteCounter):
         self.counters = counters
         
 
@@ -228,9 +260,459 @@ class CaptureCounter():
         result = {counter.name: [0, 0] for counter in self.counters}  # The byte count of each protocol within the capture.
         for pkt in cap:
             for counter in self.counters:
-                cnt = counter.count(pkt)
+                cnt = counter.packet_count(pkt)
                 if cnt > 0:
                     result[counter.name][0] += 1  # The number of packets with non-zero byte count.
                 result[counter.name][1] += cnt  
 
         return result
+    
+
+class Cell():
+    """
+    Abstraction of Wireshark PDU for any protocol. The comparison (<, >, ==, <=, >=) is for partial order.
+    Especially, the == operator checks if two cells have the same abs_frame_number and abs_segment_frame_number.
+    Don't use it as a check for all the attributes of two cells.
+    """
+    def __init__(self, proto, abs_frame_number):
+        self.proto = proto
+        self.abs_frame_number = abs_frame_number 
+        self.abs_segment_frame_number = []
+        self.rel_frame_number = None
+        self.rel_segment_frame_number = []
+        self.segment_size = []
+        self.size = 0
+
+    def __eq__(self, other):
+        if not isinstance(other, Cell):
+            raise TypeError("Can only compare with another Cell object")
+        if self.proto != other.proto:
+            raise ValueError(f"Cannot compare {self} with {other}, since they are not from the same protocol.")
+        if self.abs_frame_number == other.abs_frame_number and \
+            self.abs_segment_frame_number == other.abs_segment_frame_number:
+            return True
+        else:
+            return False
+        
+    def __lt__(self, other):
+        if not isinstance(other, Cell):
+            raise TypeError("Can only compare with another Cell object")
+        
+        if self.proto != other.proto:
+            raise ValueError(f"Cannot compare {self} with {other}, since they are not from the same protocol.")
+        
+        if self.abs_frame_number < other.abs_frame_number:
+            assert max(self.abs_segment_frame_number) <= max(other.abs_segment_frame_number), "Bad Order: Previous frame has segments beyond the next frame."
+            return True
+
+        elif self.abs_frame_number > other.abs_frame_number:
+            assert max(self.abs_segment_frame_number) >= max(other.abs_segment_frame_number), "Bad Order: Next frame has segments before the previous frame."
+            return False
+        
+        else:  # If the two cells are from the same frame, compare there segment number.
+            if self == other:
+                return False
+            else:  # Their segment number are not the same.
+                # TODO: more complicated check, for sanity check here, e.g., self.abs_segment_frame_number = [2, 3] and other.abs_segment_frame_number = [1, 2, 3, 4], such case MUST NOT happen.
+                if min(self.abs_segment_frame_number) < min(other.abs_segment_frame_number):
+                    return True
+                else:
+                    return False
+                
+    def __gt__(self, other):
+        if not isinstance(other, Cell):
+            raise TypeError("Can only compare with another Cell object")
+
+        if self.proto!= other.proto:
+            raise ValueError(f"Cannot compare {self} with {other}, since they are not from the same protocol.")
+
+        if self.abs_frame_number > other.abs_frame_number:
+            assert max(self.abs_segment_frame_number) >= max(other.abs_segment_frame_number), "Bad Order: Next frame has segments before the previous frame."
+            return True 
+
+        elif self.abs_frame_number < other.abs_frame_number:
+            assert max(self.abs_segment_frame_number) <= max(other.abs_segment_frame_number), "Bad Order: Previous frame has segments beyond the next frame."
+            return False
+
+        else:  # If the two cells are from the same frame, compare there segment number.
+            if self == other:
+                return False
+            else:  # Their segment number are not the same.
+                # TODO: more complicated check, for sanity check here, e.g., self.abs_segment_frame_number = [2, 3] and other.abs_segment_frame_number = [1, 2, 3, 4], such case MUST NOT happen.
+                if max(self.abs_segment_frame_number) > max(other.abs_segment_frame_number):
+                    return True
+                else:
+                    return False
+                
+
+class Line():
+    """
+    The compound of two list of Cells, each line is the abstract representation of a stream byte-segment map 
+    between the given upper protocol and lower protocol. 
+    
+    For example, a line with upper protocol HTTP/2 and lower protocol TLS within stream 1 represents the following:
+
+    HTTP/2 Layer     -------------       ---------------      --------     ----------------------
+                     |     |\     \      |  | \       \   
+                     |     | \     \     |  |  \       \ 
+                     |     |  \     \    |  |   \       \     ...  
+                     |     |   \     \   |  |    \       \ 
+                     |     |    \     \ /   /     \       \ 
+    TLS Layer     ----------  --------------    -----------      --------------      --------------------
+    """
+    def __init__(self, 
+                 upper_protocol: str, upper_cells: List[Cell], 
+                 sanity_check = False
+                 ):
+        self.upper_layer = upper_protocol
+        self.upper_cells = upper_cells
+
+        if sanity_check:
+            self.sanity_check()
+
+        self._upper_abs_byte_map = None  # COMMENT: shall we build the map in lazy mode?
+        self._byte_counter = 0  # Count how many bytes in the upper layer in total
+
+    
+    def sanity_check(self):
+        """
+        Check if the line is valid.
+        
+        TODO: Implement cell_order_check and frame_contain_check.
+        """
+        def cell_order_check(cells):
+            raise NotImplementedError() 
+
+        def frame_contain_check(lower_abs_frame_numbers, upper_abs_frame_numbers):
+            raise NotImplementedError()
+        
+    @property
+    def byte_counter(self):
+         # byte_counter needs to iterate through the upper_cells, build the map together.
+        if self._upper_abs_byte_map is None: 
+                self.upper_rel_building()
+        return self._byte_counter
+
+    @property
+    def upper_abs_byte_map(self):
+        if self._upper_abs_byte_map is None:  # Lazy build the map if not built yet.
+            self.upper_rel_building()
+        return self._upper_abs_byte_map
+
+    def upper_rel_building(self):
+        """
+        Build the relative reassemble information for upper layer according to their absolute frame number.
+        Upper relative reassemble contains which lower frame (abs) contains which bytes in upper layer.
+        """
+        byte_counter = 0  # Count how many bytes in the upper layer in total
+        # COMMENT: shall we explicitly create closed-interval or right-open interval then use for-loop 
+        #          to implicitly ignore the last byte index?
+        upper_abs_byte_map = dict()
+
+        for i in range(len(self.upper_cells)):
+            for segment_frame_number, segment_size in zip(self.upper_cells[i].abs_segment_frame_number, self.upper_cells[i].segment_size):
+                if segment_frame_number in upper_abs_byte_map:
+                    upper_abs_byte_map[segment_frame_number] = (  # If the segment frame number is already in the map, update the byte range
+                        upper_abs_byte_map[segment_frame_number][0],
+                        upper_abs_byte_map[segment_frame_number][1] + segment_size
+                    )
+                else:  # If the segment frame number is not in the map, create the entry
+                    upper_abs_byte_map[segment_frame_number] = (byte_counter, byte_counter + segment_size)
+
+                byte_counter += segment_size  # Update the byte counter
+
+        self._byte_counter = byte_counter
+
+        self._upper_abs_byte_map = upper_abs_byte_map
+
+
+PROTOCOL_REASSEMBLE_FIELD = {
+    "tls": "tls_segments",
+    "tcp": "tcp_segments",
+    "vmess": "vmess_segments",
+}
+
+class CellExtractor(object):
+    """
+    Select the reassemble info related field for each protocol in DATA layer.
+    """
+    def __init__(self):
+        self._name = "abstract" 
+
+    @property
+    def name(self):
+        return self._name
+    
+    def layer_extract(self, layer, frame_number: int, lower_protocol) -> Cell:
+        cell = Cell(self.name, frame_number)
+        
+        if lower_protocol is not None and layer.layer_name == "DATA":
+            # Make tls_segments to more generic.
+            for segment_frame_number, segment_size in match_segment_number(
+                layer.get_field(
+                    PROTOCOL_REASSEMBLE_FIELD[lower_protocol]
+                    )
+                ):
+
+                cell.abs_segment_frame_number.append(segment_frame_number)
+                cell.segment_size.append(segment_size)
+
+        elif layer.layer_name == self.name:
+            counter = PROTOCOL_BYTE_COUNTER[self.name]
+            cell.abs_segment_frame_number.append(frame_number)
+            cell.segment_size.append(counter.layer_count(layer))
+
+        else:
+            raise ValueError(f"Protocol mismatch: only support {self.name} and DATA layer, but got {layer.layer_name}")
+        
+        cell.size = sum(cell.segment_size)
+        
+        return cell
+    
+    def extract(self, pkt, lower_protocol: str) -> List[Cell]:
+        """
+        Extract reassemble information from the given packet with the given protocol.
+
+        Params
+        ------
+        pkt: 
+            The packet to extract reassemble information from.
+        lower_protocol: str | None
+            The protocol to extract reassemble information from. If None, this function does not
+            extract reassemble information from the given packet. Please always set it to
+            not None value unless you are extracting the reassemble info for the lowest protocol
+            in a protocol stack, whose reassemble info is not needed or not implemented.
+        """
+        lower_protocol = lower_protocol.lower()
+        layers = layer_extractor(pkt, self.name, lower_protocol)
+        filtered_layers = seq_filter(layers, lower_protocol)
+        cells = []
+
+        for layer in filtered_layers:
+            cell = self.layer_extract(layer, int(pkt.number), lower_protocol)
+            cells.append(cell)
+
+        # Defer the sorting work to the Cell instead of layers.
+        cells.sort()
+        
+        return cells
+    
+
+class HTTP2CellExtractor(CellExtractor):
+    def __init__(self):
+        self._name = "http2"
+
+    def extract(self, pkt, lower_protocol="TLS") -> List[Cell]:
+        return super().extract(pkt, lower_protocol)
+    
+
+class TLSCellExtractor(CellExtractor):
+    def __init__(self):
+        self._name = "tls"
+
+    def extract(self, pkt, lower_protocol="TCP") -> List[Cell]:
+        return super().extract(pkt, lower_protocol)
+    
+
+class TCPCellExtractor(CellExtractor):
+    def __init__(self):
+        self._name = "tcp"
+
+    def extract(self, pkt, lower_protocol='tcp') -> List[Cell]:
+        return super().extract(pkt, lower_protocol)
+    
+
+PROCOCOL_CELL_EXTRACTOR = {
+    "tcp": TCPCellExtractor(),  
+    "tls": TLSCellExtractor(),
+    "http2": HTTP2CellExtractor(),
+}
+
+
+def layer_extractor(pkt, upper_protocol, lower_protocol):
+    """
+    Extract all layers of the given protocol, if the layer is built upon a DATA layer, 
+    prepend the DATA layer to the layer list. Caller is responsible to ensure that
+    the order of upper_protocol and lower_protocol is correct. Moreover, caller is
+    responsible to ensure the continuity of upper_protocol and lower_protocol.
+
+    For example, if the packet stack is TCP/TLS/HTTP2, the following params:
+    {upper_protocol: 'http2', lower_protocol: 'tcp'},
+    {upper_protocol: 'tls', lower_protocol: 'http2'},
+
+    will lead to unexpected behavior. Callee does not handle the above cases since in 
+    practice they are valid, e.g., HTTP tunnel may build TLS upon HTTP.
+
+    If the packet does not contain either upper_protocol or lower_protocol, return an empty list.
+    """
+    upper_protocol = upper_protocol.lower()
+    lower_protocol = lower_protocol.lower()
+
+    supported_protocols = ['tcp', 'tls', 'http2', 'vmess']
+    if upper_protocol not in supported_protocols or lower_protocol not in supported_protocols:
+        raise ValueError(f"Unsupported protocol: only the following protocols are supported: {supported_protocols}")
+    # Assure the packet protocol stack contains both upper and lower protocols.
+    if upper_protocol not in pkt or lower_protocol not in pkt:
+        return []  
+    
+    layers = []
+    data_layer_marker = {'tcp': 'tcp_segments', 'tls': 'tls_segments'}
+
+    for layer in pkt.layers:
+        # When upper_protocol == lower_protocol, no need to extract reassemble info
+        if layer.layer_name == 'DATA' and upper_protocol != lower_protocol:
+            if data_layer_marker[lower_protocol] in layer.field_names:
+                layers.append(layer)
+        elif layer.layer_name == upper_protocol:
+            layers.append(layer)
+
+    return layers
+
+# def layer_label_func(layer):
+#     """
+#     This function maps a layer to the label. Note that DATA layer is the x (or 0) in seq_filter.
+#     """
+#     return 0 if layer.layer_name == 'DATA' else 1
+
+
+def seq_filter(seq, lower_protocol):
+    """
+    Filter the redundant layers from the original list of layers. For example, if the original list of layers is:
+    [DATA, DATA, TLS, TLS, TLS], then according to Wireshark dissection result, one DATA would cover the same
+    byte range as one TLS layer. 
+
+    The correspondence between DATA and TLS layers seem to be random (MAYBE there is some algorithm), since we do
+    not concern about the real content of the data contained, we remove the TLS which has the same size as the DATA.
+    """
+    if len(seq) == 0:
+        return []
+
+    to_remove = set()
+
+    for layer in seq:
+        if layer.layer_name == 'DATA':
+            for i in range(len(seq)):
+                if i not in to_remove and seq[i].layer_name != 'DATA':
+                    # Compute current layer size
+                    layer_size = PROTOCOL_BYTE_COUNTER[seq[i].layer_name].layer_count(seq[i])
+                    data_layer_size = 0
+                    # Compute DATA layer size
+                    for _, segment_size in match_segment_number(
+                        layer.get_field(PROTOCOL_REASSEMBLE_FIELD[lower_protocol])):
+                        data_layer_size += segment_size
+
+                    if layer_size == data_layer_size:
+                        to_remove.add(i)
+
+    new_seq = [seq[i] for i in range(len(seq)) if i not in to_remove]
+    return new_seq
+
+def match_segment_number(s: str): 
+    """
+    Extract numbers after symbol '#'.  
+    """
+    pattern = r'#(\d+)\((\d+)\)'
+    results = re.findall(pattern, s)
+    res = [(int(idx), int(size)) for idx, size in results]
+    return res
+
+def get_adjacent_protocol_reassemble_info(cap: pyshark.FileCapture, upper_protocol: str, lower_protocol: str) -> Line:
+    """
+    Extract the reassemble information for each packet given the adjacent upper_protocol and lower_protocol, e.g.,
+    TLS over TCP, HTTP2 over TLS. This function is a component of get_reassemble_info.
+    """
+    upper_protocol = upper_protocol.lower()
+    lower_protocol = lower_protocol.lower()
+
+    upper_cells = []
+
+    for pkt in cap:
+        if upper_protocol in pkt:
+            upper_cells += PROCOCOL_CELL_EXTRACTOR[upper_protocol].extract(pkt, lower_protocol=lower_protocol)
+
+    line = Line(
+        upper_protocol=upper_protocol, 
+        upper_cells=upper_cells, 
+        )
+
+    return line
+
+def get_reassemble_info(cap: pyshark.FileCapture, protocol_stack: List[str] = ['TCP', 'TLS',]): 
+    """
+    Extract the reassemble information for each packet given the protocol stack. In PyShark, the reassembly information is wrapped in the DATA layer, which is a fake-field-wrapper. When there are multiple upper layers, multiple DATA layer might be used. For example, given a packet TCP/TLS/HTTP2, there are 3 possible cases, we list the corresponding layers for each of them:
+
+    + 1. The TLS layer is reassembled, but HTTP2 layer is not (TCP/DATA/TLS/HTTP2/DATA);
+    + 2. The TLS layer is not reassembled, but HTTP2 layer is (TCP/TLS/DATA/HTTP2/DATA);
+    + 3. Both TLS and HTTP2 layers are reassembled (TCP/DATA/TLS/DATA/HTTP2/DATA),
+
+    where the last DATA layer is for Lua-related information that should be ignored.
+
+    However, for protocols above the transport layer, there might be multiple layers for the same protocol, e.g.,
+    TCP/DATA/TLS/TLS/TLS/DATA/HTTP2/HTTP2. 
+                  ^   ^         ^     ^
+
+    One could deduce that for a given protocol, reassembly would only happen at the its first layer. Therefore, we
+    need to separately handle the remaining layers (marked with ^).
+
+
+    TODO: Add support to UDP stack.
+
+    Parameters 
+    ----------
+    cap: pyshark.FileCapture
+        The capture file.
+    protocol_stack: List[str]
+        The ordered list of protocols, the first one is the lower bound of the stack, the last one the upper bound.
+        For example, for a protocol stack TCP/VMess/TLS/HTTP2, if we want to extract all the layer reassembly, one
+        should set the protocol_stack to ['TCP', 'VMess', 'TLS', 'HTTP2'].
+
+    Returns 
+    ------- 
+    res_dict: dict, {K: [v1, ...], ...} 
+        K is the packet index in the same form of Wireshark, namely, starts from 1. 
+        [v1, ...] denotes the reassembled indices, whose values will be K in turn and have the same reassembled list. 
+        For example, {1: [1, 2], 2: [1, 2]}. 
+    """
+    # res_dict = {} # {index: [reassemble packets]}
+    # for i in tqdm(range(packet_count(cap)), "get reassemble info"): 
+    #     if cap[i].transport_layer == 'TCP': # ignore the UDP based protocols 
+    #         frame_num = int(cap[i].frame_info.get_field('number')) # get the number of frame
+    #         res_dict[frame_num] = [] # init i-th position as empty 
+    #         segment_index = [] 
+    #         # print(f'${i}$: ${pcap[i].layers}')
+    #         for layer in cap[i].layers: 
+    #             if layer.layer_name == 'DATA': # fake-field-wrapper is renamed to data in pyshark
+    #                 for field in layer.field_names: 
+    #                     if field == 'tcp_segments': # reassemble will appearance in the last packet
+    #                         field_obj = layer.get_field(field) 
+    #                         content = field_obj.main_field.get_default_value() 
+    #                         segment_index.extend(match_segment_number(content)) 
+    #         for index in segment_index: # cover related values with its reassemble info
+    #             res_dict[index] = segment_index 
+    
+    # return res_dict
+    res_dict = {protocol: [] for protocol in protocol_stack} # {index: [reassemble packets]}
+    cell_extractor = CellExtractor()
+    for pkt in cap: 
+        # for protocol in protocol_stack: 
+        #     if protocol in pkt:
+        #         res_dict[protocol].extend(cell_extractor.extract(pkt, protocol))
+        # if protocol in pkt:
+        #     frame_num = int(pkt.frame_info.get_field('number')) # get the number of frame
+        #     res_dict[frame_num] = [] # init i-th position as empty 
+        #     segment_index = [] 
+        #     # print(f'${i}$: ${pcap[i].layers}')
+        #     for layer in pkt.layers: 
+        #         if layer.layer_name == 'DATA': # fake-field-wrapper is renamed to data in pyshark
+        #             for field in layer.field_names: 
+        #                 if field == 'tcp_segments': # reassemble will appearance in the last packet
+        #                     field_obj = layer.get_field(field) 
+        #                     content = field_obj.main_field.get_default_value() 
+        #                     segment_index.extend(match_segment_number(content)) 
+        #     for index in segment_index: # cover related values with its reassemble info
+        #         res_dict[index] = segment_index 
+        frame_num = int(pkt.frame_info.get_field('number'))
+        if frame_num == 58:
+            pass
+    
+    return res_dict
