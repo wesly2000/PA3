@@ -5,9 +5,27 @@ from WFlib.tools.analyzer import *
 from pathlib import Path
 import pyshark
 import os
+import pytest
+from WFlib.utils.config import get_config
 
 import nest_asyncio 
 nest_asyncio.apply()
+
+config_path = Path.cwd() / 'config.ini'
+if not config_path.exists():
+    VMESS_ENABLED = False
+else:
+    config = get_config(config_path)
+    if 'vmess' not in config:
+        VMESS_ENABLED = False
+    else:
+        VMESS_ENABLED = config['vmess'].getboolean('enabled', fallback=False)
+
+
+skip_vmess = pytest.mark.skipif(
+    not VMESS_ENABLED,
+    reason="VMess dissector not available, skip the test."
+)
 
 baidu_proxied_file = "exp/test_dataset/realworld_dataset/www.baidu.com_proxied.pcapng"
 google_file = "exp/test_dataset/realworld_dataset/www.google.com.pcapng"
@@ -143,6 +161,12 @@ def test_http3_bytes_count():
     byte_target, packet_target = 42925, 22
 
     assert byte_target == byte_count and packet_target == pkt_count
+
+@skip_vmess
+def test_vmess_bytes_count():
+    counter = VMessByteCounter()
+
+    
 
 
 def test_capture_counter_1():
