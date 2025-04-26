@@ -320,7 +320,7 @@ def batch_capture(base_dir, host_list, iface,
                 monitor_process = multiprocessing.Process(target=launch_proxy, kwargs={"keylog": keylog, "proxy_log": proxy_log})
                 monitor_process.start()
 
-                # time.sleep(2)  # maybe waiting for proxy client to launch?
+                time.sleep(1)  # maybe waiting for proxy client to launch?
             
             capture(url=url, 
                     timeout=timeout, 
