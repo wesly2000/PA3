@@ -1,0 +1,130 @@
+"""
+This test file is used to test VMess-related features. We make isolation from the normal tests
+for better clarity.
+"""
+
+from WFlib.tools.analyzer import *
+from pathlib import Path
+import pyshark
+import os
+import pytest
+from WFlib.utils.config import get_config
+
+import nest_asyncio 
+nest_asyncio.apply()
+
+config_path = Path.cwd() / 'config.ini'
+if not config_path.exists():
+    VMESS_ENABLED = False
+else:
+    config = get_config(config_path)
+    if 'vmess' not in config:
+        VMESS_ENABLED = False
+    else:
+        VMESS_ENABLED = config['vmess'].getboolean('enabled', fallback=False)
+
+
+skip_vmess = pytest.mark.skipif(
+    not VMESS_ENABLED,
+    reason="VMess dissector not available, skip the test."
+)
+
+s_weibo_com_vmess_dir = "exp/test_dataset/realworld_dataset/vmess/s.weibo.com"
+s_weibo_com_vmess_file = os.path.join(s_weibo_com_vmess_dir, "s.weibo.com.pcapng")
+proxy_keylog_file = os.path.join(s_weibo_com_vmess_dir, "proxy_keylog.txt")
+keylog_file = os.path.join(s_weibo_com_vmess_dir, "keylog.txt")
+
+override_prefs = {'tls.keylog_file': os.path.abspath(keylog_file),
+                  'vmess.keylog_file': os.path.abspath(proxy_keylog_file)}
+
+custom_parameters = ["-C", "Customized", "-2"]
+
+@skip_vmess
+def test_vmess_bytes_count():
+    counter = VMessByteCounter()
+
+    s_weibo_com_vmess_file = os.path.join(s_weibo_com_vmess_dir, "s.weibo.com.pcapng")
+    vmess_filter = "vmess"
+
+    cap = pyshark.FileCapture(  input_file=s_weibo_com_vmess_file, 
+                                custom_parameters=custom_parameters,
+                                display_filter=vmess_filter, 
+                                override_prefs=override_prefs)
+
+    byte_count, pkt_count = 0, 0
+    for pkt in cap:
+        byte_count += counter.packet_count(pkt)
+        pkt_count += 1
+
+    cap.close()
+    byte_target, packet_target = 102837, 31
+
+    assert byte_target == byte_count and packet_target == pkt_count
+
+@skip_vmess
+def test_layer_extractor_01():
+    """
+    This test covers extracting layers from the given capture for HTTP2.
+    """
+    cap = pyshark.FileCapture(input_file=s_weibo_com_vmess_file, 
+                              custom_parameters=custom_parameters,
+                              override_prefs=override_prefs)
+
+    for pkt in cap:
+        if pkt.number == "108": 
+            layers = layer_extractor(pkt, upper_protocol="http2", lower_protocol='tls')
+            assert len(layers) == 5 and \
+                    layers[0].layer_name == "DATA" and \
+                    layers[1].layer_name == "http2" and \
+                    layers[2].layer_name == "http2" and \
+                    layers[3].layer_name == "http2" and \
+                    layers[4].layer_name == "http2" and \
+                    DATA_LAYER_MARKER['tls'] in layers[0].field_names  # Assert we are extracting the correct DATA layer.
+            layers = layer_extractor(pkt, upper_protocol="tls", lower_protocol='vmess')
+            assert len(layers) == 3 and \
+                    layers[0].layer_name == "DATA" and \
+                    DATA_LAYER_MARKER['vmess'] in layers[0].field_names and \
+                    layers[1].layer_name == "tls" and \
+                    layers[2].layer_name == "tls"
+        elif pkt.number == "15":
+            layers = layer_extractor(pkt, upper_protocol="vmess", lower_protocol='tcp') 
+            assert len(layers) == 3 and \
+                    layers[0].layer_name == "DATA" and \
+                    layers[1].layer_name == "vmess" and \
+                    layers[2].layer_name == "vmess" and \
+                    DATA_LAYER_MARKER['tcp'] in layers[0].field_names  # Assert we are extracting the correct DATA layer.
+        elif pkt.number == "63":
+            layers = layer_extractor(pkt, upper_protocol="http2", lower_protocol='tls') 
+            assert len(layers) == 2 and \
+                    layers[0].layer_name == "http2" and \
+                    layers[1].layer_name == "http2"
+    cap.close()
+
+def test_line_rel_building_01():
+    """
+    This test covers building the lower relation of a line using MORE COMPLEX real-world data.
+    """
+    cap = pyshark.FileCapture(input_file=s_weibo_com_vmess_file, 
+                              custom_parameters=custom_parameters,
+                              override_prefs=override_prefs)
+    
+    line = get_adjacent_protocol_reassemble_info(cap=cap, upper_protocol="http2", lower_protocol="tls")
+    
+    cap.close()
+    
+    counter = HTTP2ByteCounter()
+    cnt = 0
+
+    cap = pyshark.FileCapture(input_file=s_weibo_com_vmess_file, 
+                              custom_parameters=custom_parameters,
+                              override_prefs=override_prefs)
+    for pkt in cap:
+        if "HTTP2" in pkt:
+            cnt += counter.packet_count(pkt)
+    
+    cap.close()
+
+    # If the first and last elements of upper_abs_byte_map is correct, the whole map should be correct.
+    assert  line.upper_abs_byte_map[23] == (0, 367) and \
+            line.upper_abs_byte_map[150] == (cnt - 17, cnt) and \
+            line.byte_counter == cnt

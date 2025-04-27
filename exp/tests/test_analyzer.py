@@ -11,27 +11,10 @@ from WFlib.utils.config import get_config
 import nest_asyncio 
 nest_asyncio.apply()
 
-config_path = Path.cwd() / 'config.ini'
-if not config_path.exists():
-    VMESS_ENABLED = False
-else:
-    config = get_config(config_path)
-    if 'vmess' not in config:
-        VMESS_ENABLED = False
-    else:
-        VMESS_ENABLED = config['vmess'].getboolean('enabled', fallback=False)
-
-
-skip_vmess = pytest.mark.skipif(
-    not VMESS_ENABLED,
-    reason="VMess dissector not available, skip the test."
-)
-
 baidu_proxied_file = "exp/test_dataset/realworld_dataset/www.baidu.com_proxied.pcapng"
 google_file = "exp/test_dataset/realworld_dataset/www.google.com.pcapng"
 apple_file = "exp/test_dataset/realworld_dataset/decryption/www.apple.com.pcapng"
 tiktok_file = "exp/test_dataset/realworld_dataset/decryption/www.tiktok.com.pcapng"
-s_weibo_com_vmess_dir = "exp/test_dataset/realworld_dataset/vmess/s.weibo.com"
 
 def test_packet_count_01():
     target = 8627
@@ -162,31 +145,6 @@ def test_http3_bytes_count():
     byte_target, packet_target = 42925, 22
 
     assert byte_target == byte_count and packet_target == pkt_count
-
-@skip_vmess
-def test_vmess_bytes_count():
-    counter = VMessByteCounter()
-
-    s_weibo_com_vmess_file = os.path.join(s_weibo_com_vmess_dir, "s.weibo.com.pcapng")
-    proxy_keylog_file = os.path.join(s_weibo_com_vmess_dir, "proxy_keylog.txt")
-    keylog_file = os.path.join(s_weibo_com_vmess_dir, "keylog.txt")
-    vmess_filter = "vmess"
-
-    capture = pyshark.FileCapture(input_file=s_weibo_com_vmess_file, display_filter=vmess_filter, 
-                                  override_prefs={'tls.keylog_file': os.path.abspath(keylog_file),
-                                                  'vmess.keylog_file': os.path.abspath(proxy_keylog_file)})
-
-    byte_count, pkt_count = 0, 0
-    for pkt in capture:
-        byte_count += counter.packet_count(pkt)
-        pkt_count += 1
-
-    capture.close()
-    byte_target, packet_target = 102837, 31
-
-    assert byte_target == byte_count and packet_target == pkt_count
-    
-
 
 def test_capture_counter_1():
     """
