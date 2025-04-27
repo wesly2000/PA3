@@ -3,6 +3,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
+import argparse
 
 from WFlib.tools.visualize import *
 from WFlib.tools.capture import *
@@ -23,26 +24,41 @@ def draw_byte_segment(avg_byte_segments: np.ndarray, std_byte_segments: np.ndarr
     plt.savefig(output_path, dpi=300, format=fig_format, bbox_inches='tight')
     plt.close()
 
+if __name__ == '__main__':    
+    parser = argparse.ArgumentParser()
+    # Flag argument
+    parser.add_argument("-p", "--protocol", default="normal", type=str, help="The protocol to analyze.")
+    parser.add_argument("-h", "--host", required=True, type=str, help="The host to analyze.")
+    parser.add_argument("-s", "--sni", required=True, type=str, help="The SNI to analyze.")
+    parser.add_argument("-r", "--root", default="exp", type=str, help="The root directory of the capture and keylog.")
+    args = parser.parse_args()
 
-if __name__ == '__main__':
-    pcap_dir = Path("exp/normal_capture/www.apple.com")
-    # file = "exp/test_dataset/realworld_dataset/decryption/www.apple.com.pcapng"
+    pcap_dir = Path(f"{args.root}/{args.protocol}_capture/{args.host}")
+    keylog_file = f"{args.root}/{args.protocol}_capture/{args.host}/keylog.txt"
+    proxy_keylog_file = f"{args.root}/{args.protocol}_capture/{args.host}/proxy_keylog.txt"
+    custom_parameters=["-C", "Customized", "-2"]
 
-    # tcp_filter = "tcp.stream == 0"
-    keylog_file = "exp/normal_capture/www.apple.com/keylog.txt"
-    SNIs = ["is1-ssl.mzstatic.com"]
+    if args.protocol == 'normal':
+        override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)}
+    elif args.protocol == 'vmess':
+        override_prefs={'tls.keylog_file': os.path.abspath(keylog_file),
+                        'vmess.keylog_file': os.path.abspath(proxy_keylog_file)}
+
+    SNIs = [args.sni]
     lines = []
     for file in sorted(pcap_dir.iterdir()):
         if file.is_file() and file.suffix in ['.pcapng', '.pcap']:
-            tcp_stream, _ = h2data_SNI_intersect(file, SNIs, keylog_file=keylog_file, custom_parameters={"-C": "Customized"})
+            tcp_stream, _ = h2data_SNI_intersect(file, SNIs, keylog_file=keylog_file, 
+                                                 custom_parameters=custom_parameters, 
+                                                 override_prefs=override_prefs)
             tcp_stream_filter = stream_extract_filter(tcp_stream, [])
             display_filter = tcp_stream_filter
             if tcp_stream_filter == "":
                 continue
 
             cap = pyshark.FileCapture(input_file=file, display_filter=tcp_stream_filter, 
-                                        custom_parameters=["-C", "Customized", "-2"],
-                                        override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
+                                        custom_parameters=custom_parameters,
+                                        override_prefs=override_prefs)
             
             lines.append(get_adjacent_protocol_reassemble_info(cap, upper_protocol="http2", lower_protocol="tls"))
 
@@ -52,4 +68,4 @@ if __name__ == '__main__':
     avg_byte_segments = np.mean(np.array(byte_segments), axis=0)
     std_byte_segments = np.std(np.array(byte_segments), axis=0)
 
-    draw_byte_segment(avg_byte_segments, std_byte_segments, "exp/data_visualize/img/example.pdf")
+    draw_byte_segment(avg_byte_segments, std_byte_segments, f"exp/data_visualize/img/{args.host}_{SNIs[0]}_{args.protocol}.pdf")
