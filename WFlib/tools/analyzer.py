@@ -563,11 +563,22 @@ class TCPCellExtractor(CellExtractor):
         return super().extract(pkt, lower_protocol)
     
 
+
+class VMessCellExtractor(CellExtractor):
+    def __init__(self):
+        self._name = "tcp"
+
+    def extract(self, pkt, lower_protocol='tcp') -> List[Cell]:
+        return super().extract(pkt, lower_protocol)
+    
+
 PROCOCOL_CELL_EXTRACTOR = {
     "tcp": TCPCellExtractor(),  
     "tls": TLSCellExtractor(),
     "http2": HTTP2CellExtractor(),
 }
+
+DATA_LAYER_MARKER = {'tcp': 'tcp_segments', 'tls': 'tls_segments', 'vmess': 'vmess_fragments'}
 
 
 def layer_extractor(pkt, upper_protocol, lower_protocol):
@@ -597,12 +608,11 @@ def layer_extractor(pkt, upper_protocol, lower_protocol):
         return []  
     
     layers = []
-    data_layer_marker = {'tcp': 'tcp_segments', 'tls': 'tls_segments'}
 
     for layer in pkt.layers:
         # When upper_protocol == lower_protocol, no need to extract reassemble info
         if layer.layer_name == 'DATA' and upper_protocol != lower_protocol:
-            if data_layer_marker[lower_protocol] in layer.field_names:
+            if DATA_LAYER_MARKER[lower_protocol] in layer.field_names:
                 layers.append(layer)
         elif layer.layer_name == upper_protocol:
             layers.append(layer)
