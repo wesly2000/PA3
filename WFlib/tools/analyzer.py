@@ -654,6 +654,7 @@ def seq_filter(seq, lower_protocol):
 
                     if layer_size == data_layer_size:
                         to_remove.add(i)
+                        break
 
     new_seq = [seq[i] for i in range(len(seq)) if i not in to_remove]
     return new_seq
