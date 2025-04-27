@@ -24,11 +24,13 @@ def draw_byte_segment(avg_byte_segments: np.ndarray, std_byte_segments: np.ndarr
     plt.savefig(output_path, dpi=300, format=fig_format, bbox_inches='tight')
     plt.close()
 
+
+
 if __name__ == '__main__':    
     parser = argparse.ArgumentParser()
     # Flag argument
     parser.add_argument("-p", "--protocol", default="normal", type=str, help="The protocol to analyze.")
-    parser.add_argument("-h", "--host", required=True, type=str, help="The host to analyze.")
+    parser.add_argument("--host", required=True, type=str, help="The host to analyze.")
     parser.add_argument("-s", "--sni", required=True, type=str, help="The SNI to analyze.")
     parser.add_argument("-r", "--root", default="exp", type=str, help="The root directory of the capture and keylog.")
     args = parser.parse_args()
@@ -48,22 +50,26 @@ if __name__ == '__main__':
     lines = []
     for file in sorted(pcap_dir.iterdir()):
         if file.is_file() and file.suffix in ['.pcapng', '.pcap']:
-            tcp_stream, _ = h2data_SNI_intersect(file, SNIs, keylog_file=keylog_file, 
-                                                 custom_parameters=custom_parameters, 
-                                                 override_prefs=override_prefs)
-            tcp_stream_filter = stream_extract_filter(tcp_stream, [])
-            display_filter = tcp_stream_filter
-            if tcp_stream_filter == "":
-                continue
+            try:
+                tcp_stream, _ = h2data_SNI_intersect(file, SNIs, keylog_file=keylog_file, 
+                                                    custom_parameters=custom_parameters, 
+                                                    override_prefs=override_prefs)
+                tcp_stream_filter = stream_extract_filter(tcp_stream, [])
+                display_filter = tcp_stream_filter
+                if tcp_stream_filter == "":
+                    continue
 
-            cap = pyshark.FileCapture(input_file=file, display_filter=tcp_stream_filter, 
-                                        custom_parameters=custom_parameters,
-                                        override_prefs=override_prefs)
+                cap = pyshark.FileCapture(input_file=file, display_filter=tcp_stream_filter, 
+                                            custom_parameters=custom_parameters,
+                                            override_prefs=override_prefs)
+                
+                lines.append(get_adjacent_protocol_reassemble_info(cap, upper_protocol="http2", lower_protocol="tls"))
+
+                cap.close()
+            except Exception as e:
+                print(f"Error in file {file}: {e}")
+
             
-            lines.append(get_adjacent_protocol_reassemble_info(cap, upper_protocol="http2", lower_protocol="tls"))
-
-            cap.close()
-
     byte_segments = generate_byte_segment(lines)
     avg_byte_segments = np.mean(np.array(byte_segments), axis=0)
     std_byte_segments = np.std(np.array(byte_segments), axis=0)
