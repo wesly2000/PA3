@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 import argparse
+from tqdm import tqdm
 
 from WFlib.tools.visualize import *
 from WFlib.tools.capture import *
@@ -50,7 +51,7 @@ def main():
                 std_byte_segments = np.load(std_array_path)
         else:
             lines = []
-            for file in sorted(pcap_dir.iterdir()):
+            for file in tqdm(sorted(pcap_dir.iterdir())):
                 if file.is_file() and file.suffix in ['.pcapng', '.pcap']:
                     try:
                         tcp_stream, _ = h2data_SNI_intersect(file, SNIs, keylog_file=keylog_file, 
