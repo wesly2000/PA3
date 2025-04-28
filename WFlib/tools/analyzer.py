@@ -640,12 +640,12 @@ def seq_filter(seq, lower_protocol):
 
     to_remove = set()
 
-    for layer in seq:
+    for i, layer in enumerate(seq):
         if layer.layer_name == 'DATA':
-            for i in range(len(seq)):
-                if i not in to_remove and seq[i].layer_name != 'DATA':
+            for j in range(i + 1, len(seq)):
+                if j not in to_remove and seq[j].layer_name != 'DATA':
                     # Compute current layer size
-                    layer_size = PROTOCOL_BYTE_COUNTER[seq[i].layer_name].layer_count(seq[i])
+                    layer_size = PROTOCOL_BYTE_COUNTER[seq[j].layer_name].layer_count(seq[j])
                     data_layer_size = 0
                     # Compute DATA layer size
                     for _, segment_size in match_segment_number(
@@ -653,7 +653,7 @@ def seq_filter(seq, lower_protocol):
                         data_layer_size += segment_size
 
                     if layer_size == data_layer_size:
-                        to_remove.add(i)
+                        to_remove.add(j)
                         break
 
     new_seq = [seq[i] for i in range(len(seq)) if i not in to_remove]
