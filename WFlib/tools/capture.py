@@ -491,6 +491,9 @@ def h2data_SNI_intersect(file, SNIs, keylog_file, custom_parameters = None, over
     capture_tls.close()
 
     SNI_filter = stream_extract_filter(tcp_stream_numbers_tls, udp_stream_numbers_tls)
+    # No satisfying stream is found, no further searching is needed.
+    if SNI_filter == "":
+        return set(), set()
     
     capture_h2data = pyshark.FileCapture(input_file=file, 
                                          display_filter=f"({SNI_filter}) and http2.type == 0",
@@ -518,6 +521,9 @@ def h3data_SNI_intersect(file, SNIs, keylog_file, custom_parameters = None, over
     capture_quic.close()
 
     SNI_filter = stream_extract_filter(tcp_stream_numbers_quic, udp_stream_numbers_quic)
+    # No satisfying stream is found, no further searching is needed.
+    if SNI_filter == "":
+        return set(), set()
     
     capture_h3data = pyshark.FileCapture(input_file=file, 
                                          display_filter=f"({SNI_filter}) and http3.frame_type == 0",
