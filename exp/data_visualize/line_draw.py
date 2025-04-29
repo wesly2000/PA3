@@ -33,7 +33,8 @@ def draw_byte_segment(root: str, host: str, SNI: str, output_path: str):
             seg_compute.main(root, proto, host, SNI)
 
             avg_byte_segments, std_byte_segments = np.load(avg_array_path), np.load(std_array_path)
-            draw_single_byte_segment(avg_byte_segments, avg_color_map[proto], std_byte_segments, std_color_map[proto])
+            
+        draw_single_byte_segment(avg_byte_segments, avg_color_map[proto], std_byte_segments, std_color_map[proto])
     
     plt.xlabel('Byte Index')
     plt.ylabel('Stream Relative Segment Index')
