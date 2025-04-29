@@ -475,7 +475,9 @@ def select_stream(pcap_file: Union[str, Path],
 
     selected_property = criteria(list(stream_property.keys()))
     selected_stream_number = stream_property[selected_property]
-    return set(selected_stream_number)
+    # Don't use set("something"), which causing {'s', 'o', ..., 'g'}
+    # Instead, use set(["something"])
+    return set([selected_stream_number])
 
 def contains_SNI(SNIs, pkt):
     if SNIs is None or len(SNIs) == 0:
