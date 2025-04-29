@@ -525,8 +525,7 @@ class CellExtractor(object):
             in a protocol stack, whose reassemble info is not needed or not implemented.
         """
         lower_protocol = lower_protocol.lower()
-        layers = layer_extractor(pkt, self.name, lower_protocol)
-        filtered_layers = seq_filter(layers, lower_protocol)
+        filtered_layers = seq_filter(layer_extractor(pkt, self.name, lower_protocol), lower_protocol)
         cells = []
 
         for layer in filtered_layers:
