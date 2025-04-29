@@ -177,3 +177,15 @@ def test_h3data_SNI_intersect_2():
     target = set()
 
     assert udp_stream_numbers == target
+
+def test_select_stream_with_max_packet_count():
+    """
+    This test covers the selection of the stream with the maximum packet count.
+    """
+    tcp_stream_numbers = {'1', '2', '3'}
+    result = select_stream(apple_file, tcp_stream_numbers, mapper=packet_count, proto='tcp', criteria=max)
+
+    target = {'3'}
+
+    assert result == target
+    

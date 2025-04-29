@@ -23,7 +23,7 @@ import time
 import threading
 import multiprocessing
 import subprocess
-from typing import Union, Tuple, Any
+from typing import Union, Tuple, Callable, List
 from pathlib import Path
 from urllib.parse import urlparse
 import os
@@ -429,6 +429,53 @@ def stream_exclude_filter(tcp_stream_numbers : Union[list, set], udp_stream_numb
     display_filter = f'({tcp_display_filter} or {udp_display_filter}) and not icmp'
 
     return display_filter
+
+def select_stream(pcap_file: str, 
+                  stream_numbers: set, 
+                  mapper: Callable[[Capture], int],
+                  proto: str, 
+                  criteria: Callable[[List[int]], int], **extra_data) -> set:
+    """
+    Select a stream from the given.pcap(ng) file. The selection is based on the given criteria over the property of the stream. 
+    The property is obtained using the mapper.
+
+    Params
+    ------
+    pcap_file : str
+        The file path to the.pcap(ng) file.
+
+    stream_numbers : set
+        The set of stream numbers to select from.
+
+    mapper : Callable[[Capture], int]
+        The mapper to obtain the property of the stream. Currently, the property could only be integers.
+
+    proto : str
+        The protocol of the stream. Currently, only "tcp" and "udp" are supported.
+
+    criteria : Callable[[List[int]], int]
+        The criteria to select the stream. The criteria is a function that takes a list of integers as input, and returns the index of the stream to select.
+
+    Returns
+    -------
+    set : The set contains ONE stream number which has the best property judged by criteria.
+    """
+    if proto not in ["tcp", "udp"]:
+        raise ValueError("proto must be either 'tcp' or 'udp'")
+    
+    if len(stream_numbers) <= 1:  # If the candidates are less than 2, no need to select.
+        return stream_numbers
+    
+    stream_property = dict()
+    for stream_number in stream_numbers:
+        stream_filter = f"{proto}.stream == " + stream_number
+        cap = pyshark.FileCapture(input_file=pcap_file, display_filter=stream_filter, **extra_data)
+        stream_property[mapper(cap)] = stream_number
+        cap.close()
+
+    selected_property = criteria(list(stream_property.keys()))
+    selected_stream_number = stream_property[selected_property]
+    return set(selected_stream_number)
 
 def contains_SNI(SNIs, pkt):
     if SNIs is None or len(SNIs) == 0:
