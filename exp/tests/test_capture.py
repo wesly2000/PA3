@@ -183,7 +183,7 @@ def test_select_stream_with_max_packet_count():
     This test covers the selection of the stream with the maximum packet count.
     """
     tcp_stream_numbers = {'1', '2', '3'}
-    result = select_stream(apple_file, tcp_stream_numbers, mapper=packet_count, proto='tcp', criteria=max)
+    result = select_stream(apple_file, tcp_stream_numbers, mapper=packet_count, criteria=max)
 
     target = {'3'}
 

@@ -430,11 +430,11 @@ def stream_exclude_filter(tcp_stream_numbers : Union[list, set], udp_stream_numb
 
     return display_filter
 
-def select_stream(pcap_file: str, 
+def select_stream(pcap_file: Union[str, Path], 
                   stream_numbers: set, 
                   mapper: Callable[[Capture], int],
-                  proto: str, 
-                  criteria: Callable[[List[int]], int], **extra_data) -> set:
+                  criteria: Callable[[List[int]], int],
+                  proto: str = "tcp", **extra_data) -> set:
     """
     Select a stream from the given.pcap(ng) file. The selection is based on the given criteria over the property of the stream. 
     The property is obtained using the mapper.
