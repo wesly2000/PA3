@@ -2,13 +2,14 @@
 This test file is used to test VMess-related features. We make isolation from the normal tests
 for better clarity.
 """
-
-from WFlib.tools.analyzer import *
 from pathlib import Path
 import pyshark
 import os
 import pytest
+
 from WFlib.utils.config import get_config
+from WFlib.tools.analyzer import *
+from WFlib.tools.visualize import *
 
 import nest_asyncio 
 nest_asyncio.apply()
@@ -152,3 +153,30 @@ def test_line_rel_building_02(capture_gen):
 
     assert line.byte_counter == byte_counter and \
            cnt == line.byte_counter
+    
+@pytest.mark.parametrize("capture_gen", [{'host': 'top.baidu.com'}], indirect=True)
+@skip_vmess
+def test_generate_byte_segment_1(capture_gen):
+    """
+    This test covers generating byte segment map using real-world data
+    """
+    line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="http2", lower_protocol="tls")
+    result = generate_byte_segment([line])
+
+    counter = HTTP2ByteCounter()
+    cnt = 0
+
+    for pkt in capture_gen:
+        if "HTTP2" in pkt:
+            cnt += counter.packet_count(pkt)
+
+    byte_counter = 0
+    for covers in line.upper_abs_byte_map.values():
+        for cover in covers:
+            byte_counter += cover[1] - cover[0]
+
+    assert line.byte_counter == byte_counter and \
+           cnt == line.byte_counter
+
+    assert result[0][-1] == 17 and \
+            result[0][-18] == 16
