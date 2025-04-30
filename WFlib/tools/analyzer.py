@@ -703,6 +703,9 @@ def get_adjacent_protocol_reassemble_info(cap: pyshark.FileCapture, upper_protoc
         upper_protocol=upper_protocol, 
         upper_cells=upper_cells, 
         )
+    
+    if not line.continunity_check():
+        raise ValueError("Discontinuous line")
 
     return line
 

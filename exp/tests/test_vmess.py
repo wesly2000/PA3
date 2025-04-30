@@ -129,8 +129,6 @@ def test_line_rel_building_01(capture_gen):
     assert line.byte_counter == byte_counter and \
            cnt == line.byte_counter
     
-    assert line.continunity_check()
-    
 @pytest.mark.parametrize("capture_gen", [{'host': 'top.baidu.com'}], indirect=True)
 @skip_vmess
 def test_line_rel_building_02(capture_gen):
@@ -154,5 +152,3 @@ def test_line_rel_building_02(capture_gen):
 
     assert line.byte_counter == byte_counter and \
            cnt == line.byte_counter
-    
-    assert line.continunity_check()
