@@ -29,48 +29,55 @@ skip_vmess = pytest.mark.skipif(
     reason="VMess dissector not available, skip the test."
 )
 
-s_weibo_com_vmess_dir = "exp/test_dataset/realworld_dataset/vmess/s.weibo.com"
-s_weibo_com_vmess_file = os.path.join(s_weibo_com_vmess_dir, "s.weibo.com.pcapng")
-proxy_keylog_file = os.path.join(s_weibo_com_vmess_dir, "proxy_keylog.txt")
-keylog_file = os.path.join(s_weibo_com_vmess_dir, "keylog.txt")
-
-override_prefs = {'tls.keylog_file': os.path.abspath(keylog_file),
-                  'vmess.keylog_file': os.path.abspath(proxy_keylog_file)}
-
 custom_parameters = ["-C", "Customized", "-2"]
 
+@pytest.fixture
+def capture_gen(request):
+    host = request.param['host']
+    if 'display_filter' in request.param:
+        display_filter = request.param['display_filter']
+    else:
+        display_filter = None
+    pcap_dir = f"exp/test_dataset/realworld_dataset/vmess/{host}"
+    pcap_file =  os.path.join(pcap_dir, f"{host}.pcapng")
+    proxy_keylog_file = os.path.join(pcap_dir, "proxy_keylog.txt")
+    keylog_file = os.path.join(pcap_dir, "keylog.txt")
+
+    override_prefs = {'tls.keylog_file': os.path.abspath(keylog_file),
+                      'vmess.keylog_file': os.path.abspath(proxy_keylog_file)}
+    
+    cap = pyshark.FileCapture(
+        input_file=pcap_file, 
+        custom_parameters=custom_parameters,
+        display_filter=display_filter, 
+        override_prefs=override_prefs
+        )
+    
+    yield cap
+
+    cap.close()
+
+@pytest.mark.parametrize("capture_gen", [{'host': 's.weibo.com', 'display_filter': 'vmess'}], indirect=True)
 @skip_vmess
-def test_vmess_bytes_count():
+def test_vmess_bytes_count(capture_gen):
     counter = VMessByteCounter()
 
-    s_weibo_com_vmess_file = os.path.join(s_weibo_com_vmess_dir, "s.weibo.com.pcapng")
-    vmess_filter = "vmess"
-
-    cap = pyshark.FileCapture(  input_file=s_weibo_com_vmess_file, 
-                                custom_parameters=custom_parameters,
-                                display_filter=vmess_filter, 
-                                override_prefs=override_prefs)
-
     byte_count, pkt_count = 0, 0
-    for pkt in cap:
+    for pkt in capture_gen:
         byte_count += counter.packet_count(pkt)
         pkt_count += 1
 
-    cap.close()
     byte_target, packet_target = 102837, 31
 
     assert byte_target == byte_count and packet_target == pkt_count
 
+@pytest.mark.parametrize("capture_gen", [{'host': 's.weibo.com'}], indirect=True)
 @skip_vmess
-def test_layer_extractor_01():
+def test_layer_extractor_01(capture_gen):
     """
     This test covers extracting layers from the given capture for HTTP2.
     """
-    cap = pyshark.FileCapture(input_file=s_weibo_com_vmess_file, 
-                              custom_parameters=custom_parameters,
-                              override_prefs=override_prefs)
-
-    for pkt in cap:
+    for pkt in capture_gen:
         if pkt.number == "108": 
             layers = layer_extractor(pkt, upper_protocol="http2", lower_protocol='tls')
             assert len(layers) == 5 and \
@@ -98,31 +105,21 @@ def test_layer_extractor_01():
             assert len(layers) == 2 and \
                     layers[0].layer_name == "http2" and \
                     layers[1].layer_name == "http2"
-    cap.close()
 
-def test_line_rel_building_01():
+@pytest.mark.parametrize("capture_gen", [{'host': 's.weibo.com'}], indirect=True)
+@skip_vmess
+def test_line_rel_building_01(capture_gen):
     """
     This test covers building the lower relation of a line using MORE COMPLEX real-world data.
-    """
-    cap = pyshark.FileCapture(input_file=s_weibo_com_vmess_file, 
-                              custom_parameters=custom_parameters,
-                              override_prefs=override_prefs)
-    
-    line = get_adjacent_protocol_reassemble_info(cap=cap, upper_protocol="http2", lower_protocol="tls")
-    
-    cap.close()
+    """    
+    line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="http2", lower_protocol="tls")
     
     counter = HTTP2ByteCounter()
     cnt = 0
 
-    cap = pyshark.FileCapture(input_file=s_weibo_com_vmess_file, 
-                              custom_parameters=custom_parameters,
-                              override_prefs=override_prefs)
-    for pkt in cap:
+    for pkt in capture_gen:
         if "HTTP2" in pkt:
             cnt += counter.packet_count(pkt)
-    
-    cap.close()
 
     byte_counter = 0
     for covers in line.upper_abs_byte_map.values():
