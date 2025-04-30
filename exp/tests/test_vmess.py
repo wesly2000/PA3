@@ -128,3 +128,27 @@ def test_line_rel_building_01(capture_gen):
 
     assert line.byte_counter == byte_counter and \
            cnt == line.byte_counter
+    
+@pytest.mark.parametrize("capture_gen", [{'host': 'top.baidu.com'}], indirect=True)
+@skip_vmess
+def test_line_rel_building_02(capture_gen):
+    """
+    This test covers building the lower relation of a line using MORE COMPLEX real-world data.
+    """
+    
+    line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="http2", lower_protocol="tls")
+    
+    counter = HTTP2ByteCounter()
+    cnt = 0
+
+    for pkt in capture_gen:
+        if "HTTP2" in pkt:
+            cnt += counter.packet_count(pkt)
+
+    byte_counter = 0
+    for covers in line.upper_abs_byte_map.values():
+        for cover in covers:
+            byte_counter += cover[1] - cover[0]
+
+    assert line.byte_counter == byte_counter and \
+           cnt == line.byte_counter
