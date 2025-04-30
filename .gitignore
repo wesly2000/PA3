@@ -171,3 +171,9 @@ analysis
 exp/normal_capture
 exp/example_capture
 exp/vmess_capture
+
+*.npy
+*.json 
+*.pdf 
+*.xml 
+*.iml
