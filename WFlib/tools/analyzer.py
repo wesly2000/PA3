@@ -453,12 +453,11 @@ class Line():
         for i in range(len(self.upper_cells)):
             for segment_frame_number, segment_size in zip(self.upper_cells[i].abs_segment_frame_number, self.upper_cells[i].segment_size):
                 if segment_frame_number in upper_abs_byte_map:
-                    upper_abs_byte_map[segment_frame_number] = (  # If the segment frame number is already in the map, update the byte range
-                        upper_abs_byte_map[segment_frame_number][0],
-                        upper_abs_byte_map[segment_frame_number][1] + segment_size
+                    upper_abs_byte_map[segment_frame_number].append(  # If the segment frame number is already in the map, update the byte range
+                        (byte_counter, byte_counter + segment_size)
                     )
                 else:  # If the segment frame number is not in the map, create the entry
-                    upper_abs_byte_map[segment_frame_number] = (byte_counter, byte_counter + segment_size)
+                    upper_abs_byte_map[segment_frame_number] = [(byte_counter, byte_counter + segment_size)]
 
                 byte_counter += segment_size  # Update the byte counter
 
