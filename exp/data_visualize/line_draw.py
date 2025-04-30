@@ -6,22 +6,23 @@ import os
 import argparse
 import seg_compute
 
-avg_color_map = {"normal": "blue", "vmess": "green"}
-std_color_map = {"normal": "yellow", "vmess": "purple"}
+avg_color_map = {"Normal": "blue", "VMess": "green"}
+std_color_map = {"Normal": "yellow", "VMess": "purple"}
 
-def draw_single_byte_segment(avg_byte_segments: np.ndarray, avg_color: str, std_byte_segments: np.ndarray, std_color: str):
+def draw_single_byte_segment(fig: plt.Axes, ax: plt.Axes, avg_byte_segments: np.ndarray, std_byte_segments: np.ndarray, proto: str):
     """
     Draw the byte segment array. The array is a list of segment index. The length of the list is the cutoff.
     """
-    plt.plot(avg_byte_segments, '-', linewidth=1, color=avg_color)
-    plt.plot(std_byte_segments, '-', linewidth=1, color=std_color)
+    ax.plot(avg_byte_segments, '-', linewidth=1, color=avg_color_map[proto], label=f"{proto} Avg")
+    ax.plot(std_byte_segments, '-', linewidth=1, color=std_color_map[proto], label=f"{proto} Std")
 
 
 def draw_byte_segment(root: str, host: str, SNI: str, output_path: str):
     """
     Draw the byte segment array. The array is a list of segment index. The length of the list is the cutoff.
     """
-    plt.figure(figsize=(12, 6))
+    fig, ax = plt.subplots(figsize=(12, 6))
+    fig.suptitle('Byte Segment Map', fontdict={'size': 16})
     for proto in avg_color_map:
         avg_array_path = Path(os.path.join(root, "data_visualize", "result", f"avg_{host}_{SNI}_{proto}.npy"))
         std_array_path = Path(os.path.join(root, "data_visualize", "result", f"std_{host}_{SNI}_{proto}.npy"))
@@ -30,15 +31,16 @@ def draw_byte_segment(root: str, host: str, SNI: str, output_path: str):
             avg_byte_segments, std_byte_segments = np.load(avg_array_path), np.load(std_array_path)
         else:
             print("Array does not exist, start computing...")
-            seg_compute.main(root, proto, host, SNI)
+            seg_compute.main(root, proto.lower(), host, SNI)
 
             avg_byte_segments, std_byte_segments = np.load(avg_array_path), np.load(std_array_path)
             
-        draw_single_byte_segment(avg_byte_segments, avg_color_map[proto], std_byte_segments, std_color_map[proto])
+        draw_single_byte_segment(fig, ax, avg_byte_segments, std_byte_segments, proto)
     
-    plt.xlabel('Byte Index')
-    plt.ylabel('Stream Relative Segment Index')
-    plt.title('Byte Segment Map')
+    ax.legend(loc='upper left')
+    ax.set_xlabel('Byte Index')
+    ax.set_ylabel('Relative Segment Index')
+    ax.set_title(f'Host: {host}, SNI: {SNI}', fontsize=12)
 
     fig_format = output_path.split('.')[-1]
     plt.savefig(output_path, dpi=300, format=fig_format, bbox_inches='tight')
