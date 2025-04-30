@@ -414,7 +414,26 @@ class Line():
         self._upper_abs_byte_map = None  # COMMENT: shall we build the map in lazy mode?
         self._byte_counter = 0  # Count how many bytes in the upper layer in total
 
-    
+    def continunity_check(self):
+        """
+        Continunity Check: All cover, sorted by their beginning (or ending) point, should be continuous
+        as a byte stream.
+        """
+        if len(self.upper_abs_byte_map) <= 1:
+            return True  # We define that when there are less than 2 covers within a map, it is continuous
+
+        total_covers = []
+        for covers in self.upper_abs_byte_map.values():
+            total_covers += covers
+
+        total_covers.sort(key=lambda x: x[0])
+
+        for i in range(len(total_covers) - 1):
+            if total_covers[i][1] != total_covers[i+1][0]:
+                return False 
+            
+        return True
+
     def sanity_check(self):
         """
         Check if the line is valid.

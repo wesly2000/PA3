@@ -473,7 +473,8 @@ def test_line_rel_building_02():
 
     assert line.byte_counter == 10368 and \
            byte_counter == line.byte_counter
-
+    
+    assert line.continunity_check()
 
 
 def test_line_rel_building_03():
@@ -511,6 +512,8 @@ def test_line_rel_building_03():
 
     assert line.byte_counter == byte_counter and \
            cnt == line.byte_counter
+    
+    assert line.continunity_check()
 
 def test_match_segment_number_01():
     """
