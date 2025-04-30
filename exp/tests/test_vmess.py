@@ -124,7 +124,10 @@ def test_line_rel_building_01():
     
     cap.close()
 
-    # If the first and last elements of upper_abs_byte_map is correct, the whole map should be correct.
-    assert  line.upper_abs_byte_map[23] == (0, 367) and \
-            line.upper_abs_byte_map[150] == (cnt - 17, cnt) and \
-            line.byte_counter == cnt
+    byte_counter = 0
+    for covers in line.upper_abs_byte_map.values():
+        for cover in covers:
+            byte_counter += cover[1] - cover[0]
+
+    assert line.byte_counter == byte_counter and \
+           cnt == line.byte_counter
