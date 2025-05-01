@@ -446,7 +446,8 @@ def test_line_rel_building_01():
     http2_cell_3.segment_size = [8, 10, 1145]
 
 
-    line = Line(upper_protocol="http2", upper_cells=[http2_cell_1, http2_cell_2, http2_cell_3])
+    line = Line(upper_protocol="http2", upper_cells=[http2_cell_1, http2_cell_2, http2_cell_3],
+                lower_protocol="tls", lower_abs_frame_numbers=[104, 106, 108, 109])
 
     target_upper_abs_byte_map = {104: [(0, 114)], 106: [(114, 628), (628, 2547), (2547, 2555)], 108: [(2555, 2565)], 109: [(2565, 3710)]}
 

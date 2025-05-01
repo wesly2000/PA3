@@ -403,10 +403,13 @@ class Line():
     """
     def __init__(self, 
                  upper_protocol: str, upper_cells: List[Cell], 
+                 lower_protocol: str, lower_abs_frame_numbers: List[int],
                  sanity_check = False
                  ):
-        self.upper_layer = upper_protocol
-        self.upper_cells = upper_cells
+        self._upper_layer = upper_protocol
+        self._upper_cells = upper_cells
+        self._lower_layer = lower_protocol
+        self._lower_abs_frame_numbers = lower_abs_frame_numbers
 
         if sanity_check:
             self.sanity_check()
@@ -469,8 +472,8 @@ class Line():
         #          to implicitly ignore the last byte index?
         upper_abs_byte_map = dict()
 
-        for i in range(len(self.upper_cells)):
-            for segment_frame_number, segment_size in zip(self.upper_cells[i].abs_segment_frame_number, self.upper_cells[i].segment_size):
+        for i in range(len(self._upper_cells)):
+            for segment_frame_number, segment_size in zip(self._upper_cells[i].abs_segment_frame_number, self._upper_cells[i].segment_size):
                 if segment_frame_number in upper_abs_byte_map:
                     upper_abs_byte_map[segment_frame_number].append(  # If the segment frame number is already in the map, update the byte range
                         (byte_counter, byte_counter + segment_size)
@@ -694,14 +697,20 @@ def get_adjacent_protocol_reassemble_info(cap: pyshark.FileCapture, upper_protoc
     lower_protocol = lower_protocol.lower()
 
     upper_cells = []
+    lower_abs_frame_numbers = []
 
     for pkt in cap:
         if upper_protocol in pkt:
             upper_cells += PROCOCOL_CELL_EXTRACTOR[upper_protocol].extract(pkt, lower_protocol=lower_protocol)
+        if lower_protocol in pkt:
+            lower_abs_frame_numbers.append(int(pkt.number))
+
 
     line = Line(
         upper_protocol=upper_protocol, 
         upper_cells=upper_cells, 
+        lower_protocol=lower_protocol,
+        lower_abs_frame_numbers=lower_abs_frame_numbers,
         )
     
     if not line.continunity_check():
