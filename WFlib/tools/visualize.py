@@ -39,5 +39,11 @@ def generate_byte_segment(lines: list[Line]) -> List[np.ndarray]:
 
     # Calculate the minimum byte_counter among the filtered lines
     min_byte_count = min([line.byte_counter for line in filtered_lines])
-            
-    return [generate_byte_stream(line.upper_abs_byte_map, min_byte_count, line.lower_abs_frame_numbers) for line in filtered_lines]
+
+    result = []
+    for i, line in enumerate(filtered_lines):
+        try:
+            result.append(generate_byte_stream(line.upper_abs_byte_map, min_byte_count, line.lower_abs_frame_numbers)) 
+        except Exception as e:
+            print(f"Error in Line {i}: {e}")
+    return result
