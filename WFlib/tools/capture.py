@@ -499,7 +499,7 @@ def contains_SNI(SNIs, pkt):
             
     return result
 
-def SNI_exclude_filter(file, SNIs):
+def SNI_exclude_filter(file, SNIs, custom_parameters = None, override_prefs = None):
     """
     Create a display filter for the given .pcap file which exclude all the TCP streams that contains the SNI in SNIs.
 
@@ -518,11 +518,36 @@ def SNI_exclude_filter(file, SNIs):
     """
     if SNIs is None or len(SNIs) == 0:
         return None
-    client_hello_capture = pyshark.FileCapture(input_file=file, display_filter="tls.handshake.type == 1")
-    tcp_stream_numbers, udp_stream_numbers = stream_number_extract(capture=client_hello_capture, check=lambda pkt: contains_SNI(SNIs, pkt))
-    client_hello_capture.close()
+    
+    tcp_stream_numbers, udp_stream_numbers = SNI_stream_extract(file, SNIs, custom_parameters, override_prefs)
     display_filter = stream_exclude_filter(tcp_stream_numbers, udp_stream_numbers)
     return display_filter
+
+def SNI_stream_extract(file, SNIs, custom_parameters = None, override_prefs = None) -> Tuple[set, set]:
+    """
+    Util function: for a given file, extract the TCP/UDP streams satisfying:
+    1. It is the TLS stream with given SNIs;
+
+    Params
+    ------
+    file : str
+        The file path to the.pcap(ng) file.
+
+    SNIs : list
+        The target SNIs, each TCP stream containing the SNI is included.
+
+    Returns
+    -------
+    The sets contains the TCP and UDP stream numbers, respectively.
+    """
+    client_hello_capture = pyshark.FileCapture( input_file=file, 
+                                                display_filter="tls.handshake.type == 1", 
+                                                custom_parameters=custom_parameters,
+                                                override_prefs=override_prefs)
+    tcp_stream_numbers, udp_stream_numbers = stream_number_extract(capture=client_hello_capture, check=lambda pkt: contains_SNI(SNIs, pkt))
+    client_hello_capture.close()
+
+    return tcp_stream_numbers, udp_stream_numbers
 
 def h2data_SNI_intersect(file, SNIs, keylog_file, custom_parameters = None, override_prefs = None) -> Tuple[set, set]:
     """
@@ -532,12 +557,7 @@ def h2data_SNI_intersect(file, SNIs, keylog_file, custom_parameters = None, over
 
     If override_prefs is given, keylog_file will be surpressed.
     """
-    capture_tls = pyshark.FileCapture(input_file=file, 
-                                      display_filter="tls.handshake.type == 1", 
-                                      custom_parameters=custom_parameters,
-                                      override_prefs=override_prefs)
-    tcp_stream_numbers_tls, udp_stream_numbers_tls = stream_number_extract(capture=capture_tls, check=lambda pkt: contains_SNI(SNIs, pkt))
-    capture_tls.close()
+    tcp_stream_numbers_tls, udp_stream_numbers_tls = SNI_stream_extract(file, SNIs, custom_parameters, override_prefs)
 
     SNI_filter = stream_extract_filter(tcp_stream_numbers_tls, udp_stream_numbers_tls)
     # No satisfying stream is found, no further searching is needed.
@@ -562,12 +582,7 @@ def h3data_SNI_intersect(file, SNIs, keylog_file, custom_parameters = None, over
     If override_prefs is given, keylog_file will be surpressed.
     """
     # Note that Client Hello is embedded in QUIC, so we need to use tls.handshake.type == 1 to filter.
-    capture_quic = pyshark.FileCapture(input_file=file, 
-                                      display_filter="tls.handshake.type == 1", 
-                                      custom_parameters=custom_parameters,
-                                      override_prefs=override_prefs)
-    tcp_stream_numbers_quic, udp_stream_numbers_quic = stream_number_extract(capture=capture_quic, check=lambda pkt: contains_SNI(SNIs, pkt))
-    capture_quic.close()
+    tcp_stream_numbers_quic, udp_stream_numbers_quic = SNI_stream_extract(file, SNIs, custom_parameters, override_prefs)
 
     SNI_filter = stream_extract_filter(tcp_stream_numbers_quic, udp_stream_numbers_quic)
     # No satisfying stream is found, no further searching is needed.
