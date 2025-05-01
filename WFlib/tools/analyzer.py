@@ -409,6 +409,12 @@ class Line():
         self._upper_layer = upper_protocol
         self._upper_cells = upper_cells
         self._lower_layer = lower_protocol
+        """
+        COMMENT: Shall we make lower_abs_frame_numbers a dict, whose values indicate the relative
+        index of each lower frame?
+        Currently, such work is deferred to generate_byte_stream, and the line does not maintain
+        that dict.
+        """
         self._lower_abs_frame_numbers = lower_abs_frame_numbers
 
         if sanity_check:
@@ -461,6 +467,10 @@ class Line():
         if self._upper_abs_byte_map is None:  # Lazy build the map if not built yet.
             self.upper_rel_building()
         return self._upper_abs_byte_map
+    
+    @property
+    def lower_abs_frame_numbers(self):
+        return self._lower_abs_frame_numbers
 
     def upper_rel_building(self):
         """

@@ -6,7 +6,8 @@ def test_generate_byte_segment_01():
     http2_cell_0.abs_segment_frame_number = [104, 106]
     http2_cell_0.segment_size = [1, 1]
 
-    http2_line_short = Line(upper_protocol="http2", upper_cells=[http2_cell_0])
+    http2_line_short = Line(upper_protocol="http2", upper_cells=[http2_cell_0],
+                            lower_protocol='tls', lower_abs_frame_numbers=[104, 106])
 
     http2_cell_1 = Cell(proto="http2", abs_frame_number=106)
     http2_cell_1.abs_segment_frame_number = [104, 106]
@@ -18,7 +19,8 @@ def test_generate_byte_segment_01():
     http2_cell_3.abs_segment_frame_number = [106, 108, 109]
     http2_cell_3.segment_size = [2, 1, 2]
 
-    http2_line_mid = Line(upper_protocol="http2", upper_cells=[http2_cell_1, http2_cell_2, http2_cell_3])
+    http2_line_mid = Line(upper_protocol="http2", upper_cells=[http2_cell_1, http2_cell_2, http2_cell_3],
+                          lower_protocol='tls', lower_abs_frame_numbers=[104, 106, 108, 109])
 
     http2_cell_4 = Cell(proto="http2", abs_frame_number=1107)
     http2_cell_4.abs_segment_frame_number = [1104, 1106, 1107]
@@ -30,7 +32,8 @@ def test_generate_byte_segment_01():
     http2_cell_6.abs_segment_frame_number = [1107, 1108, 1109]
     http2_cell_6.segment_size = [2, 1, 2]
 
-    http2_line_long = Line(upper_protocol="http2", upper_cells=[http2_cell_4, http2_cell_5, http2_cell_6])
+    http2_line_long = Line(upper_protocol="http2", upper_cells=[http2_cell_4, http2_cell_5, http2_cell_6],
+                           lower_protocol='tls', lower_abs_frame_numbers=[1104, 1106, 1107, 1108, 1109])
 
     lines = [http2_line_short, http2_line_mid, http2_line_mid, http2_line_mid, http2_line_long]
 

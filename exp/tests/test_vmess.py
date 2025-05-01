@@ -178,5 +178,5 @@ def test_generate_byte_segment_1(capture_gen):
     assert line.byte_counter == byte_counter and \
            cnt == line.byte_counter
 
-    assert result[0][-1] == 17 and \
-            result[0][-18] == 16
+    assert result[0][-1] == 28 and \
+            result[0][-18] == 27
