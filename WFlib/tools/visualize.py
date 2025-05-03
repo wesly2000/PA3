@@ -1,4 +1,5 @@
 from WFlib.tools.analyzer import Line 
+from WFlib.utils.statistics import IQR_bound
 from typing import List
 import numpy as np
 
@@ -28,14 +29,10 @@ def generate_byte_segment(lines: list[Line]) -> List[np.ndarray]:
     use IQR to filter out those lines that are too short.
     """
     byte_count_arr = np.array([line.byte_counter for line in lines])
-    Q1 = np.percentile(byte_count_arr, 25)  # Lower quartile (25th percentile)
-    Q3 = np.percentile(byte_count_arr, 75)  # Upper quartile (75th percentile)
+    lower_bound, upper_bound = IQR_bound(byte_count_arr)
 
-    IQR = Q3 - Q1  # Interquartile range (IQR)
-    lower_bound = Q1 - 1.5 * IQR  # Lower bound for outliers (adjust as needed)
-
-    # Filter out outliers (lines with byte_counter below the lower bound)
-    filtered_lines = [line for line in lines if line.byte_counter >= lower_bound]
+    # Filter out outliers (lines with byte_counter within the IQR range)
+    filtered_lines = [line for line in lines if lower_bound <= line.byte_counter <= upper_bound]
 
     # Calculate the minimum byte_counter among the filtered lines
     min_byte_count = min([line.byte_counter for line in filtered_lines])
