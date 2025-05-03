@@ -1,0 +1,110 @@
+import pandas as pd
+import numpy as np
+from typing import List, Set
+import pyshark
+from pathlib import Path
+from tqdm import tqdm
+
+from WFlib.tools.capture import *
+from WFlib.utils.statistics import *
+
+PROTOCOLS = ['normal', 'vmess']
+custom_parameters=["-C", "Customized", "-2"]
+
+def h2_stream_analysis_per_sni(file: Path, host_filter: Set[str], custom_parameters = None, override_prefs = None):
+    """
+    Count the average number of HTTP/2 streams and available HTTP/2 streams (streams with HTTP/2 DATA frames).
+    To make these statistics reusable, store them into .csv files. The key is (host, SNI, protocol).
+
+    Params
+    ------
+    
+    """
+    origin_cap = pyshark.FileCapture(input_file=file, 
+                                     custom_parameters=custom_parameters, 
+                                     override_prefs=override_prefs)
+
+    SNIs = SNI_extract(origin_cap)
+
+    origin_cap.close()
+    filtered_SNIs = SNIs - host_filter
+
+    for SNI in filtered_SNIs:
+        # Fetch the number of all HTTP/2 streams for the same SNI
+        tcp_stream_numbers, _ = SNI_stream_extract(file, [SNI], custom_parameters, override_prefs)
+        h2_stream_number = len(tcp_stream_numbers)
+        tcp_stream_numbers, _ = h2data_SNI_intersect(file, SNIs, None, custom_parameters, override_prefs)
+        available_h2_stream_number = len(tcp_stream_numbers)
+
+        yield SNI, h2_stream_number, available_h2_stream_number
+
+
+def h2_stream_analysis_per_host(root: str, protocol: str, host: str, df: pd.DataFrame, host_filter: List[str]):
+    """
+    Count the average number of HTTP/2 streams and available HTTP/2 streams (streams with HTTP/2 DATA frames).
+    To make these statistics reusable, store them into .csv files. The key is (host, SNI, protocol).
+
+    Params
+    ------
+    root : str
+        The root of all capture (.pcap(ng)) files.
+    """
+    pcap_dir = f"{root}/{protocol}_capture/{host}"
+    keylog_file = f"{pcap_dir}/keylog.txt"
+    proxy_keylog_file = f"{pcap_dir}/proxy_keylog.txt"
+
+    pcap_dir_path = Path(pcap_dir)
+
+    if protocol == 'normal':
+        override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)}
+    elif protocol == 'vmess':
+        override_prefs={'tls.keylog_file': os.path.abspath(keylog_file),
+                        'vmess.keylog_file': os.path.abspath(proxy_keylog_file)}
+    
+    stats = dict()
+    for file in tqdm(sorted(pcap_dir_path.iterdir())):
+        if file.is_file() and file.suffix in ['.pcapng', '.pcap']:
+            for SNI, h2, avail_h2 in h2_stream_analysis_per_sni(file, host_filter,   
+                                                                    custom_parameters=custom_parameters, 
+                                                                    override_prefs=override_prefs):
+                if SNI not in stats:
+                    stats[SNI] = {'h2': [h2], 'avail_h2': [avail_h2]}
+                else:
+                    stats[SNI]['h2'].append(h2)
+                    stats[SNI]['avail_h2'].append(avail_h2)
+
+    # IQR filter
+    lower_bound, upper_bound = IQR_bound(stats[SNI]['avail_h2'])
+    stats[SNI]['avail_h2'] = [v for v in stats[SNI]['avail_h2'] if lower_bound <= v <= upper_bound]
+
+    lower_bound, upper_bound = IQR_bound(stats[SNI]['h2'])
+    stats[SNI]['h2'] = [v for v in stats[SNI]['h2'] if lower_bound <= v <= upper_bound]
+
+    # Write the result to the database
+    for SNI in stats:
+        df.loc[len(df)] = [host, SNI, protocol, 
+               np.mean(stats[SNI]['h2']), np.std(stats[SNI]['h2']), 
+               np.mean(stats[SNI]['avail_h2']), np.std(stats[SNI]['avail_h2'])]
+        
+def h2_stream_analysis(root: str, host_list: List[str], df: pd.DataFrame, host_filter: List[str]):
+    for host in host_list:
+        for protocol in PROTOCOLS:
+            # Check if the host with the given protocol has been computed
+            if ((df['host'] == 'alice') & (df['protocol'] == 23)).any():
+                continue
+            h2_stream_analysis_per_host(root, protocol, host, df, host_filter)
+
+def main(root: str, host_list_file: str, database_file: str, host_filter_file: str):
+    if not Path(database_file).exists():
+        print("H2 stream database does not exist, create a new one")
+        df = pd.DataFrame(columns=['host', 'SNI', 'protocol', 'h2_avg', 'h2_std', 'avail_h2_avg', 'avail_h2_std'])
+    else:
+        print("H2 stream database found")
+        df = pd.read_csv(database_file)
+    
+    host_list = read_host_list(host_list_file)
+    host_filter = read_host_list(host_filter_file)
+
+    h2_stream_analysis(root, host_list, df, host_filter)
+
+    df.to_csv(database_file)
