@@ -29,12 +29,17 @@ def generate_byte_segment(lines: list[Line]) -> List[np.ndarray]:
     use IQR to filter out those lines that are too short.
     """
     byte_count_arr = np.array([line.byte_counter for line in lines])
-    lower_bound, upper_bound = IQR_bound(byte_count_arr)
+    if byte_count_arr.shape[0] > 1:
+        lower_bound, upper_bound = IQR_bound(byte_count_arr)
 
-    # Filter out outliers (lines with byte_counter within the IQR range)
-    filtered_lines = [line for line in lines if lower_bound <= line.byte_counter <= upper_bound]
+        # Filter out outliers (lines with byte_counter within the IQR range)
+        filtered_lines = [line for line in lines if lower_bound <= line.byte_counter <= upper_bound]
 
-    # Calculate the minimum byte_counter among the filtered lines
+        # Calculate the minimum byte_counter among the filtered lines
+    else:
+        # No need to do IQR when only 1 elements within (it occurs in some tests)
+        filtered_lines = lines
+
     min_byte_count = min([line.byte_counter for line in filtered_lines])
 
     result = []
