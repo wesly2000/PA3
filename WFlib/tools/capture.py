@@ -152,7 +152,7 @@ def read_host_list(file) -> list:
         else:
             return url
         
-    host_list = []
+    host_list = set()  # Use set to eliminate dups
     with open(file, 'r') as f:
         for line in f:
             stripped_line = line.strip()  # Remove leading and trailing whitespace
@@ -162,7 +162,7 @@ def read_host_list(file) -> list:
             url = stripped_line.split("#")[0].strip() # Ignore inline comments
             hostname = strip_url(url.strip())
             if hostname and hostname not in host_list:
-                host_list.append(hostname)
+                host_list.add(hostname)
 
     return host_list
 
