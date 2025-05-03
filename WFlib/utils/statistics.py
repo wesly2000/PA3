@@ -1,5 +1,6 @@
 import numpy as np
-def IQR_bound(array: np.array):
+from typing import Union, List
+def IQR_bound(array: Union[np.array, List]):
     arr_sorted = np.sort(array)
 
     lower_half = arr_sorted[:len(arr_sorted)//2]    

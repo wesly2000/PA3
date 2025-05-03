@@ -6,10 +6,12 @@ from pathlib import Path
 import pyshark
 import os
 import pytest
+import pandas as pd
 
 from WFlib.utils.config import get_config
 from WFlib.tools.analyzer import *
 from WFlib.tools.visualize import *
+from exp.data_analysis.http2_stream_analysis import h2_stream_analysis_per_host
 
 import nest_asyncio 
 nest_asyncio.apply()
@@ -34,13 +36,23 @@ custom_parameters = ["-C", "Customized", "-2"]
 
 @pytest.fixture
 def capture_gen(request):
+    if 'index' in request.param:
+        index = request.param['index']
+    else:
+        index = None
+
     host = request.param['host']
+
     if 'display_filter' in request.param:
         display_filter = request.param['display_filter']
     else:
         display_filter = None
-    pcap_dir = f"exp/test_dataset/realworld_dataset/vmess/{host}"
-    pcap_file =  os.path.join(pcap_dir, f"{host}.pcapng")
+    pcap_dir = f"exp/test_dataset/realworld_dataset/vmess_capture/{host}"
+    if index is None:
+        pcap_file =  os.path.join(pcap_dir, f"{host}.pcapng")
+    else:
+        pcap_file =  os.path.join(pcap_dir, f"{host}_{index}.pcapng")
+
     proxy_keylog_file = os.path.join(pcap_dir, "proxy_keylog.txt")
     keylog_file = os.path.join(pcap_dir, "keylog.txt")
 
@@ -130,7 +142,7 @@ def test_line_rel_building_01(capture_gen):
     assert line.byte_counter == byte_counter and \
            cnt == line.byte_counter
     
-@pytest.mark.parametrize("capture_gen", [{'host': 'top.baidu.com'}], indirect=True)
+@pytest.mark.parametrize("capture_gen", [{'host': 'top.baidu.com', 'index': 0}], indirect=True)
 @skip_vmess
 def test_line_rel_building_02(capture_gen):
     """
@@ -154,7 +166,7 @@ def test_line_rel_building_02(capture_gen):
     assert line.byte_counter == byte_counter and \
            cnt == line.byte_counter
     
-@pytest.mark.parametrize("capture_gen", [{'host': 'top.baidu.com'}], indirect=True)
+@pytest.mark.parametrize("capture_gen", [{'host': 'top.baidu.com', 'index': 0}], indirect=True)
 @skip_vmess
 def test_generate_byte_segment_1(capture_gen):
     """
