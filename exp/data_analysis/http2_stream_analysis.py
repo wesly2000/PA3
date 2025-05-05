@@ -39,7 +39,7 @@ def h2_stream_analysis_per_sni(file: Path, host_filter: Set[str], custom_paramet
         yield SNI, h2_stream_number, available_h2_stream_number
 
 
-def h2_stream_analysis_per_host(root: str, protocol: str, host: str, df: pd.DataFrame, host_filter: List[str]):
+def h2_stream_analysis_per_host(root: str, protocol: str, host: str, df: pd.DataFrame, host_filter: Set[str]):
     """
     Count the average number of HTTP/2 streams and available HTTP/2 streams (streams with HTTP/2 DATA frames).
     To make these statistics reusable, store them into .csv files. The key is (host, SNI, protocol).
@@ -73,12 +73,12 @@ def h2_stream_analysis_per_host(root: str, protocol: str, host: str, df: pd.Data
                     stats[SNI]['h2'].append(h2)
                     stats[SNI]['avail_h2'].append(avail_h2)
 
-    # IQR filter
-    lower_bound, upper_bound = IQR_bound(stats[SNI]['avail_h2'])
-    stats[SNI]['avail_h2'] = [v for v in stats[SNI]['avail_h2'] if lower_bound <= v <= upper_bound]
+    if len(stats[SNI]['h2']) > 1:  # If there are more than 1 elements, do IQR filter
+        lower_bound, upper_bound = IQR_bound(stats[SNI]['avail_h2'])
+        stats[SNI]['avail_h2'] = [v for v in stats[SNI]['avail_h2'] if lower_bound <= v <= upper_bound]
 
-    lower_bound, upper_bound = IQR_bound(stats[SNI]['h2'])
-    stats[SNI]['h2'] = [v for v in stats[SNI]['h2'] if lower_bound <= v <= upper_bound]
+        lower_bound, upper_bound = IQR_bound(stats[SNI]['h2'])
+        stats[SNI]['h2'] = [v for v in stats[SNI]['h2'] if lower_bound <= v <= upper_bound]
 
     # Write the result to the database
     for SNI in stats:
