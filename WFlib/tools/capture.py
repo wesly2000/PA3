@@ -557,21 +557,22 @@ def h2data_SNI_intersect(file, SNIs, keylog_file, custom_parameters = None, over
 
     If override_prefs is given, keylog_file will be surpressed.
     """
-    tcp_stream_numbers_tls, udp_stream_numbers_tls = SNI_stream_extract(file, SNIs, custom_parameters, override_prefs)
+    # HTTP/2 runs atop of TCP, no need to concern about UDP streams
+    tcp_stream_numbers_tls, _ = SNI_stream_extract(file, SNIs, custom_parameters, override_prefs)
 
-    SNI_filter = stream_extract_filter(tcp_stream_numbers_tls, udp_stream_numbers_tls)
-    # No satisfying stream is found, no further searching is needed.
-    if SNI_filter == "":
-        return set(), set()
-    
-    capture_h2data = pyshark.FileCapture(input_file=file, 
-                                         display_filter=f"({SNI_filter}) and http2.type == 0",
-                                         custom_parameters=custom_parameters,
-                                         override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)} if override_prefs is None else override_prefs)
-    tcp_stream_numbers_h2data, udp_stream_numbers_h2data = stream_number_extract(capture=capture_h2data, check=lambda _: True)
-    capture_h2data.close()
+    tcp_stream_numbers_h2data = set()
+    for tcp_stream_number in tcp_stream_numbers_tls:
+        capture_h2data = pyshark.FileCapture(input_file=file, 
+                                            display_filter=f"tcp.stream eq {tcp_stream_number} and http2.type == 0",
+                                            custom_parameters=custom_parameters,
+                                            override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)} if override_prefs is None else override_prefs)
+        for pkt in capture_h2data:
+            if 'http2' in pkt:
+                tcp_stream_numbers_h2data.add(tcp_stream_number)
+                break
+        capture_h2data.close()
 
-    return tcp_stream_numbers_h2data & tcp_stream_numbers_tls, udp_stream_numbers_h2data & udp_stream_numbers_tls
+    return tcp_stream_numbers_h2data
 
 def h3data_SNI_intersect(file, SNIs, keylog_file, custom_parameters = None, override_prefs = None) -> Tuple[set, set]:
     """
@@ -582,18 +583,19 @@ def h3data_SNI_intersect(file, SNIs, keylog_file, custom_parameters = None, over
     If override_prefs is given, keylog_file will be surpressed.
     """
     # Note that Client Hello is embedded in QUIC, so we need to use tls.handshake.type == 1 to filter.
-    tcp_stream_numbers_quic, udp_stream_numbers_quic = SNI_stream_extract(file, SNIs, custom_parameters, override_prefs)
+    # HTTP/3 runs atop of UDP, no need to concern about TCP streams
+    _, udp_stream_numbers_quic = SNI_stream_extract(file, SNIs, custom_parameters, override_prefs)
 
-    SNI_filter = stream_extract_filter(tcp_stream_numbers_quic, udp_stream_numbers_quic)
-    # No satisfying stream is found, no further searching is needed.
-    if SNI_filter == "":
-        return set(), set()
-    
-    capture_h3data = pyshark.FileCapture(input_file=file, 
-                                         display_filter=f"({SNI_filter}) and http3.frame_type == 0",
-                                         custom_parameters=custom_parameters,
-                                         override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)} if override_prefs is None else override_prefs)
-    tcp_stream_numbers_h3data, udp_stream_numbers_h2data = stream_number_extract(capture=capture_h3data, check=lambda _: True)
-    capture_h3data.close()
+    udp_stream_numbers_h3data = set()
+    for udp_stream_number in udp_stream_numbers_quic:
+        capture_h3data = pyshark.FileCapture(input_file=file, 
+                                            display_filter=f"udp.stream eq {udp_stream_number} and http3.frame_type == 0",
+                                            custom_parameters=custom_parameters,
+                                            override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)} if override_prefs is None else override_prefs)
+        for pkt in capture_h3data:
+            if 'http3' in pkt:
+                udp_stream_numbers_h3data.add(udp_stream_number)
+                break
+        capture_h3data.close()
 
-    return tcp_stream_numbers_h3data & tcp_stream_numbers_quic, udp_stream_numbers_h2data & udp_stream_numbers_quic
+    return udp_stream_numbers_h3data

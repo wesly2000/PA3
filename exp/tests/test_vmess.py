@@ -11,7 +11,7 @@ import pandas as pd
 from WFlib.utils.config import get_config
 from WFlib.tools.analyzer import *
 from WFlib.tools.visualize import *
-from exp.data_analysis.http2_stream_analysis import h2_stream_analysis_per_host
+from exp.data_analysis.http2_stream_analysis import *
 
 import nest_asyncio 
 nest_asyncio.apply()

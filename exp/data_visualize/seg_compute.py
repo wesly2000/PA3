@@ -17,7 +17,7 @@ def extract_tcp_stream(pcap_file: Path, sni, keylog_file, custom_parameters, ove
     Extract the proper TCP stream from the pcap file given the SNIs. If any error occurs, return an empty string.
     """
     try:
-        tcp_stream_numbers, _ = h2data_SNI_intersect(pcap_file, [sni], keylog_file=keylog_file, 
+        tcp_stream_numbers = h2data_SNI_intersect(pcap_file, [sni], keylog_file=keylog_file, 
                                             custom_parameters=custom_parameters, 
                                             override_prefs=override_prefs)
     except Exception as e:

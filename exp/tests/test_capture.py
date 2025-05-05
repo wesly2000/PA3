@@ -138,7 +138,7 @@ def test_h2data_SNI_intersect_1():
     '''
     SNIs = ["is1-ssl.mzstatic.com"]
     keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
-    tcp_stream_numbers, _ = h2data_SNI_intersect(file=apple_file, SNIs=SNIs, keylog_file=keylog_file)
+    tcp_stream_numbers = h2data_SNI_intersect(file=apple_file, SNIs=SNIs, keylog_file=keylog_file)
     target = {'0'}
 
     assert tcp_stream_numbers == target
@@ -149,7 +149,7 @@ def test_h2data_SNI_intersect_2():
     '''
     SNIs = ["is1-ssl.mzstatic"]
     keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
-    tcp_stream_numbers, _ = h2data_SNI_intersect(file=apple_file, SNIs=SNIs, keylog_file=keylog_file)
+    tcp_stream_numbers = h2data_SNI_intersect(file=apple_file, SNIs=SNIs, keylog_file=keylog_file)
     target = set()
 
     assert tcp_stream_numbers == target
@@ -160,7 +160,7 @@ def test_h3data_SNI_intersect_1():
     '''
     SNIs = ["lf16-cdn-tos.tiktokcdn-us.com"]
     keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
-    _, udp_stream_numbers = h3data_SNI_intersect(file=tiktok_file, SNIs=SNIs, keylog_file=keylog_file)
+    udp_stream_numbers = h3data_SNI_intersect(file=tiktok_file, SNIs=SNIs, keylog_file=keylog_file)
 
     target = {'0'}
 
@@ -172,7 +172,7 @@ def test_h3data_SNI_intersect_2():
     '''
     SNIs = ["lf16-cdn-tos.tiktokcdn-us."]
     keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
-    _, udp_stream_numbers = h3data_SNI_intersect(file=tiktok_file, SNIs=SNIs, keylog_file=keylog_file)
+    udp_stream_numbers = h3data_SNI_intersect(file=tiktok_file, SNIs=SNIs, keylog_file=keylog_file)
 
     target = set()
 

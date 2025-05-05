@@ -4,6 +4,7 @@ from typing import List, Set
 import pyshark
 from pathlib import Path
 from tqdm import tqdm
+import argparse
 
 from WFlib.tools.capture import *
 from WFlib.utils.statistics import *
@@ -33,7 +34,7 @@ def h2_stream_analysis_per_sni(file: Path, host_filter: Set[str], custom_paramet
         # Fetch the number of all HTTP/2 streams for the same SNI
         tcp_stream_numbers, _ = SNI_stream_extract(file, [SNI], custom_parameters, override_prefs)
         h2_stream_number = len(tcp_stream_numbers)
-        tcp_stream_numbers, _ = h2data_SNI_intersect(file, SNIs, None, custom_parameters, override_prefs)
+        tcp_stream_numbers = h2data_SNI_intersect(file, SNIs, None, custom_parameters, override_prefs)
         available_h2_stream_number = len(tcp_stream_numbers)
 
         yield SNI, h2_stream_number, available_h2_stream_number
@@ -90,7 +91,7 @@ def h2_stream_analysis(root: str, host_list: List[str], df: pd.DataFrame, host_f
     for host in host_list:
         for protocol in PROTOCOLS:
             # Check if the host with the given protocol has been computed
-            if ((df['host'] == 'alice') & (df['protocol'] == 23)).any():
+            if ((df['host'] == host) & (df['protocol'] == protocol)).any():
                 continue
             h2_stream_analysis_per_host(root, protocol, host, df, host_filter)
 
@@ -108,3 +109,14 @@ def main(root: str, host_list_file: str, database_file: str, host_filter_file: s
     h2_stream_analysis(root, host_list, df, host_filter)
 
     df.to_csv(database_file)
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    # Flag argument
+    parser.add_argument("-r", "--root", default="exp", type=str, help="The root directory of the capture and keylog")
+    parser.add_argument("--host", default="exp/data_analysis/host_list.txt", type=str, help="The host list file")
+    parser.add_argument("-d", "--database", default="exp/data_analysis/database/h2.csv", help="The H2 analysis results")
+    parser.add_argument("-f", "--filter", default="exp/data_analysis/filter.txt", help="The host filter file")
+    args = parser.parse_args()
+
+    main(args.root, args.host, args.database, args.filter)
