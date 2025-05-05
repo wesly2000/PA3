@@ -192,3 +192,33 @@ def test_generate_byte_segment_1(capture_gen):
 
     assert result[0][-1] == 28 and \
             result[0][-18] == 27
+    
+@skip_vmess
+def test_h2_stream_analysis_per_host_1():
+    """
+    This test covers H2 stream statistics for s.weibo.com with a single stream
+    """
+    df = pd.DataFrame(columns=['host', 'SNI', 'protocol', 'h2_avg', 'h2_std', 'avail_h2_avg', 'avail_h2_std'])
+    root = 'exp/test_dataset/realworld_dataset'
+    host = 's.weibo.com'
+    host_filter = {'firefox.settings.services.mozilla.com'}
+    h2_stream_analysis_per_host(root=root, protocol='vmess', host=host, df=df, host_filter=host_filter)
+
+    assert df.loc[0, 'h2_avg'] == 1 and \
+            df.loc[0, 'avail_h2_avg'] == 1 and \
+            df.loc[0, 'protocol'] == 'vmess'
+    
+@skip_vmess
+def test_h2_stream_analysis_per_host_2():
+    """
+    This test covers H2 stream statistics for top.baidu.com with a multiple streams
+    """
+    df = pd.DataFrame(columns=['host', 'SNI', 'protocol', 'h2_avg', 'h2_std', 'avail_h2_avg', 'avail_h2_std'])
+    root = 'exp/test_dataset/realworld_dataset'
+    host = 'top.baidu.com'
+    host_filter = {'firefox.settings.services.mozilla.com'}
+    h2_stream_analysis_per_host(root=root, protocol='vmess', host=host, df=df, host_filter=host_filter)
+
+    assert df.loc[0, 'h2_avg'] == 1.5 and \
+            df.loc[0, 'avail_h2_avg'] == 1.5 and \
+            df.loc[0, 'protocol'] == 'vmess'
