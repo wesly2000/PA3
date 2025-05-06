@@ -35,7 +35,8 @@ def h2_stream_analysis_per_sni(file: Path, host_filter: Set[str], custom_paramet
         # Fetch the number of all HTTP/2 streams for the same SNI
         tcp_stream_numbers, _ = SNI_stream_extract(file, [SNI], custom_parameters, override_prefs)
         h2_stream_number = len(tcp_stream_numbers)
-        tcp_stream_numbers = h2data_SNI_intersect(file, SNIs, None, custom_parameters, override_prefs)
+        # Fetch the number of all available HTTP/2 streams for the same SNI
+        tcp_stream_numbers = h2data_SNI_intersect(file, [SNI], None, custom_parameters, override_prefs)
         available_h2_stream_number = len(tcp_stream_numbers)
 
         yield SNI, h2_stream_number, available_h2_stream_number
