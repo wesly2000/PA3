@@ -106,7 +106,7 @@ def main(root: str, host_list_file: str, database_file: str, host_filter_file: s
     if not Path(database_file).exists():
         print("H2 stream database does not exist, create a new one")
         df = pd.DataFrame(columns=['host', 'SNI', 'protocol', 'h2_avg', 'h2_std', 'avail_h2_avg', 'avail_h2_std'])
-        df.to_csv(database_file)
+        df.to_csv(database_file, index=False)
     
     host_list = read_host_list(host_list_file)
     host_filter = read_host_list(host_filter_file)
