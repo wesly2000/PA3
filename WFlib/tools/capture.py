@@ -482,7 +482,6 @@ def select_stream(pcap_file: Union[str, Path],
 def contains_SNI(SNIs, pkt):
     if SNIs is None or len(SNIs) == 0:
         return False
-    result = False
 
     if 'TLS' in pkt:
         tls_layer = pkt['TLS']
@@ -497,7 +496,7 @@ def contains_SNI(SNIs, pkt):
             if SNI in SNIs:
                 return True
             
-    return result
+    return False
 
 def SNI_exclude_filter(file, SNIs, custom_parameters = None, override_prefs = None):
     """
@@ -549,13 +548,13 @@ def SNI_stream_extract(file, SNIs, custom_parameters = None, override_prefs = No
 
     return tcp_stream_numbers, udp_stream_numbers
 
-def h2data_SNI_intersect(file, SNIs, keylog_file, custom_parameters = None, override_prefs = None) -> Tuple[set, set]:
+def h2data_SNI_intersect(file, SNIs, keylog_file, custom_parameters = None, override_prefs = None) -> set:
     """
     Util function: for a given file, extract the TCP/UDP streams satisfying:
     1. It is the TLS stream with given SNIs;
     2. It contains HTTP/2 DATA frames.
 
-    If override_prefs is given, keylog_file will be surpressed.
+    If override_prefs is given, keylog_file will be suppressed.
     """
     # HTTP/2 runs atop of TCP, no need to concern about UDP streams
     tcp_stream_numbers_tls, _ = SNI_stream_extract(file, SNIs, custom_parameters, override_prefs)
@@ -574,13 +573,13 @@ def h2data_SNI_intersect(file, SNIs, keylog_file, custom_parameters = None, over
 
     return tcp_stream_numbers_h2data
 
-def h3data_SNI_intersect(file, SNIs, keylog_file, custom_parameters = None, override_prefs = None) -> Tuple[set, set]:
+def h3data_SNI_intersect(file, SNIs, keylog_file, custom_parameters = None, override_prefs = None) -> set:
     """
     Util function: for a given file, extract the TCP/UDP streams satisfying:
     1. It is the QUIC stream with given SNIs;
     2. It contains HTTP/3 DATA frames.
 
-    If override_prefs is given, keylog_file will be surpressed.
+    If override_prefs is given, keylog_file will be suppressed.
     """
     # Note that Client Hello is embedded in QUIC, so we need to use tls.handshake.type == 1 to filter.
     # HTTP/3 runs atop of UDP, no need to concern about TCP streams

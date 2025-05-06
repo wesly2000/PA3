@@ -22,6 +22,7 @@ def h2_stream_analysis_per_sni(file: Path, host_filter: Set[str], custom_paramet
     
     """
     origin_cap = pyshark.FileCapture(input_file=file, 
+                                     display_filter="tls.handshake.type == 1",
                                      custom_parameters=custom_parameters, 
                                      override_prefs=override_prefs)
 
@@ -40,7 +41,7 @@ def h2_stream_analysis_per_sni(file: Path, host_filter: Set[str], custom_paramet
         yield SNI, h2_stream_number, available_h2_stream_number
 
 
-def h2_stream_analysis_per_host(root: str, protocol: str, host: str, df: pd.DataFrame, host_filter: Set[str]):
+def h2_stream_analysis_per_host(root: str, protocol: str, host: str, host_filter: Set[str]) -> pd.DataFrame:
     """
     Count the average number of HTTP/2 streams and available HTTP/2 streams (streams with HTTP/2 DATA frames).
     To make these statistics reusable, store them into .csv files. The key is (host, SNI, protocol).
@@ -50,6 +51,7 @@ def h2_stream_analysis_per_host(root: str, protocol: str, host: str, df: pd.Data
     root : str
         The root of all capture (.pcap(ng)) files.
     """
+    df = pd.DataFrame(columns=['host', 'SNI', 'protocol', 'h2_avg', 'h2_std', 'avail_h2_avg', 'avail_h2_std'])
     pcap_dir = f"{root}/{protocol}_capture/{host}"
     keylog_file = f"{pcap_dir}/keylog.txt"
     proxy_keylog_file = f"{pcap_dir}/proxy_keylog.txt"
@@ -87,28 +89,29 @@ def h2_stream_analysis_per_host(root: str, protocol: str, host: str, df: pd.Data
                np.mean(stats[SNI]['h2']), np.std(stats[SNI]['h2']), 
                np.mean(stats[SNI]['avail_h2']), np.std(stats[SNI]['avail_h2'])]
         
-def h2_stream_analysis(root: str, host_list: List[str], df: pd.DataFrame, host_filter: List[str]):
+    return df
+        
+def h2_stream_analysis(root: str, host_list: List[str], database_file: str, host_filter: List[str]):
+    existed_df = pd.read_csv(database_file)[['host', 'protocol']]
     for host in host_list:
         for protocol in PROTOCOLS:
             # Check if the host with the given protocol has been computed
-            if ((df['host'] == host) & (df['protocol'] == protocol)).any():
+            if ((existed_df['host'] == host) & (existed_df['protocol'] == protocol)).any():
                 continue
-            h2_stream_analysis_per_host(root, protocol, host, df, host_filter)
+            df = h2_stream_analysis_per_host(root, protocol, host, host_filter)
+            df.to_csv(database_file, mode='a', index=False, header=False)
 
 def main(root: str, host_list_file: str, database_file: str, host_filter_file: str):
     if not Path(database_file).exists():
         print("H2 stream database does not exist, create a new one")
         df = pd.DataFrame(columns=['host', 'SNI', 'protocol', 'h2_avg', 'h2_std', 'avail_h2_avg', 'avail_h2_std'])
-    else:
-        print("H2 stream database found")
-        df = pd.read_csv(database_file)
+        df.to_csv(database_file)
     
     host_list = read_host_list(host_list_file)
     host_filter = read_host_list(host_filter_file)
 
-    h2_stream_analysis(root, host_list, df, host_filter)
+    h2_stream_analysis(root, host_list, database_file, host_filter)
 
-    df.to_csv(database_file)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
