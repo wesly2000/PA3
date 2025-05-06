@@ -563,12 +563,13 @@ def h2data_SNI_intersect(file, SNIs, keylog_file, custom_parameters = None, over
     for tcp_stream_number in tcp_stream_numbers_tls:
         capture_h2data = pyshark.FileCapture(input_file=file, 
                                             display_filter=f"tcp.stream eq {tcp_stream_number} and http2.type == 0",
+                                            only_summaries=True,
                                             custom_parameters=custom_parameters,
                                             override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)} if override_prefs is None else override_prefs)
-        for pkt in capture_h2data:
-            if 'http2' in pkt:
-                tcp_stream_numbers_h2data.add(tcp_stream_number)
-                break
+        for _ in capture_h2data:
+            # If it enters the loop, the stream must contains at least one HTTP/2 DATA frame
+            tcp_stream_numbers_h2data.add(tcp_stream_number)
+            break
         capture_h2data.close()
 
     return tcp_stream_numbers_h2data
