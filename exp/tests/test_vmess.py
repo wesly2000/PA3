@@ -86,7 +86,7 @@ def test_vmess_bytes_count(capture_gen):
 
 @pytest.mark.parametrize("capture_gen", [{'host': 's.weibo.com'}], indirect=True)
 @skip_vmess
-def test_layer_extractor_01(capture_gen):
+def test_layer_extractor_1(capture_gen):
     """
     This test covers extracting layers from the given capture for HTTP2.
     """
@@ -121,7 +121,7 @@ def test_layer_extractor_01(capture_gen):
 
 @pytest.mark.parametrize("capture_gen", [{'host': 's.weibo.com'}], indirect=True)
 @skip_vmess
-def test_line_rel_building_01(capture_gen):
+def test_line_rel_building_1(capture_gen):
     """
     This test covers building the lower relation of a line using MORE COMPLEX real-world data.
     """    
@@ -144,7 +144,7 @@ def test_line_rel_building_01(capture_gen):
     
 @pytest.mark.parametrize("capture_gen", [{'host': 'top.baidu.com', 'index': 0}], indirect=True)
 @skip_vmess
-def test_line_rel_building_02(capture_gen):
+def test_line_rel_building_2(capture_gen):
     """
     This test covers building the lower relation of a line using MORE COMPLEX real-world data.
     """
@@ -165,6 +165,48 @@ def test_line_rel_building_02(capture_gen):
 
     assert line.byte_counter == byte_counter and \
            cnt == line.byte_counter
+    
+@pytest.mark.parametrize("capture_gen", [{'host': 'top.baidu.com', 'index': 0}], indirect=True)
+@skip_vmess
+def test_line_span_building_1(capture_gen):
+    """
+    This test covers building the lower relation of a line using MORE COMPLEX real-world data.
+    """    
+    line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="http2", lower_protocol="tls")
+    lower_span_bytes = 0
+    for span in line.lower_span_map.values():
+        for segment_size in span.values():
+            lower_span_bytes += segment_size
+
+    assert line.byte_counter == lower_span_bytes
+
+@pytest.mark.parametrize("capture_gen", [{'host': 'top.baidu.com', 'index': 1}], indirect=True)
+@skip_vmess
+def test_line_span_building_2(capture_gen):
+    """
+    This test covers building the lower relation of a line using MORE COMPLEX real-world data.
+    """    
+    line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="http2", lower_protocol="tls")
+    lower_span_bytes = 0
+    for span in line.lower_span_map.values():
+        for segment_size in span.values():
+            lower_span_bytes += segment_size
+
+    assert line.byte_counter == lower_span_bytes
+
+@pytest.mark.parametrize("capture_gen", [{'host': 's.weibo.com'}], indirect=True)
+@skip_vmess
+def test_line_span_building_3(capture_gen):
+    """
+    This test covers building the lower relation of a line using MORE COMPLEX real-world data.
+    """    
+    line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="http2", lower_protocol="tls")
+    lower_span_bytes = 0
+    for span in line.lower_span_map.values():
+        for segment_size in span.values():
+            lower_span_bytes += segment_size
+
+    assert line.byte_counter == lower_span_bytes
     
 @pytest.mark.parametrize("capture_gen", [{'host': 'top.baidu.com', 'index': 0}], indirect=True)
 @skip_vmess

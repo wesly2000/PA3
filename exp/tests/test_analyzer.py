@@ -487,6 +487,38 @@ def test_line_rel_building_3(apple_cap):
            cnt == line.byte_counter
     
 @pytest.mark.parametrize("apple_cap", [{'display_filter': "tcp.stream == 0"}], indirect=True) 
+def test_line_span_building_1(apple_cap):
+    """
+    This test covers building the lower relation of a line using MORE COMPLEX real-world data.
+    """    
+    line = get_adjacent_protocol_reassemble_info(cap=apple_cap, upper_protocol="http2", lower_protocol="tls")
+
+    # The number of bytes lower layer spans MUST be equal to the upper layer possesses
+    # BUG: However, it is known that in VMess dissector, sometimes the upper layer marks some packet as HTTP/2
+    # but there are no TLS layers within. Such issue is caused by the dissector, instead of the Line.
+    # Therefore, we still consider the claim above holds.
+    lower_span_bytes = 0
+    for span in line.lower_span_map.values():
+        for segment_size in span.values():
+            lower_span_bytes += segment_size
+
+    assert line.byte_counter == lower_span_bytes
+
+@pytest.mark.parametrize("apple_cap", [{'display_filter': "tcp.stream == 1"}], indirect=True) 
+def test_line_span_building_2(apple_cap):
+    """
+    This test covers building the lower relation of a line using MORE COMPLEX real-world data.
+    """    
+    line = get_adjacent_protocol_reassemble_info(cap=apple_cap, upper_protocol="http2", lower_protocol="tls")
+    lower_span_bytes = 0
+    for span in line.lower_span_map.values():
+        for segment_size in span.values():
+            lower_span_bytes += segment_size
+
+    assert line.byte_counter == lower_span_bytes
+    
+    
+@pytest.mark.parametrize("apple_cap", [{'display_filter': "tcp.stream == 0"}], indirect=True) 
 def test_line_seg_1(apple_cap):
     line = get_adjacent_protocol_reassemble_info(cap=apple_cap, upper_protocol="http2", lower_protocol="tls")
 
