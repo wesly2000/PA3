@@ -429,21 +429,22 @@ def test_line_rel_building_1():
     This test covers building the lower relation of a line using artificial data.
     """
     # Upper layer PDUs
-    http2_cell_1 = Cell(proto="http2", abs_frame_number=106)
+    http2_cell_1 = Cell(upper_protocol="http2", lower_protocol="tls", abs_frame_number=106)
     http2_cell_1.abs_segment_frame_number = [104, 106]
     http2_cell_1.segment_size = [114, 514]
-    http2_cell_2 = Cell(proto="http2", abs_frame_number=106)
+    http2_cell_2 = Cell(upper_protocol="http2", lower_protocol="tls", abs_frame_number=106)
     http2_cell_2.abs_segment_frame_number = [106]
     http2_cell_2.segment_size = [1919]
-    http2_cell_3 = Cell(proto="http2", abs_frame_number=109)
+    http2_cell_3 = Cell(upper_protocol="http2", lower_protocol="tls", abs_frame_number=109)
     http2_cell_3.abs_segment_frame_number = [106, 108, 109]
     http2_cell_3.segment_size = [8, 10, 1145]
 
+    packet_1 = Packet(cells=[http2_cell_1, http2_cell_2])
+    packet_2 = Packet(cells=[http2_cell_3])
 
-    line = Line(upper_protocol="http2", upper_cells=[http2_cell_1, http2_cell_2, http2_cell_3],
-                lower_protocol="tls", lower_abs_frame_numbers=[104, 106, 108, 109])
+    line = Line(upper_packets=[packet_1, packet_2], lower_abs_frame_numbers=[104, 106, 108, 109])
 
-    target_upper_abs_byte_map = {104: [(0, 114)], 106: [(114, 628), (628, 2547), (2547, 2555)], 108: [(2555, 2565)], 109: [(2565, 3710)]}
+    target_upper_abs_byte_map = {104: [(0, 114)], 106: [(114, 2547), (2547, 2555)], 108: [(2555, 2565)], 109: [(2565, 3710)]}
 
 
     assert line.upper_abs_byte_map == target_upper_abs_byte_map

@@ -441,13 +441,14 @@ class Line():
     TLS Layer     ----------  --------------    -----------      --------------      --------------------
     """
     def __init__(self, 
-                 upper_protocol: str, upper_cells: List[Cell], 
-                 lower_protocol: str, lower_abs_frame_numbers: List[int],
+                 upper_packets: List[Packet], 
+                 lower_abs_frame_numbers: List[int],
                  sanity_check = False
                  ):
-        self._upper_layer = upper_protocol
-        self._upper_cells = sorted(upper_cells)  # Defer the sorting to the Line instead of CellExtractor
-        self._lower_layer = lower_protocol
+        self._upper_protocol = upper_packets[0].upper_protocol
+        self._lower_protocol = upper_packets[0].lower_protocol
+        self._upper_packets = sorted(upper_packets)  # Defer the sorting to the Line instead of CellExtractor
+        
         """
         COMMENT: Shall we make lower_abs_frame_numbers a dict, whose values indicate the relative
         index of each lower frame?
@@ -522,8 +523,8 @@ class Line():
         #          to implicitly ignore the last byte index?
         upper_abs_byte_map = dict()
 
-        for i in range(len(self._upper_cells)):
-            for segment_frame_number, segment_size in zip(self._upper_cells[i].abs_segment_frame_number, self._upper_cells[i].segment_size):
+        for packet in self._upper_packets:
+            for segment_frame_number, segment_size in sorted(packet.segments.items()):
                 if segment_frame_number in upper_abs_byte_map:
                     upper_abs_byte_map[segment_frame_number].append(  # If the segment frame number is already in the map, update the byte range
                         (byte_counter, byte_counter + segment_size)
@@ -543,43 +544,36 @@ class Line():
     def seg(self, upper_abs_frame_number: int) -> dict:
         """
         Given the absolute frame number of a upper layer frame, return its segment and segment size list.
-
-        COMMENT: shall we merge the segment number/size for the same segment? YES
-        COMMENT: is the order important? NO
         """
-        seg = dict()
-        for cell in self._upper_cells:
-            if cell.abs_frame_number == upper_abs_frame_number:
-                for abs_segment_frame_number, segment_size in zip(cell.abs_segment_frame_number, cell.segment_size):
-                    seg[abs_segment_frame_number] = seg.setdefault(abs_segment_frame_number, 0) + segment_size
-
-        return seg
+        for packet in self._upper_packets:
+            if packet.abs_frame_number == upper_abs_frame_number:
+                return packet.segments
 
     def span(self, lower_abs_frame_number: int) -> List:
         """
         Given the absolute frame number of a lower layer frame, return the upper segment and segment size it spans.
         """
         span = dict()
-        # Note that the required segment may consist all cells with frame number larger or equal than its frame number.
-        # For multiple stream case, even the segment does not consists the next cell, it may consist the cells after the
-        # next cell.
-        # However, if a cell contains segments equal to it, meanwhile, this cell contains segments whose frame numbers
+        # Note that the required segment may consist all packets with frame number larger or equal than its frame number.
+        # For multiple stream case, even the segment does not consists the next packet, it may consist the packets after the
+        # next packet.
+        # However, if a packet contains segments equal to it, meanwhile, this packet contains segments whose frame numbers
         # are larger than the required frame number, the searching process could terminate.
-        # NOTE: the claims above requires cells sorted.
+        # NOTE: the claims above requires packets sorted.
         no_further_search = False
-        for cell in self._upper_cells:
-            if cell.abs_frame_number >= lower_abs_frame_number:
-                # Search all the segments of the cell, and find if there are the required segment
+        for packet in self._upper_packets:
+            if packet.abs_frame_number >= lower_abs_frame_number:
+                # Search all the segments of the packet, and find if there are the required segment
                 possible_no_further_search = False
-                for abs_segment_frame_number, segment_size in zip(cell.abs_segment_frame_number, cell.segment_size):
+                for abs_segment_frame_number, segment_size in packet.segments.items():
                     if abs_segment_frame_number == lower_abs_frame_number:
-                        # When the cell contains the lower_abs_frame_number, check if there are segment numbers larger than it
+                        # When the packet contains the lower_abs_frame_number, check if there are segment numbers larger than it
                         # for early termination.
                         possible_no_further_search = True
-                        span[cell.abs_frame_number] = span.setdefault(cell.abs_frame_number, 0) + segment_size
+                        span[packet.abs_frame_number] = span.setdefault(packet.abs_frame_number, 0) + segment_size
 
                 if possible_no_further_search:
-                    for frame_number in cell.abs_segment_frame_number:
+                    for frame_number in packet.segments.keys():
                         if frame_number > lower_abs_frame_number:
                             no_further_search = True 
                             break
@@ -795,22 +789,18 @@ def get_adjacent_protocol_reassemble_info(cap: pyshark.FileCapture, upper_protoc
     upper_protocol = upper_protocol.lower()
     lower_protocol = lower_protocol.lower()
 
-    upper_cells = []
+    upper_packets = []
     lower_abs_frame_numbers = []
 
     for pkt in cap:
         if upper_protocol in pkt:
-            upper_cells += PROCOCOL_CELL_EXTRACTOR[upper_protocol].extract(pkt, lower_protocol=lower_protocol)
+            packet = Packet(PROCOCOL_CELL_EXTRACTOR[upper_protocol].extract(pkt, lower_protocol=lower_protocol))
+            upper_packets.append(packet)
         if lower_protocol in pkt:
             lower_abs_frame_numbers.append(int(pkt.number))
 
 
-    line = Line(
-        upper_protocol=upper_protocol, 
-        upper_cells=upper_cells, 
-        lower_protocol=lower_protocol,
-        lower_abs_frame_numbers=lower_abs_frame_numbers,
-        )
+    line = Line(upper_packets=upper_packets, lower_abs_frame_numbers=lower_abs_frame_numbers)
     
     if not line.continunity_check():
         raise ValueError("Discontinuous line")
