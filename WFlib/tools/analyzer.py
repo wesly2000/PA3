@@ -315,8 +315,9 @@ class Cell():
     Especially, the == operator checks if two cells have the same abs_frame_number and abs_segment_frame_number.
     Don't use it as a check for all the attributes of two cells.
     """
-    def __init__(self, proto, abs_frame_number):
-        self.proto = proto
+    def __init__(self, upper_protocol, lower_protocol, abs_frame_number):
+        self.upper_protocol = upper_protocol
+        self.lower_protocol = lower_protocol
         self.abs_frame_number = abs_frame_number 
         self.abs_segment_frame_number = []
         self.rel_frame_number = None
@@ -327,7 +328,7 @@ class Cell():
     def __eq__(self, other):
         if not isinstance(other, Cell):
             raise TypeError("Can only compare with another Cell object")
-        if self.proto != other.proto:
+        if self.upper_protocol != other.upper_protocol or self.lower_protocol != other.lower_protocol:
             raise ValueError(f"Cannot compare {self} with {other}, since they are not from the same protocol.")
         if self.abs_frame_number == other.abs_frame_number and \
             self.abs_segment_frame_number == other.abs_segment_frame_number:
@@ -339,7 +340,7 @@ class Cell():
         if not isinstance(other, Cell):
             raise TypeError("Can only compare with another Cell object")
         
-        if self.proto != other.proto:
+        if self.upper_protocol != other.upper_protocol or self.lower_protocol != other.lower_protocol:
             raise ValueError(f"Cannot compare {self} with {other}, since they are not from the same protocol.")
         
         if self.abs_frame_number < other.abs_frame_number:
@@ -364,7 +365,7 @@ class Cell():
         if not isinstance(other, Cell):
             raise TypeError("Can only compare with another Cell object")
 
-        if self.proto!= other.proto:
+        if self.upper_protocol != other.upper_protocol or self.lower_protocol != other.lower_protocol:
             raise ValueError(f"Cannot compare {self} with {other}, since they are not from the same protocol.")
 
         if self.abs_frame_number > other.abs_frame_number:
