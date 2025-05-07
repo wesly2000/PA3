@@ -462,8 +462,25 @@ def test_line_rel_building_3(apple_cap):
     assert line.byte_counter == byte_counter and \
            cnt == line.byte_counter
     
-def test_line_seg_1():
-    pass
+@pytest.mark.parametrize("apple_cap", [{'display_filter': "tcp.stream == 0"}], indirect=True) 
+def test_line_seg_1(apple_cap):
+    line = get_adjacent_protocol_reassemble_info(cap=apple_cap, upper_protocol="http2", lower_protocol="tls")
+
+    seg = line.seg(upper_abs_frame_number=201)
+
+    target_seg = {201: 16402, 199: 16384}
+
+    assert seg == target_seg
+
+@pytest.mark.parametrize("apple_cap", [{'display_filter': "tcp.stream == 0"}], indirect=True) 
+def test_line_span_1(apple_cap):
+    line = get_adjacent_protocol_reassemble_info(cap=apple_cap, upper_protocol="http2", lower_protocol="tls")
+
+    span = line.span(lower_abs_frame_number=199)
+
+    target_span = {201: 16384, 199: 39144}
+
+    assert span == target_span
 
 
 def test_match_segment_number_1():

@@ -508,9 +508,10 @@ class Line():
         COMMENT: is the order important? NO
         """
         seg = dict()
-        for cell in filter(lambda c: c.abs_frame_number == upper_abs_frame_number, self._upper_cells):
-            for abs_segment_frame_number, segment_size in zip(cell.abs_segment_frame_number, cell.segment_size):
-                seg[abs_segment_frame_number] = seg.setdefault(abs_segment_frame_number, 0) + segment_size
+        for cell in self._upper_cells:
+            if cell.abs_frame_number == upper_abs_frame_number:
+                for abs_segment_frame_number, segment_size in zip(cell.abs_segment_frame_number, cell.segment_size):
+                    seg[abs_segment_frame_number] = seg.setdefault(abs_segment_frame_number, 0) + segment_size
 
         return seg
 
@@ -518,7 +519,35 @@ class Line():
         """
         Given the absolute frame number of a lower layer frame, return the upper segment and segment size it spans.
         """
+        span = dict()
+        # Note that the required segment may consist all cells with frame number larger or equal than its frame number.
+        # For multiple stream case, even the segment does not consists the next cell, it may consist the cells after the
+        # next cell.
+        # However, if a cell contains segments equal to it, meanwhile, this cell contains segments whose frame numbers
+        # are larger than the required frame number, the searching process could terminate.
+        # NOTE: the claims above requires cells sorted.
+        no_further_search = False
+        for cell in self._upper_cells:
+            if cell.abs_frame_number >= lower_abs_frame_number:
+                # Search all the segments of the cell, and find if there are the required segment
+                possible_no_further_search = False
+                for abs_segment_frame_number, segment_size in zip(cell.abs_segment_frame_number, cell.segment_size):
+                    if abs_segment_frame_number == lower_abs_frame_number:
+                        # When the cell contains the lower_abs_frame_number, check if there are segment numbers larger than it
+                        # for early termination.
+                        possible_no_further_search = True
+                        span[cell.abs_frame_number] = span.setdefault(cell.abs_frame_number, 0) + segment_size
 
+                if possible_no_further_search:
+                    for frame_number in cell.abs_segment_frame_number:
+                        if frame_number > lower_abs_frame_number:
+                            no_further_search = True 
+                            break
+            
+            if no_further_search:
+                break
+
+        return span
 
 
 PROTOCOL_REASSEMBLE_FIELD = {
