@@ -510,6 +510,12 @@ class Line():
         return self._upper_abs_byte_map
     
     @property
+    def lower_span_map(self):
+        if self._lower_span_map is None:  # Lazy build the map if not built yet.
+            self.lower_span_building()
+        return self._lower_span_map
+    
+    @property
     def lower_abs_frame_numbers(self):
         return self._lower_abs_frame_numbers
 
@@ -539,7 +545,11 @@ class Line():
         self._upper_abs_byte_map = upper_abs_byte_map
 
     def lower_span_building(self):
-        pass
+        lower_span_map = dict()
+        for lower_segment_frame_number in self._upper_abs_byte_map:
+            lower_span_map[lower_segment_frame_number] = self.span(lower_segment_frame_number)
+
+        self._lower_span_map = lower_span_map 
 
     def seg(self, upper_abs_frame_number: int) -> dict:
         """
