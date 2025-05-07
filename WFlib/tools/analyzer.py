@@ -407,7 +407,7 @@ class Line():
                  sanity_check = False
                  ):
         self._upper_layer = upper_protocol
-        self._upper_cells = upper_cells
+        self._upper_cells = sorted(upper_cells)  # Defer the sorting to the Line instead of CellExtractor
         self._lower_layer = lower_protocol
         """
         COMMENT: Shall we make lower_abs_frame_numbers a dict, whose values indicate the relative
@@ -497,6 +497,29 @@ class Line():
 
         self._upper_abs_byte_map = upper_abs_byte_map
 
+    def lower_span_building(self):
+        pass
+
+    def seg(self, upper_abs_frame_number: int) -> dict:
+        """
+        Given the absolute frame number of a upper layer frame, return its segment and segment size list.
+
+        COMMENT: shall we merge the segment number/size for the same segment? YES
+        COMMENT: is the order important? NO
+        """
+        seg = dict()
+        for cell in filter(lambda c: c.abs_frame_number == upper_abs_frame_number, self._upper_cells):
+            for abs_segment_frame_number, segment_size in zip(cell.abs_segment_frame_number, cell.segment_size):
+                seg[abs_segment_frame_number] = seg.setdefault(abs_segment_frame_number, 0) + segment_size
+
+        return seg
+
+    def span(self, lower_abs_frame_number: int) -> List:
+        """
+        Given the absolute frame number of a lower layer frame, return the upper segment and segment size it spans.
+        """
+
+
 
 PROTOCOL_REASSEMBLE_FIELD = {
     "tls": "tls_segments",
@@ -562,9 +585,6 @@ class CellExtractor(object):
         for layer in filtered_layers:
             cell = self.layer_extract(layer, int(pkt.number), lower_protocol)
             cells.append(cell)
-
-        # Defer the sorting work to the Cell instead of layers.
-        cells.sort()
         
         return cells
     
