@@ -6,7 +6,6 @@ from pathlib import Path
 import pyshark
 import os
 import pytest
-from WFlib.utils.config import get_config
 
 import nest_asyncio 
 nest_asyncio.apply()
@@ -16,21 +15,58 @@ google_file = "exp/test_dataset/realworld_dataset/www.google.com.pcapng"
 apple_file = "exp/test_dataset/realworld_dataset/decryption/www.apple.com.pcapng"
 tiktok_file = "exp/test_dataset/realworld_dataset/decryption/www.tiktok.com.pcapng"
 
-def test_packet_count_01():
-    target = 8627
-    cap = pyshark.FileCapture(input_file=baidu_proxied_file, only_summaries=True, keep_packets=False)
-    cnt = packet_count(cap)
+@pytest.fixture
+def baidu_proxied_cap(request):
+    if 'display_filter' in request.param:
+        display_filter = request.param['display_filter']
+    else:
+        display_filter = None
+    
+    cap = pyshark.FileCapture(input_file=baidu_proxied_file, display_filter=display_filter, only_summaries=True, keep_packets=False)
+    yield cap
 
     cap.close()
+
+@pytest.fixture
+def apple_cap(request):
+    if 'display_filter' in request.param:
+        display_filter = request.param['display_filter']
+    else:
+        display_filter = None
+    keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
+
+    cap = pyshark.FileCapture(input_file=apple_file, display_filter=display_filter,
+                            custom_parameters=["-C", "Customized", "-2"],
+                            override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
+    yield cap
+
+    cap.close()
+
+@pytest.fixture
+def tiktok_cap(request):
+    if 'display_filter' in request.param:
+        display_filter = request.param['display_filter']
+    else:
+        display_filter = None
+    keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
+
+    cap = pyshark.FileCapture(  input_file=tiktok_file, display_filter=display_filter,
+                                override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
+    yield cap
+
+    cap.close()
+
+@pytest.mark.parametrize("baidu_proxied_cap", [{}], indirect=True)
+def test_packet_count_01(baidu_proxied_cap):
+    target = 8627
+    cnt = packet_count(baidu_proxied_cap)
 
     assert target == cnt
 
-def test_packet_count_02():
+@pytest.mark.parametrize("baidu_proxied_cap", [{'display_filter': "tcp"}], indirect=True)
+def test_packet_count_02(baidu_proxied_cap):
     target = 8564
-    cap = pyshark.FileCapture(input_file=baidu_proxied_file, display_filter="tcp", only_summaries=True, keep_packets=False)
-    cnt = packet_count(cap)
-
-    cap.close()
+    cnt = packet_count(baidu_proxied_cap)
 
     assert target == cnt
 
@@ -45,154 +81,119 @@ def test_file_count():
     for k in result:
         assert result[k] == target[k]
 
-def test_http2_bytes_count():
+@pytest.mark.parametrize("apple_cap", [{'display_filter': "tcp.stream == 2 and http2"}], indirect=True)
+def test_http2_bytes_count(apple_cap):
     counter = HTTP2ByteCounter()
-
-    keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
-    capture = pyshark.FileCapture(input_file=apple_file, display_filter="tcp.stream == 2 and http2",
-                                  override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
     
     byte_count, pkt_count = 0, 0
-    for pkt in capture:
+    for pkt in apple_cap:
         byte_count += counter.packet_count(pkt)
         pkt_count += 1
 
     byte_target, packet_target = 3242, 9
-
-    capture.close()
     
     assert byte_target == byte_count and packet_target == pkt_count
 
-def test_tcp_bytes_count():
+@pytest.mark.parametrize("apple_cap", [{'display_filter': "tcp.stream == 2"}], indirect=True)
+def test_tcp_bytes_count(apple_cap):
     counter = TCPByteCounter()
-
-    capture = pyshark.FileCapture(input_file=apple_file, display_filter="tcp.stream == 2")
     
     byte_count, pkt_count = 0, 0
-    for pkt in capture:
+    for pkt in apple_cap:
         byte_count += counter.packet_count(pkt)
         pkt_count += 1
 
     byte_target, packet_target = 11408, 32
-
-    capture.close()
     
     assert byte_target == byte_count and packet_target == pkt_count
 
-def test_tls_bytes_count():
+@pytest.mark.parametrize("apple_cap", [{'display_filter': "tcp.stream == 2 and tls"}], indirect=True)
+def test_tls_bytes_count(apple_cap):
     counter = TLSByteCounter()
-
-    capture = pyshark.FileCapture(input_file=apple_file, display_filter="tcp.stream == 2 and tls")
     
     byte_count, pkt_count = 0, 0
-    for pkt in capture:
+    for pkt in apple_cap:
         byte_count += counter.packet_count(pkt)
         pkt_count += 1
 
     byte_target, packet_target = 10368, 16
-
-    capture.close()
     
     assert byte_target == byte_count and packet_target == pkt_count
 
-def test_udp_bytes_count():
+@pytest.mark.parametrize("tiktok_cap", [{'display_filter': "udp.stream == 0"}], indirect=True)
+def test_udp_bytes_count(tiktok_cap):
     counter = UDPByteCounter()
-
-    capture = pyshark.FileCapture(input_file=tiktok_file, display_filter="udp.stream == 0")
 
     byte_count, pkt_count = 0, 0
 
-    for pkt in capture:
+    for pkt in tiktok_cap:
         byte_count += counter.packet_count(pkt)
         pkt_count += 1
 
     byte_target, packet_target = 56518, 80
 
-    capture.close() 
-
     assert byte_target == byte_count and packet_target == pkt_count
 
-def test_quic_bytes_count():
+@pytest.mark.parametrize("tiktok_cap", [{'display_filter': "udp.stream == 0"}], indirect=True)
+def test_quic_bytes_count(tiktok_cap):
     counter = QUICByteCounter()
-
-    capture = pyshark.FileCapture(input_file=tiktok_file, display_filter="udp.stream == 0 and quic")
 
     byte_count, pkt_count = 0, 0
     
-    for pkt in capture:
+    for pkt in tiktok_cap:
         byte_count += counter.packet_count(pkt)
         pkt_count += 1
 
     byte_target, packet_target = 55878, 80
 
-    capture.close()
-
     assert byte_target == byte_count and packet_target == pkt_count
 
-def test_http3_bytes_count():
+@pytest.mark.parametrize("tiktok_cap", [{'display_filter': "udp.stream == 0 and http3"}], indirect=True)
+def test_http3_bytes_count(tiktok_cap):
     counter = HTTP3ByteCounter()
 
-    keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
-    capture = pyshark.FileCapture(input_file=tiktok_file, display_filter="udp.stream == 0 and http3",
-                                  override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
-
     byte_count, pkt_count = 0, 0
-    for pkt in capture:
+    for pkt in tiktok_cap:
         byte_count += counter.packet_count(pkt)
         pkt_count += 1
 
-    capture.close()
+    tiktok_cap.close()
     byte_target, packet_target = 42925, 22
 
     assert byte_target == byte_count and packet_target == pkt_count
 
-def test_capture_counter_1():
+@pytest.mark.parametrize("apple_cap", [{'display_filter': "tcp.stream == 2"}], indirect=True)
+def test_capture_counter_1(apple_cap):
     """
     This test covers TCP/TLS/HTTP2 layered counter to the given capture.
     """
     counter = CaptureCounter(TCPByteCounter(), TLSByteCounter(), HTTP2ByteCounter())
-
-    keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
-    capture = pyshark.FileCapture(input_file=apple_file, display_filter="tcp.stream == 2",
-                                  override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
     
-    result = counter.count(capture)
-
-    capture.close()
+    result = counter.count(apple_cap)
 
     assert  result['tcp'][0] == 32 and result['tcp'][1] == 11408 and \
             result['tls'][0] == 16 and result['tls'][1] == 10368 and \
             result['http2'][0] == 9 and result['http2'][1] == 3242
     
-def test_capture_counter_2():
+@pytest.mark.parametrize("tiktok_cap", [{'display_filter': "udp.stream == 0"}], indirect=True)
+def test_capture_counter_2(tiktok_cap):
     """
     This test covers UDP/QUIC/HTTP3 layered counter to the given capture."
     """
     counter = CaptureCounter(UDPByteCounter(), QUICByteCounter(), HTTP3ByteCounter())
 
-    keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
-
-    capture = pyshark.FileCapture(input_file=tiktok_file, display_filter="udp.stream == 0",
-                                  override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
-
-    result = counter.count(capture)
-
-    capture.close()
+    result = counter.count(tiktok_cap)
 
     assert result['udp'][0] == 80 and result['udp'][1] == 56518 and \
            result['quic'][0] == 80 and result['quic'][1] == 55878 and \
            result['http3'][0] == 22 and result['http3'][1] == 42925
-    
-def test_layer_extractor_01():
+
+@pytest.mark.parametrize("apple_cap", [{'display_filter': "tcp.stream == 0"}], indirect=True)
+def test_layer_extractor_1(apple_cap):
     """
     This test covers extracting layers from the given capture for TLS.
     """
-    tcp_filter = "tcp.stream == 0"
-    keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
-    cap = pyshark.FileCapture(input_file=apple_file, display_filter=tcp_filter, 
-                                custom_parameters=["-C", "Customized", "-2"],
-                                override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
-    for pkt in cap:
+    for pkt in apple_cap:
         if pkt.number == "34":  # This packet contains only a single TLS layer.
             layers = layer_extractor(pkt, upper_protocol="tls", lower_protocol='TCP')
             assert len(layers) == 1 and layers[0].layer_name == "tls"
@@ -213,18 +214,12 @@ def test_layer_extractor_01():
             layers = layer_extractor(pkt, upper_protocol="tls", lower_protocol='TCP')
             assert len(layers) == 0
 
-    cap.close()
-
-def test_layer_extractor_02():
+@pytest.mark.parametrize("apple_cap", [{'display_filter': "tcp.stream == 0"}], indirect=True)
+def test_layer_extractor_2(apple_cap):
     """
     This test covers extracting layers from the given capture for HTTP2.
     """
-    tcp_filter = "tcp.stream == 0"
-    keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
-    cap = pyshark.FileCapture(input_file=apple_file, display_filter=tcp_filter, 
-                                custom_parameters=["-C", "Customized", "-2"],
-                                override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
-    for pkt in cap:
+    for pkt in apple_cap:
         if pkt.number == "67":  # This packet contains a DATA layer and a single HTTP2 layer.
             layers = layer_extractor(pkt, upper_protocol="http2", lower_protocol='tls')
             assert len(layers) == 2 and \
@@ -261,19 +256,13 @@ def test_layer_extractor_02():
                     "tls_segments" in layers[0].field_names and \
                     "tls_segments" in layers[1].field_names and \
                     "tls_segments" in layers[2].field_names
-            
-    cap.close()
 
-def test_seq_filter_01():
+@pytest.mark.parametrize("apple_cap", [{'display_filter': "tcp.stream == 0"}], indirect=True)  
+def test_seq_filter_1(apple_cap):
     """
     This test covers seq_filter with more complex labeling functions.
     """
-    tcp_filter = "tcp.stream == 0"
-    keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
-    cap = pyshark.FileCapture(input_file=apple_file, display_filter=tcp_filter, 
-                                custom_parameters=["-C", "Customized", "-2"],
-                                override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
-    for pkt in cap:
+    for pkt in apple_cap:
         if pkt.number == "104":  # This packet contains a DATA layer and multiple HTTP2 layers.
             layers = layer_extractor(pkt, upper_protocol="http2", lower_protocol='tls')
             result = seq_filter(layers, lower_protocol='tls')
@@ -293,16 +282,10 @@ def test_seq_filter_01():
             assert layer_names.count("DATA") == expect_num_DATA_layer and \
                    layer_names.count("http2") == expect_num_HTTP2_layer
             
-    cap.close()
-
-def test_HTTP2CellExtractor_01():
+@pytest.mark.parametrize("apple_cap", [{'display_filter': "tcp.stream == 0"}], indirect=True) 
+def test_HTTP2CellExtractor_1(apple_cap):
     cell_extractor = HTTP2CellExtractor()
-    tcp_filter = "tcp.stream == 0"
-    keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
-    cap = pyshark.FileCapture(input_file=apple_file, display_filter=tcp_filter, 
-                                custom_parameters=["-C", "Customized", "-2"],
-                                override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
-    for pkt in cap:
+    for pkt in apple_cap:
         if pkt.number == "104":  # This packet contains a DATA layer and multiple HTTP2 layers.
             cells = cell_extractor.extract(pkt)
             assert len(cells) == 2 and \
@@ -326,17 +309,12 @@ def test_HTTP2CellExtractor_01():
             cells[1].segment_size == [16384, 9] and \
             cells[1].abs_segment_frame_number == [212, 212] and \
             cells[1].size == 16393
-            
-    cap.close()
 
-def test_TLSCellExtractor_01():
+@pytest.mark.parametrize("apple_cap", [{'display_filter': "tcp.stream == 0"}], indirect=True) 
+def test_TLSCellExtractor_1(apple_cap):
     cell_extractor = TLSCellExtractor()
-    tcp_filter = "tcp.stream == 0"
-    keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
-    cap = pyshark.FileCapture(input_file=apple_file, display_filter=tcp_filter, 
-                                custom_parameters=["-C", "Customized", "-2"],
-                                override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
-    for pkt in cap:
+
+    for pkt in apple_cap:
         if pkt.number == "211":  # This packet contains a DATA layer and multiple HTTP2 layers.
             cells = cell_extractor.extract(pkt)
             assert len(cells) == 2 and \
@@ -368,17 +346,12 @@ def test_TLSCellExtractor_01():
             cells[0].segment_size == [3838, 4236, 2824, 1412, 4096] and \
             cells[0].abs_segment_frame_number == [60, 61, 63, 65, 66] and \
             cells[0].size == 16406 
-            
-    cap.close()
 
-def test_TCPCellExtractor_01():
+@pytest.mark.parametrize("apple_cap", [{'display_filter': "tcp.stream == 0"}], indirect=True) 
+def test_TCPCellExtractor_01(apple_cap):
     cell_extractor = TCPCellExtractor()
-    tcp_filter = "tcp.stream == 0"
-    keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
-    cap = pyshark.FileCapture(input_file=apple_file, display_filter=tcp_filter, 
-                                custom_parameters=["-C", "Customized", "-2"],
-                                override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
-    for pkt in cap:
+
+    for pkt in apple_cap:
         if pkt.number == "1":  
             cells = cell_extractor.extract(pkt)
             assert len(cells) == 1 and \
@@ -402,8 +375,6 @@ def test_TCPCellExtractor_01():
             cells[0].segment_size == [44] and \
             cells[0].abs_segment_frame_number == [288] and \
             cells[0].size == 44 
-            
-    cap.close()
 
 def test_cell_comparison():
     """
@@ -430,7 +401,7 @@ def test_cell_comparison():
 
     assert cell_1 < cell_2 and cell_2 > cell_1
 
-def test_line_rel_building_01():
+def test_line_rel_building_1():
     """
     This test covers building the lower relation of a line using artificial data.
     """
@@ -453,19 +424,13 @@ def test_line_rel_building_01():
 
 
     assert line.upper_abs_byte_map == target_upper_abs_byte_map
-    
-def test_line_rel_building_02():
+
+@pytest.mark.parametrize("apple_cap", [{'display_filter': "tcp.stream == 2"}], indirect=True) 
+def test_line_rel_building_2(apple_cap):
     """
     This test covers building the lower relation of a line using real-world data.
     """
-    tcp_filter = "tcp.stream == 2"
-    keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
-    cap = pyshark.FileCapture(input_file=apple_file, display_filter=tcp_filter, 
-                                custom_parameters=["-C", "Customized", "-2"],
-                                override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
-    
-    line = get_adjacent_protocol_reassemble_info(cap=cap, upper_protocol="tls", lower_protocol="tcp")
-    cap.close()
+    line = get_adjacent_protocol_reassemble_info(cap=apple_cap, upper_protocol="tls", lower_protocol="tcp")
 
     byte_counter = 0
     for covers in line.upper_abs_byte_map.values():
@@ -475,34 +440,19 @@ def test_line_rel_building_02():
     assert line.byte_counter == 10368 and \
            byte_counter == line.byte_counter
 
-
-def test_line_rel_building_03():
+@pytest.mark.parametrize("apple_cap", [{'display_filter': "tcp.stream == 0"}], indirect=True) 
+def test_line_rel_building_3(apple_cap):
     """
     This test covers building the lower relation of a line using MORE COMPLEX real-world data.
-    """
-    tcp_filter = "tcp.stream == 0"
-    keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
-    cap = pyshark.FileCapture(input_file=apple_file, display_filter=tcp_filter, 
-                                custom_parameters=["-C", "Customized", "-2"],
-                                override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
-    
-    line = get_adjacent_protocol_reassemble_info(cap=cap, upper_protocol="http2", lower_protocol="tls")
-    
-    cap.close()
+    """    
+    line = get_adjacent_protocol_reassemble_info(cap=apple_cap, upper_protocol="http2", lower_protocol="tls")
 
-    
     counter = HTTP2ByteCounter()
     cnt = 0
 
-    cap = pyshark.FileCapture(input_file=apple_file, display_filter=tcp_filter, 
-                                custom_parameters=["-C", "Customized", "-2"],
-                                override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
-    for pkt in cap:
-
+    for pkt in apple_cap:
         if "HTTP2" in pkt:
             cnt += counter.packet_count(pkt)
-    
-    cap.close()
 
     byte_counter = 0
     for covers in line.upper_abs_byte_map.values():
@@ -511,8 +461,12 @@ def test_line_rel_building_03():
 
     assert line.byte_counter == byte_counter and \
            cnt == line.byte_counter
+    
+def test_line_seg_1():
+    pass
 
-def test_match_segment_number_01():
+
+def test_match_segment_number_1():
     """
     This test covers matching needed fields.
     """
