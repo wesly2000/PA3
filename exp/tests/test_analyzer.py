@@ -288,6 +288,7 @@ def test_HTTP2CellExtractor_1(apple_cap):
     for pkt in apple_cap:
         if pkt.number == "104":  # This packet contains a DATA layer and multiple HTTP2 layers.
             cells = cell_extractor.extract(pkt)
+            cells.sort()
             assert len(cells) == 2 and \
             cells[0].abs_frame_number == 104 and \
             cells[0].segment_size == [7706] and \
@@ -300,6 +301,7 @@ def test_HTTP2CellExtractor_1(apple_cap):
             
         if pkt.number == "212":  # This packet contains a DATA layer and multiple HTTP2 layers.
             cells = cell_extractor.extract(pkt)
+            cells.sort()
             assert len(cells) == 2 and \
             cells[0].abs_frame_number == 212 and \
             cells[0].segment_size == [16384, 9] and \
@@ -317,6 +319,7 @@ def test_TLSCellExtractor_1(apple_cap):
     for pkt in apple_cap:
         if pkt.number == "211":  # This packet contains a DATA layer and multiple HTTP2 layers.
             cells = cell_extractor.extract(pkt)
+            cells.sort()
             assert len(cells) == 2 and \
             cells[0].abs_frame_number == 211 and \
             cells[0].segment_size == [15641, 765] and \
@@ -329,6 +332,7 @@ def test_TLSCellExtractor_1(apple_cap):
 
         if pkt.number == "220":  # This packet contains a DATA layer and multiple HTTP2 layers.
             cells = cell_extractor.extract(pkt)
+            cells.sort()
             assert len(cells) == 2 and \
             cells[0].abs_frame_number == 220 and \
             cells[0].segment_size == [13365, 3041] and \
@@ -341,6 +345,7 @@ def test_TLSCellExtractor_1(apple_cap):
             
         if pkt.number == "66":  # This packet contains a DATA layer and multiple HTTP2 layers.
             cells = cell_extractor.extract(pkt)
+            cells.sort()
             assert len(cells) == 1 and \
             cells[0].abs_frame_number == 66 and \
             cells[0].segment_size == [3838, 4236, 2824, 1412, 4096] and \
@@ -354,6 +359,7 @@ def test_TCPCellExtractor_01(apple_cap):
     for pkt in apple_cap:
         if pkt.number == "1":  
             cells = cell_extractor.extract(pkt)
+            cells.sort()
             assert len(cells) == 1 and \
             cells[0].abs_frame_number == 1 and \
             cells[0].segment_size == [40] and \
@@ -362,6 +368,7 @@ def test_TCPCellExtractor_01(apple_cap):
 
         if pkt.number == "220": 
             cells = cell_extractor.extract(pkt)
+            cells.sort()
             assert len(cells) == 1 and \
             cells[0].abs_frame_number == 220 and \
             cells[0].segment_size == [9916] and \
@@ -370,6 +377,7 @@ def test_TCPCellExtractor_01(apple_cap):
             
         if pkt.number == "288": 
             cells = cell_extractor.extract(pkt)
+            cells.sort()
             assert len(cells) == 1 and \
             cells[0].abs_frame_number == 288 and \
             cells[0].segment_size == [44] and \
@@ -380,26 +388,41 @@ def test_cell_comparison():
     """
     This test covers the partial order comparison of cells.
     """
-    cell_1 = Cell(proto="http2", abs_frame_number=106)
+    cell_1 = Cell(upper_protocol="http2", lower_protocol='tls', abs_frame_number=106)
     cell_1.abs_segment_frame_number = [104, 106]
-    cell_2 = Cell(proto="http2", abs_frame_number=108)
+    cell_2 = Cell(upper_protocol="http2", lower_protocol='tls', abs_frame_number=108)
     cell_2.abs_segment_frame_number = [106, 108]
 
     assert cell_1 < cell_2 and cell_2 > cell_1
 
-    cell_1 = Cell(proto="http2", abs_frame_number=104)
+    cell_1 = Cell(upper_protocol="http2", lower_protocol='tls', abs_frame_number=104)
     cell_1.abs_segment_frame_number = [101, 102, 104]
-    cell_2 = Cell(proto="http2", abs_frame_number=104)
+    cell_2 = Cell(upper_protocol="http2", lower_protocol='tls', abs_frame_number=104)
     cell_2.abs_segment_frame_number = [101, 102, 104]
 
     assert cell_1 == cell_2 and cell_2 == cell_1
 
-    cell_1 = Cell(proto="http2", abs_frame_number=106)
+    cell_1 = Cell(upper_protocol="http2", lower_protocol='tls', abs_frame_number=106)
     cell_1.abs_segment_frame_number = [104, 106]
-    cell_2 = Cell(proto="http2", abs_frame_number=108)
+    cell_2 = Cell(upper_protocol="http2", lower_protocol='tls', abs_frame_number=108)
     cell_2.abs_segment_frame_number = [104, 106]
 
     assert cell_1 < cell_2 and cell_2 > cell_1
+
+def test_packet_construction_1():
+    # Upper layer PDUs
+    http2_cell_1 = Cell(upper_protocol="http2", lower_protocol="tls", abs_frame_number=106)
+    http2_cell_1.abs_segment_frame_number = [104, 106]
+    http2_cell_1.segment_size = [114, 514]
+    http2_cell_2 = Cell(upper_protocol="http2", lower_protocol="tls", abs_frame_number=106)
+    http2_cell_2.abs_segment_frame_number = [106]
+    http2_cell_2.segment_size = [1919]
+
+    packet = Packet(cells=[http2_cell_1, http2_cell_2])
+    target = {104: 114, 106: 2433}
+
+    assert packet.segments == target and \
+            packet.abs_frame_number == 106
 
 def test_line_rel_building_1():
     """

@@ -5,7 +5,7 @@ import numpy as np
 import pyshark 
 from pathlib import Path
 import re
-from typing import List, Callable, Optional
+from typing import List, Callable, Optional, Tuple
 
 AES_128_GCM_TAG_LEN = 16
 
@@ -386,6 +386,44 @@ class Cell():
                 else:
                     return False
                 
+class Packet():
+    """
+    Abstraction of Wireshark packet, whose bytes comes from the Cells with the same abs_frame_number and protocol.
+    For example, an HTTP/2 Packet consists of a list of HTTP/2 Cells with the same abs_frame_number. Packet object
+    merges the segments in the cells with the same frame number, which is more continuous, and avoids repetitive
+    segment information. Therefore, using Frame the caller is responsible to assure all the cells have the same
+    frame number.
+
+    Packet uses dictionary to store segment information, which should be more convenient to fetch values.
+
+    The partial order of packets only depends on frame number.
+    """
+    def __init__(self, cells: List[Cell]):
+        self._segments = dict()
+        self.upper_protocol = cells[0].upper_protocol  
+        self.lower_protocol = cells[0].lower_protocol  
+        # The absolute frame number is the same as the cells' abs_frame_number
+        self.abs_frame_number = cells[0].abs_frame_number  
+        for cell in cells:
+            for segment_frame_number, segment_size in zip(cell.abs_segment_frame_number, cell.segment_size):
+                # Merge sizes with the same segment_frame_number
+                self._segments[segment_frame_number] = self._segments.setdefault(segment_frame_number, 0) + segment_size
+
+    @property
+    def segments(self):
+        return self._segments
+
+    def __lt__(self, other):
+        if not isinstance(other, Packet):
+            raise TypeError("Can only compare with another Packet object")
+        
+        return self.abs_frame_number < other.abs_frame_number
+    
+    def __gt__(self, other):
+        if not isinstance(other, Packet):
+            raise TypeError("Can only compare with another Packet object")
+        
+        return self.abs_frame_number > other.abs_frame_number
 
 class Line():
     """
@@ -422,6 +460,7 @@ class Line():
             self.sanity_check()
 
         self._upper_abs_byte_map = None  # COMMENT: shall we build the map in lazy mode?
+        self._lower_span_map = None  # COMMENT: shall we build the map in lazy mode?
         self._byte_counter = 0  # Count how many bytes in the upper layer in total
 
     def continunity_check(self):
@@ -569,7 +608,7 @@ class CellExtractor(object):
         return self._name
     
     def layer_extract(self, layer, frame_number: int, lower_protocol) -> Cell:
-        cell = Cell(self.name, frame_number)
+        cell = Cell(upper_protocol=self.name, lower_protocol=lower_protocol, abs_frame_number=frame_number)
         
         if lower_protocol is not None and layer.layer_name == "DATA":
             # Make tls_segments to more generic.
@@ -777,6 +816,18 @@ def get_adjacent_protocol_reassemble_info(cap: pyshark.FileCapture, upper_protoc
         raise ValueError("Discontinuous line")
 
     return line
+
+def cross_layer_segment_merge_single_cell():
+    pass
+
+def cross_layer_segment_merge():
+    pass
+
+def line_merge(upper_line: Line, lower_line: Line) -> Line:
+    """
+    Merge two lines with adjacent protocol stack, and create a new line for cross-layer segmentation 
+    analysis.
+    """
 
 def get_reassemble_info(cap: pyshark.FileCapture, protocol_stack: List[str] = ['TCP', 'TLS',]): 
     """
