@@ -56,6 +56,53 @@ def tiktok_cap(request):
 
     cap.close()
 
+@pytest.fixture
+def lines() -> Tuple[Line, Line]:
+    """
+    This fixture provides two lines with adjacent protocol stack.
+    """
+    upper_packet_0 = Packet()
+    upper_packet_0.upper_protocol, upper_packet_0.lower_protocol = "http2", "tls"
+    upper_packet_0.abs_frame_number = 1
+    upper_packet_0.segments = {1: 200}
+
+    upper_packet_1 = Packet()
+    upper_packet_1.upper_protocol, upper_packet_1.lower_protocol = "http2", "tls"
+    upper_packet_1.abs_frame_number = 2
+    upper_packet_1.segments = {1: 100, 2: 100}
+
+    upper_packet_2 = Packet()
+    upper_packet_2.upper_protocol, upper_packet_2.lower_protocol = "http2", "tls"
+    upper_packet_2.abs_frame_number = 3
+    upper_packet_2.segments = {2: 300}
+
+    middle_packet_0 = Packet()
+    middle_packet_0.upper_protocol, upper_packet_0.lower_protocol = "tls", "tcp"
+    middle_packet_0.abs_frame_number = 0
+    middle_packet_0.segments = {0: 150}
+
+    middle_packet_1 = Packet()
+    middle_packet_1.upper_protocol, upper_packet_1.lower_protocol = "tls", "tcp"
+    middle_packet_1.abs_frame_number = 1
+    middle_packet_1.segments = {0: 55, 1: 200, 2: 100}
+
+    middle_packet_2 = Packet()
+    middle_packet_2.upper_protocol, upper_packet_2.lower_protocol = "tls", "tcp"
+    middle_packet_2.abs_frame_number = 2
+    middle_packet_2.segments = {2: 60, 3: 350}
+
+    upper_line = Line(
+                    upper_packets=[upper_packet_0, upper_packet_1, upper_packet_2],
+                    lower_abs_frame_numbers=[0, 1, 2]
+                    )
+
+    lower_line = Line(
+                    upper_packets=[middle_packet_0, middle_packet_1, middle_packet_2],
+                    lower_abs_frame_numbers=[0, 1, 2, 3]
+                    )
+    
+    return upper_line, lower_line
+
 @pytest.mark.parametrize("baidu_proxied_cap", [{}], indirect=True)
 def test_packet_count_01(baidu_proxied_cap):
     target = 8627
@@ -538,6 +585,13 @@ def test_line_span_1(apple_cap):
 
     assert span == target_span
 
+def test_line_span_2(lines):
+    line, _ = lines
+    span = line.span(lower_abs_frame_number=2)
+    target_span = {2: 100, 3: 300}
+
+    assert span == target_span
+
 
 def test_match_segment_number_1():
     """
@@ -549,6 +603,74 @@ def test_match_segment_number_1():
     result = match_segment_number(msg)
     for i in range(len(target)):
         assert target[i] == result[i]
+
+@pytest.mark.parametrize("seq,expected", [
+    ([], [0]),  # Empty list
+    ([5], [0, 5]),  # Single element
+    ([1, 2, 3, 4], [0, 1, 3, 6, 10]),  # Multiple elements
+    ([0, 0, 0], [0, 0, 0, 0]),  # All zeros
+    ([1000, 1000, 1000], [0, 1000, 2000, 3000]),  # Large numbers
+])
+def test_anchor_line(seq, expected):
+    """
+    Test anchor_line function with various input sequences.
+    Tests include:
+    - Empty list
+    - Single element
+    - Multiple elements
+    - All zeros
+    - Large numbers
+    """
+    result = anchor_line(seq)
+    assert result == expected
+
+@pytest.mark.parametrize("anchor_list,base,expected", [
+    ([0, 1, 3, 6, 10], 2, 1),    # Basic case: between two points
+    ([0, 1, 3, 6, 10], 0, 0),    # Edge case: at start
+    ([0, 1, 3, 6, 10], 3, 2),    # Edge case: at anchor point
+    ([0, 5, 10, 15], 7, 1),      # Larger gaps
+])
+def test_find_anchor_indices(anchor_list, base, expected):
+    """
+    Test find_anchor_indices function with various input sequences.
+    Tests include:
+    - Basic case (point between two anchors)
+    - Edge case (point at start)
+    - Edge case (point at anchor point)
+    - Larger gaps between anchor points
+    """
+    result = find_anchor_indices(anchor_list, base)
+    assert result == expected
+
+@pytest.mark.parametrize("anchor_list,base,error_msg", [
+    ([], 1, "Anchor list cannot be empty"),
+    ([0, 1, 2], -1, "Base must be non-negative"),
+    ([0, 1, 2], 2, "Base must be less than the last anchor point"),
+])
+def test_find_anchor_indices_errors(anchor_list, base, error_msg):
+    """
+    Test find_anchor_indices function error cases.
+    Tests include:
+    - Empty anchor list
+    - Negative base point
+    - Base point >= last anchor point
+    """
+    with pytest.raises(ValueError, match=error_msg):
+        find_anchor_indices(anchor_list, base)
+
+
+def test_line_merge_single_packet_1(lines):
+    """
+    This test covers merging a single packet from the upper line with the lower line.
+    """
+    upper_line, lower_line = lines
+    packet = line_merge_single_packet(upper_line, lower_line, upper_packet_frame_number=2)
+
+    assert packet.upper_protocol == upper_line.upper_protocol and \
+           packet.lower_protocol == lower_line.lower_protocol and \
+           packet.abs_frame_number == 2
+    assert packet.segments == {3: 300}
+
 
 
 # def test_get_reassemble_info():

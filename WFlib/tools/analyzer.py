@@ -843,11 +843,107 @@ def cross_layer_segment_merge_single_cell():
 def cross_layer_segment_merge():
     pass
 
+def anchor_line(seq: list)-> list:
+    """
+    Given a list of positive numbers, return a list of anchor points. Suppose the input list is [x_0, x_2, ..., x_{n-1}],
+    the anchor points a_0, a_1, ..., a_n are computed as follows:
+    1. a_0 = 0;
+    2. a_i = a_{i-1} + x_{i-1}, for i = 1, 2, ..., n.
+    """
+    anchor_points = [0]
+    cur_anchor = 0
+    for number in seq:
+        cur_anchor += number
+        anchor_points.append(cur_anchor)
+    return anchor_points
+
+def find_anchor_indices(anchor_list: list, base: int) -> int:
+    """
+    Find the index of the point in anchor list that is the largest element less than or equal to the base.
+    
+    Args:
+        anchor_list: List of anchor points (must be non-decreasing)
+        base: The base point (must be non-negative and less than last anchor point)
+        
+    Returns:
+        int: The index of the largest element <= base
+            
+    Raises:
+        ValueError: If input constraints are violated
+    """
+    if not anchor_list:
+        raise ValueError("Anchor list cannot be empty")
+    if base < 0:
+        raise ValueError("Base must be non-negative")
+    if base >= anchor_list[-1]:
+        raise ValueError("Base must be less than the last anchor point")
+        
+    idx = 0
+    for i, anchor in enumerate(anchor_list):
+        if anchor <= base:
+            idx = i
+        else:
+            break
+    return idx
+
+def line_merge_single_packet(upper_line: Line, lower_line: Line, upper_packet_frame_number: int) -> Packet:
+    """
+    For a given packet within the line, find its reassemble info in across the lines, and create
+    the new packet representing the cross-layer reassemble info.
+    """
+    def span_range(span: dict, upper_packet_frame_number: int) -> Tuple[int, int]:
+        """
+        Given the span of a middle packet, find the byte range it spans for the given upper packet.
+        """
+        upper_segment_sizes = []
+        span_start_idx = span_end_idx = 0
+        for idx, (upper_segment_frame_number, upper_segment_size) in enumerate(sorted(span.items())):
+            upper_segment_sizes.append(upper_segment_size)
+            if upper_segment_frame_number == upper_packet_frame_number:
+                span_start_idx = idx
+                span_end_idx = idx + 1
+                break
+        
+        bases = anchor_line(upper_segment_sizes)
+        span_start, span_end = bases[span_start_idx], bases[span_end_idx]
+        return span_start, span_end
+
+
+    packet = Packet()
+    packet.abs_frame_number = upper_packet_frame_number
+    packet.upper_protocol, packet.lower_protocol = upper_line.upper_protocol, lower_line.lower_protocol
+    upper_seg = upper_line.seg(upper_packet_frame_number)
+    for middle_segment_frame_number in upper_seg:
+        middle_seg = lower_line.seg(middle_segment_frame_number)
+        middle_span = upper_line.span(middle_segment_frame_number)
+        # Create base sequence, and find the start and end byte index in the span.
+        span_start, span_end = span_range(middle_span, upper_packet_frame_number)
+
+        # Create anchor sequence
+        anchors = anchor_line([v for _, v in sorted(middle_seg.items())])
+        anchor_start_idx, anchor_end_idx = find_anchor_indices(anchors, span_start) + 1, find_anchor_indices(anchors, span_end)
+        # Compute the number of entire segments in the span.
+        entire_segments_num = anchor_end_idx - anchor_start_idx
+        for i in range(entire_segments_num):
+            # Append the reassemble info for entire segments to the packet
+            lower_segment_frame_number = sorted(middle_seg.keys())[anchor_start_idx + i]
+            lower_segment_size = middle_seg[lower_segment_frame_number]
+            packet.segments[lower_segment_frame_number] = lower_segment_size
+
+        # Append the reassemble info for partial segments to the packet
+        first_segment_size = anchors[anchor_start_idx] - span_start
+        last_segment_size = span_end - anchors[anchor_end_idx] + 1
+        packet.segments[sorted(middle_seg.keys())[anchor_start_idx]] = first_segment_size
+        packet.segments[sorted(middle_seg.keys())[anchor_end_idx]] = last_segment_size
+        
+    return packet
+    
 def line_merge(upper_line: Line, lower_line: Line) -> Line:
     """
     Merge two lines with adjacent protocol stack, and create a new line for cross-layer segmentation 
     analysis.
     """
+    
 
 def get_reassemble_info(cap: pyshark.FileCapture, protocol_stack: List[str] = ['TCP', 'TLS',]): 
     """
