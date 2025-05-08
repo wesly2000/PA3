@@ -398,20 +398,30 @@ class Packet():
 
     The partial order of packets only depends on frame number.
     """
-    def __init__(self, cells: List[Cell]):
+    def __init__(self, cells: List[Cell] = None):
         self._segments = dict()
-        self.upper_protocol = cells[0].upper_protocol  
-        self.lower_protocol = cells[0].lower_protocol  
-        # The absolute frame number is the same as the cells' abs_frame_number
-        self.abs_frame_number = cells[0].abs_frame_number  
-        for cell in cells:
-            for segment_frame_number, segment_size in zip(cell.abs_segment_frame_number, cell.segment_size):
-                # Merge sizes with the same segment_frame_number
-                self._segments[segment_frame_number] = self._segments.setdefault(segment_frame_number, 0) + segment_size
+        # If cells is not None, initialize the packet with the cells.
+        self.upper_protocol = None
+        self.lower_protocol = None
+        self.abs_frame_number = None
+        self._segments = None
+        if cells is not None:
+            self.upper_protocol = cells[0].upper_protocol  
+            self.lower_protocol = cells[0].lower_protocol  
+            # The absolute frame number is the same as the cells' abs_frame_number
+            self.abs_frame_number = cells[0].abs_frame_number  
+            for cell in cells:
+                for segment_frame_number, segment_size in zip(cell.abs_segment_frame_number, cell.segment_size):
+                    # Merge sizes with the same segment_frame_number
+                    self._segments[segment_frame_number] = self._segments.setdefault(segment_frame_number, 0) + segment_size
 
     @property
     def segments(self):
         return self._segments
+    
+    @segments.setter
+    def segments(self, segments):
+        self._segments = segments
 
     def __lt__(self, other):
         if not isinstance(other, Packet):
@@ -518,6 +528,14 @@ class Line():
     @property
     def lower_abs_frame_numbers(self):
         return self._lower_abs_frame_numbers
+    
+    @property
+    def upper_protocol(self):
+        return self._upper_protocol
+    
+    @property
+    def lower_protocol(self):
+        return self._lower_protocol
 
     def upper_rel_building(self):
         """
@@ -558,8 +576,10 @@ class Line():
         for packet in self._upper_packets:
             if packet.abs_frame_number == upper_abs_frame_number:
                 return packet.segments
+            
+        raise ValueError(f"No packet found with frame number {upper_abs_frame_number}")
 
-    def span(self, lower_abs_frame_number: int) -> List:
+    def span(self, lower_abs_frame_number: int) -> dict:
         """
         Given the absolute frame number of a lower layer frame, return the upper segment and segment size it spans.
         """
