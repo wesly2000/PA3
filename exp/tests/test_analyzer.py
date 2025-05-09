@@ -76,29 +76,44 @@ def lines() -> Tuple[Line, Line]:
     upper_packet_2.abs_frame_number = 3
     upper_packet_2.segments = {2: 300}
 
+    upper_packet_3 = Packet()
+    upper_packet_3.upper_protocol, upper_packet_3.lower_protocol = "http2", "tls"
+    upper_packet_3.abs_frame_number = 4
+    upper_packet_3.segments = {3: 250, 4: 350}
+
     middle_packet_0 = Packet()
-    middle_packet_0.upper_protocol, upper_packet_0.lower_protocol = "tls", "tcp"
+    middle_packet_0.upper_protocol, middle_packet_0.lower_protocol = "tls", "tcp"
     middle_packet_0.abs_frame_number = 0
     middle_packet_0.segments = {0: 150}
 
     middle_packet_1 = Packet()
-    middle_packet_1.upper_protocol, upper_packet_1.lower_protocol = "tls", "tcp"
+    middle_packet_1.upper_protocol, middle_packet_1.lower_protocol = "tls", "tcp"
     middle_packet_1.abs_frame_number = 1
-    middle_packet_1.segments = {0: 55, 1: 200, 2: 100}
+    middle_packet_1.segments = {0: 55, 1: 200, 2: 50}
 
     middle_packet_2 = Packet()
-    middle_packet_2.upper_protocol, upper_packet_2.lower_protocol = "tls", "tcp"
+    middle_packet_2.upper_protocol, middle_packet_2.lower_protocol = "tls", "tcp"
     middle_packet_2.abs_frame_number = 2
     middle_packet_2.segments = {2: 60, 3: 350}
 
+    middle_packet_3 = Packet()
+    middle_packet_3.upper_protocol, middle_packet_3.lower_protocol = "tls", "tcp"
+    middle_packet_3.abs_frame_number = 3
+    middle_packet_3.segments = {4: 155, 5: 100}
+
+    middle_packet_4 = Packet()
+    middle_packet_4.upper_protocol, middle_packet_4.lower_protocol = "tls", "tcp"
+    middle_packet_4.abs_frame_number = 4
+    middle_packet_4.segments = {5: 50, 6: 105, 7:55, 8: 150}
+
     upper_line = Line(
-                    upper_packets=[upper_packet_0, upper_packet_1, upper_packet_2],
-                    lower_abs_frame_numbers=[0, 1, 2]
+                    upper_packets=[upper_packet_0, upper_packet_1, upper_packet_2, upper_packet_3],
+                    lower_abs_frame_numbers=[0, 1, 2, 3, 4]
                     )
 
     lower_line = Line(
-                    upper_packets=[middle_packet_0, middle_packet_1, middle_packet_2],
-                    lower_abs_frame_numbers=[0, 1, 2, 3]
+                    upper_packets=[middle_packet_0, middle_packet_1, middle_packet_2, middle_packet_3, middle_packet_4],
+                    lower_abs_frame_numbers=[0, 1, 2, 3, 4, 5, 6, 7]
                     )
     
     return upper_line, lower_line
@@ -664,12 +679,30 @@ def test_line_merge_single_packet_1(lines):
     This test covers merging a single packet from the upper line with the lower line.
     """
     upper_line, lower_line = lines
+    # Case 1: The upper packet segment across no lower segments.
+    packet = line_merge_single_packet(upper_line, lower_line, upper_packet_frame_number=3)
+
+    assert packet.upper_protocol == 'http2' and \
+           packet.lower_protocol == 'tcp' and \
+           packet.abs_frame_number == 3
+    assert packet.segments == {3: 300}
+
+    # Case 2: The upper packet segment across no entire lower segments, but span_start and span_end belong
+    # to different lower segments.
     packet = line_merge_single_packet(upper_line, lower_line, upper_packet_frame_number=2)
 
-    assert packet.upper_protocol == upper_line.upper_protocol and \
-           packet.lower_protocol == lower_line.lower_protocol and \
+    assert packet.upper_protocol == 'http2' and \
+           packet.lower_protocol == 'tcp' and \
            packet.abs_frame_number == 2
-    assert packet.segments == {3: 300}
+    assert packet.segments == {1: 55, 2: 105, 3: 40}
+
+    # Case 3: The upper packet segment across multiple lower segments.
+    packet = line_merge_single_packet(upper_line, lower_line, upper_packet_frame_number=4)
+
+    assert packet.upper_protocol == 'http2' and \
+           packet.lower_protocol == 'tcp' and \
+           packet.abs_frame_number == 4
+    assert packet.segments == {4: 155, 5: 145, 6: 105, 7: 55, 8: 140}
 
 
 
