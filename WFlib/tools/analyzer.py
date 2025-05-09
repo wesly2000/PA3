@@ -404,7 +404,6 @@ class Packet():
         self.upper_protocol = None
         self.lower_protocol = None
         self.abs_frame_number = None
-        self._segments = None
         if cells is not None:
             self.upper_protocol = cells[0].upper_protocol  
             self.lower_protocol = cells[0].lower_protocol  
@@ -908,8 +907,9 @@ def line_merge_single_packet(upper_line: Line, lower_line: Line, upper_packet_fr
         span_start, span_end = bases[span_start_idx], bases[span_end_idx]
         return span_start, span_end
 
-
+    NEXT_INDEX_OFFSET = 1
     packet = Packet()
+    segments = packet.segments
     packet.abs_frame_number = upper_packet_frame_number
     packet.upper_protocol, packet.lower_protocol = upper_line.upper_protocol, lower_line.lower_protocol
     upper_seg = upper_line.seg(upper_packet_frame_number)
@@ -919,22 +919,61 @@ def line_merge_single_packet(upper_line: Line, lower_line: Line, upper_packet_fr
         # Create base sequence, and find the start and end byte index in the span.
         span_start, span_end = span_range(middle_span, upper_packet_frame_number)
 
+        sorted_middle_keys = sorted(middle_seg.keys())
         # Create anchor sequence
-        anchors = anchor_line([v for _, v in sorted(middle_seg.items())])
-        anchor_start_idx, anchor_end_idx = find_anchor_indices(anchors, span_start) + 1, find_anchor_indices(anchors, span_end)
-        # Compute the number of entire segments in the span.
-        entire_segments_num = anchor_end_idx - anchor_start_idx
+        anchors = anchor_line([middle_seg[key] for key in sorted_middle_keys])
+        anchor_start_idx, anchor_end_idx = find_anchor_indices(anchors, span_start), find_anchor_indices(anchors, span_end)
+        first_segment_number = sorted_middle_keys[anchor_start_idx]
+        last_segment_number = sorted_middle_keys[anchor_end_idx]
+        # If anchor_start_idx == anchor_end_idx, such case is illustrated in the following figure:
+        # + represents the anchor points;
+        # * represents the bases;
+        # 0 represents the starting point of bases and anchors.
+        #
+        #    target_base_idx  target_base_idx + 1
+        # 0-----------------------*--------------*--------------------*-----------*
+        # 
+        #    anchor_end_idx
+        #   anchor_start_idx  span_start     span_end
+        # 0--------+--------------^--------------^------+------------------------------------+----------+
+        #                         |--------------|
+        #                           segment_size    
+        #
+        # In this case, only one segment (span_end - span_start) is needed.
+        if anchor_start_idx == anchor_end_idx:
+            segments[first_segment_number] = segments.setdefault(first_segment_number, 0) + (span_end - span_start)
+            continue
+
+        # Compute the number of entire segments in the span, note that the first entire segment, if any, must start
+        # at the point right after anchor_start_idx, so we need to add 1 to the anchor_start_idx when computing the
+        # number of entire segments.
+        entire_segments_num = anchor_end_idx - (anchor_start_idx + NEXT_INDEX_OFFSET)
         for i in range(entire_segments_num):
             # Append the reassemble info for entire segments to the packet
-            lower_segment_frame_number = sorted(middle_seg.keys())[anchor_start_idx + i]
+            lower_segment_frame_number = sorted_middle_keys[anchor_start_idx + NEXT_INDEX_OFFSET + i]
             lower_segment_size = middle_seg[lower_segment_frame_number]
-            packet.segments[lower_segment_frame_number] = lower_segment_size
+            segments[lower_segment_frame_number] = segments.setdefault(lower_segment_frame_number, 0) + lower_segment_size
 
         # Append the reassemble info for partial segments to the packet
-        first_segment_size = anchors[anchor_start_idx] - span_start
-        last_segment_size = span_end - anchors[anchor_end_idx] + 1
-        packet.segments[sorted(middle_seg.keys())[anchor_start_idx]] = first_segment_size
-        packet.segments[sorted(middle_seg.keys())[anchor_end_idx]] = last_segment_size
+        # Like in the case of the first entire segment, the size of the first segment is computed left-to-right,
+        # which means we should compute the distance between the span_start and the point right after anchor_start_idx.
+        # We illustrate the case in the following figure:
+        #
+        #                    target_base_idx                           target_base_idx + 1
+        # 0----------*--------------*--------------------------------------------*-----------*
+        # 
+        #                               (also anchor_end_idx + 1 in this case)
+        #   anchor_start_idx   span_start            anchor_end_idx          span_end
+        # 0--------+----------------^----------------------+---------------------^--------------+----------+
+        #                           |----------------------|---------------------|
+        #                              first_segment_size     last_segment_size
+        # Therefore, the segments are segments[sorted(middle_seg.keys())[anchor_start_idx]] = first_segment_size
+        # and segments[sorted(middle_seg.keys())[anchor_end_idx]] = last_segment_size.
+        #
+        first_segment_size = anchors[anchor_start_idx + NEXT_INDEX_OFFSET] - span_start
+        last_segment_size = span_end - anchors[anchor_end_idx]
+        segments[first_segment_number] = segments.setdefault(first_segment_number, 0) + first_segment_size
+        segments[last_segment_number] = segments.setdefault(last_segment_number, 0) + last_segment_size
         
     return packet
     
