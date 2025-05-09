@@ -535,6 +535,13 @@ class Line():
     @property
     def lower_protocol(self):
         return self._lower_protocol
+    
+    @property
+    def upper_packet_frame_numbers(self):
+        """
+        We only provide the frame numbers of the upper packets instead of packets for protection.
+        """
+        return [packet.abs_frame_number for packet in self._upper_packets]
 
     def upper_rel_building(self):
         """
@@ -981,7 +988,14 @@ def line_merge(upper_line: Line, lower_line: Line) -> Line:
     """
     Merge two lines with adjacent protocol stack, and create a new line for cross-layer segmentation 
     analysis.
+
+    COMMENT: Shall we make this method a method of Line class? In other words, shall we change the upper_line
+    to a new line or create a new line?
     """
+    merged_packets = [
+        line_merge_single_packet(upper_line, lower_line, frame_number) for frame_number in upper_line.upper_packet_frame_numbers]
+    
+    return Line(upper_packets=merged_packets, lower_abs_frame_numbers=lower_line.lower_abs_frame_numbers)
     
 
 def get_reassemble_info(cap: pyshark.FileCapture, protocol_stack: List[str] = ['TCP', 'TLS',]): 

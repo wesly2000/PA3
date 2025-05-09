@@ -689,6 +689,13 @@ def test_line_merge_single_packet_1(lines):
 
     # Case 2: The upper packet segment across no entire lower segments, but span_start and span_end belong
     # to different lower segments.
+    packet = line_merge_single_packet(upper_line, lower_line, upper_packet_frame_number=1)
+
+    assert packet.upper_protocol == 'http2' and \
+           packet.lower_protocol == 'tcp' and \
+           packet.abs_frame_number == 1
+    assert packet.segments == {0: 55, 1: 145}
+
     packet = line_merge_single_packet(upper_line, lower_line, upper_packet_frame_number=2)
 
     assert packet.upper_protocol == 'http2' and \
@@ -703,6 +710,17 @@ def test_line_merge_single_packet_1(lines):
            packet.lower_protocol == 'tcp' and \
            packet.abs_frame_number == 4
     assert packet.segments == {4: 155, 5: 145, 6: 105, 7: 55, 8: 140}
+
+def test_line_merge_1(lines):
+    """
+    This test covers merging two manually created lines with adjacent protocol stack.
+    """
+    upper_line, lower_line = lines
+    merged_line = line_merge(upper_line, lower_line)
+
+    target_upper_abs_byte_map = {0: [(0, 55)], 1: [(55, 200), (200, 255)], 2: [(255, 360)], 3: [(360, 400), (400, 700)], 4: [(700, 855)], 5: [(855, 1000)], 6: [(1000, 1105)], 7: [(1105, 1160)], 8: [(1160, 1300)]}
+
+    assert merged_line.upper_abs_byte_map == target_upper_abs_byte_map
 
 
 
