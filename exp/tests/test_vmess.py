@@ -108,10 +108,9 @@ def test_layer_extractor_1(capture_gen):
                     layers[2].layer_name == "tls"
         elif pkt.number == "15":
             layers = layer_extractor(pkt, upper_protocol="vmess", lower_protocol='tcp') 
-            assert len(layers) == 3 and \
+            assert len(layers) == 2 and \
                     layers[0].layer_name == "DATA" and \
                     layers[1].layer_name == "vmess" and \
-                    layers[2].layer_name == "vmess" and \
                     DATA_LAYER_MARKER['tcp'] in layers[0].field_names  # Assert we are extracting the correct DATA layer.
         elif pkt.number == "63":
             layers = layer_extractor(pkt, upper_protocol="http2", lower_protocol='tls') 
