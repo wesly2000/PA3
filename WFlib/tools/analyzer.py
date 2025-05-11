@@ -291,6 +291,7 @@ PROTOCOL_BYTE_COUNTER = {
     "tls": TLSByteCounter(),
     "tcp": TCPByteCounter(),
     "http2": HTTP2ByteCounter(),
+    "vmess": VMessByteCounter(),
 }
 
 class CaptureCounter():
@@ -624,7 +625,7 @@ class Line():
 PROTOCOL_REASSEMBLE_FIELD = {
     "tls": "tls_segments",
     "tcp": "tcp_segments",
-    "vmess": "vmess_segments",
+    "vmess": "vmess_fragments",
 }
 
 class CellExtractor(object):
@@ -705,16 +706,15 @@ class TLSCellExtractor(CellExtractor):
         return super().extract(pkt, lower_protocol)
     
 
-class TCPCellExtractor(CellExtractor):
+class VMessCellExtractor(CellExtractor):
     def __init__(self):
-        self._name = "tcp"
+        self._name = "vmess"
 
     def extract(self, pkt, lower_protocol='tcp') -> List[Cell]:
         return super().extract(pkt, lower_protocol)
     
 
-
-class VMessCellExtractor(CellExtractor):
+class TCPCellExtractor(CellExtractor):
     def __init__(self):
         self._name = "tcp"
 
@@ -725,6 +725,7 @@ class VMessCellExtractor(CellExtractor):
 PROCOCOL_CELL_EXTRACTOR = {
     "tcp": TCPCellExtractor(),  
     "tls": TLSCellExtractor(),
+    "vmess": VMessCellExtractor(),
     "http2": HTTP2CellExtractor(),
 }
 
