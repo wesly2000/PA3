@@ -334,3 +334,22 @@ def test_line_merge_1(capture_gen):
     assert merged_line.byte_counter == http2_byte_counter
     # Check the continuity of the merged line.
     assert merged_line.continunity_check()
+
+@pytest.mark.parametrize("capture_gen", [{'host': 'top.baidu.com', 'index': 0, 'display_filter': 'tcp.stream eq 1 or tcp.stream eq 0'}], indirect=True)
+@skip_vmess
+def test_get_reassemble_info(capture_gen):
+    """
+    This test covers VMess data based line merging, which contains multiple streams.
+    """    
+    upper_line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="http2", lower_protocol="tls")
+    line = get_reassemble_info(capture_gen, protocol_stack=['http2', 'tls', 'vmess', 'tcp'])
+
+    # Assert the total bytes in HTTP/2 layer is not changed by merging.
+    http2_byte_counter = 0
+    for span in upper_line.lower_span_map.values():
+        for segment_size in span.values():
+            http2_byte_counter += segment_size
+
+    assert line.byte_counter == http2_byte_counter
+    # Check the continuity of the merged line.
+    assert line.continunity_check()
