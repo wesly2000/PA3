@@ -165,6 +165,56 @@ def test_line_rel_building_2(capture_gen):
     assert line.byte_counter == byte_counter and \
            cnt == line.byte_counter
     
+@pytest.mark.parametrize("capture_gen", [{'host': 'top.baidu.com', 'index': 0, 'display_filter': 'vmess'}], indirect=True)
+@skip_vmess
+def test_line_rel_building_3(capture_gen):
+    """
+    This test covers building the lower relation of a line using MORE COMPLEX real-world data, and
+    test TLS over VMess line building.
+    """
+    
+    line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="tls", lower_protocol="vmess")
+    
+    counter = TLSByteCounter()
+    cnt = 0
+
+    for pkt in capture_gen:
+        if "TLS" in pkt:
+            cnt += counter.packet_count(pkt)
+
+    byte_counter = 0
+    for covers in line.upper_abs_byte_map.values():
+        for cover in covers:
+            byte_counter += cover[1] - cover[0]
+
+    assert line.byte_counter == byte_counter and \
+           cnt == line.byte_counter
+    
+@pytest.mark.parametrize("capture_gen", [{'host': 'top.baidu.com', 'index': 0, 'display_filter': 'tcp.stream eq 1 or tcp.stream eq 0'}], indirect=True)
+@skip_vmess
+def test_line_rel_building_4(capture_gen):
+    """
+    This test covers building the lower relation of a line using MORE COMPLEX real-world data, and
+    test VMess over TCP line building.
+    """
+    
+    line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="vmess", lower_protocol="tcp")
+    
+    counter = VMessByteCounter()
+    cnt = 0
+
+    for pkt in capture_gen:
+        if "VMess" in pkt:
+            cnt += counter.packet_count(pkt)
+
+    byte_counter = 0
+    for covers in line.upper_abs_byte_map.values():
+        for cover in covers:
+            byte_counter += cover[1] - cover[0]
+
+    assert line.byte_counter == byte_counter and \
+           cnt == line.byte_counter
+    
 @pytest.mark.parametrize("capture_gen", [{'host': 'top.baidu.com', 'index': 0}], indirect=True)
 @skip_vmess
 def test_line_span_building_1(capture_gen):
