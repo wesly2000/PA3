@@ -722,7 +722,25 @@ def test_line_merge_1(lines):
 
     assert merged_line.upper_abs_byte_map == target_upper_abs_byte_map
 
+@pytest.mark.parametrize("apple_cap", [{'display_filter': "tcp.stream == 1"}], indirect=True) 
+def test_line_merge_2(apple_cap):
+    """
+    This test covers real-world data based line merging.
+    """    
+    upper_line = get_adjacent_protocol_reassemble_info(cap=apple_cap, upper_protocol="http2", lower_protocol="tls")
+    lower_line = get_adjacent_protocol_reassemble_info(cap=apple_cap, upper_protocol="tls", lower_protocol="tcp")
 
+    merged_line = line_merge(upper_line, lower_line)
+
+    # Assert the total bytes in HTTP/2 layer is not changed by merging.
+    http2_byte_counter = 0
+    for span in upper_line.lower_span_map.values():
+        for segment_size in span.values():
+            http2_byte_counter += segment_size
+
+    assert merged_line.byte_counter == http2_byte_counter
+    # Check the continuity of the merged line.
+    assert merged_line.continunity_check()
 
 # def test_get_reassemble_info():
 #     """
