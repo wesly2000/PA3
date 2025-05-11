@@ -269,7 +269,8 @@ class VMessByteCounter(ByteCounter):
             # contains a 16-byte (AES-128-GCM, which is commonly used) authentication tag.
             cnt += self.auth_len + self.nonce_len + self.length_len + AES_128_GCM_TAG_LEN + int(layer.request_length) + AES_128_GCM_TAG_LEN
         elif layer.layer_type == self.TYPE_RESPONSE:  
-            cnt += self.response_hdr_len + AES_128_GCM_TAG_LEN + self.length_len + AES_128_GCM_TAG_LEN
+            # FIX: The attached VMess Data frame is now considered as a part of the response.
+            cnt += self.response_hdr_len + AES_128_GCM_TAG_LEN + self.length_len + AES_128_GCM_TAG_LEN + self.length_len + int(layer.payload_length)
         elif layer.layer_type == self.TYPE_DATA:
             cnt += self.length_len + int(layer.payload_length)
         else:
