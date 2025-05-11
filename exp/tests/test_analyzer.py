@@ -742,15 +742,19 @@ def test_line_merge_2(apple_cap):
     # Check the continuity of the merged line.
     assert merged_line.continunity_check()
 
-# def test_get_reassemble_info():
-#     """
-#     This test covers getting reassemble info from the given capture.
-#     """
-#     tcp_filter = "tcp.stream == 0"
-#     keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
-#     cap = pyshark.FileCapture(input_file=apple_file, display_filter=tcp_filter,
-#                                 custom_parameters=["-C", "Customized", "-2"],
-#                                 override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
-    
-#     reassemble_info = get_reassemble_info(cap)
-#     cap.close()
+@pytest.mark.parametrize("apple_cap", [{'display_filter': "tcp.stream == 1"}], indirect=True) 
+def test_get_reassemble_info(apple_cap):
+    """
+    This test covers getting reassemble info from the given capture, the result should be the same as the line_merge_2.
+    """
+    line = get_reassemble_info(apple_cap, protocol_stack=['http2', 'tls', 'tcp'])
+    upper_line = get_adjacent_protocol_reassemble_info(cap=apple_cap, upper_protocol="http2", lower_protocol="tls")
+    # Assert the total bytes in HTTP/2 layer is not changed by merging.
+    http2_byte_counter = 0
+    for span in upper_line.lower_span_map.values():
+        for segment_size in span.values():
+            http2_byte_counter += segment_size
+
+    assert line.byte_counter == http2_byte_counter
+    # Check the continuity of the merged line.
+    assert line.continunity_check()

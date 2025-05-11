@@ -734,17 +734,21 @@ DATA_LAYER_MARKER = {'tcp': 'tcp_segments', 'tls': 'tls_segments', 'vmess': 'vme
 
 def layer_extractor(pkt, upper_protocol, lower_protocol):
     """
-    Extract all layers of the given protocol, if the layer is built upon a DATA layer, 
-    prepend the DATA layer to the layer list. Caller is responsible to ensure that
-    the order of upper_protocol and lower_protocol is correct. Moreover, caller is
-    responsible to ensure the continuity of upper_protocol and lower_protocol.
+    In PyShark, the reassembly information is wrapped in the DATA layer, which is a fake-field-wrapper. When there are multiple upper layers, multiple DATA layer might be used. For example, given a packet TCP/TLS/HTTP2, there are 3 possible cases, we list the corresponding layers for each of them:
+
+    + 1. The TLS layer is reassembled, but HTTP2 layer is not (TCP/DATA/TLS/HTTP2/DATA);
+    + 2. The TLS layer is not reassembled, but HTTP2 layer is (TCP/TLS/DATA/HTTP2/DATA);
+    + 3. Both TLS and HTTP2 layers are reassembled (TCP/DATA/TLS/DATA/HTTP2/DATA),
+
+    where the last DATA layer is for Lua-related information that should be ignored.
+
+    Extract all layers of the given protocol, if the layer is built upon a DATA layer, prepend the DATA layer to the layer list. Caller is responsible to ensure that the order of upper_protocol and lower_protocol is correct. Moreover, caller is responsible to ensure the continuity of upper_protocol and lower_protocol.
 
     For example, if the packet stack is TCP/TLS/HTTP2, the following params:
     {upper_protocol: 'http2', lower_protocol: 'tcp'},
     {upper_protocol: 'tls', lower_protocol: 'http2'},
 
-    will lead to unexpected behavior. Callee does not handle the above cases since in 
-    practice they are valid, e.g., HTTP tunnel may build TLS upon HTTP.
+    will lead to unexpected behavior. Callee does not handle the above cases since in practice they are valid, e.g., HTTP tunnel may build TLS upon HTTP.
 
     If the packet does not contain either upper_protocol or lower_protocol, return an empty list.
     """
@@ -819,31 +823,6 @@ def match_segment_number(s: str):
     res = [(int(idx), int(size)) for idx, size in results]
     return res
 
-def get_adjacent_protocol_reassemble_info(cap: pyshark.FileCapture, upper_protocol: str, lower_protocol: str) -> Line:
-    """
-    Extract the reassemble information for each packet given the adjacent upper_protocol and lower_protocol, e.g.,
-    TLS over TCP, HTTP2 over TLS. This function is a component of get_reassemble_info.
-    """
-    upper_protocol = upper_protocol.lower()
-    lower_protocol = lower_protocol.lower()
-
-    upper_packets = []
-    lower_abs_frame_numbers = []
-
-    for pkt in cap:
-        if upper_protocol in pkt:
-            packet = Packet(PROCOCOL_CELL_EXTRACTOR[upper_protocol].extract(pkt, lower_protocol=lower_protocol))
-            upper_packets.append(packet)
-        if lower_protocol in pkt:
-            lower_abs_frame_numbers.append(int(pkt.number))
-
-
-    line = Line(upper_packets=upper_packets, lower_abs_frame_numbers=lower_abs_frame_numbers)
-    
-    if not line.continunity_check():
-        raise ValueError("Discontinuous line")
-
-    return line
 
 def cross_layer_segment_merge_single_cell():
     pass
@@ -994,28 +973,43 @@ def line_merge(upper_line: Line, lower_line: Line) -> Line:
     COMMENT: Shall we make this method a method of Line class? In other words, shall we change the upper_line
     to a new line or create a new line?
     """
+    assert upper_line.lower_protocol == lower_line.upper_protocol, f"Not adjacent lines, upper_line.lower_protocol is {upper_line.lower_protocol}, lower_line.upper_protocol is {lower_line.upper_protocol}"
     merged_packets = [
         line_merge_single_packet(upper_line, lower_line, frame_number) for frame_number in upper_line.upper_packet_frame_numbers]
     
     return Line(upper_packets=merged_packets, lower_abs_frame_numbers=lower_line.lower_abs_frame_numbers)
     
-
-def get_reassemble_info(cap: pyshark.FileCapture, protocol_stack: List[str] = ['TCP', 'TLS',]): 
+def get_adjacent_protocol_reassemble_info(cap: pyshark.FileCapture, upper_protocol: str, lower_protocol: str) -> Line:
     """
-    Extract the reassemble information for each packet given the protocol stack. In PyShark, the reassembly information is wrapped in the DATA layer, which is a fake-field-wrapper. When there are multiple upper layers, multiple DATA layer might be used. For example, given a packet TCP/TLS/HTTP2, there are 3 possible cases, we list the corresponding layers for each of them:
+    Extract the reassemble information for each packet given the adjacent upper_protocol and lower_protocol, e.g.,
+    TLS over TCP, HTTP2 over TLS. This function is a component of get_reassemble_info.
+    """
+    upper_protocol = upper_protocol.lower()
+    lower_protocol = lower_protocol.lower()
 
-    + 1. The TLS layer is reassembled, but HTTP2 layer is not (TCP/DATA/TLS/HTTP2/DATA);
-    + 2. The TLS layer is not reassembled, but HTTP2 layer is (TCP/TLS/DATA/HTTP2/DATA);
-    + 3. Both TLS and HTTP2 layers are reassembled (TCP/DATA/TLS/DATA/HTTP2/DATA),
+    upper_packets = []
+    lower_abs_frame_numbers = []
 
-    where the last DATA layer is for Lua-related information that should be ignored.
+    for pkt in cap:
+        if upper_protocol in pkt:
+            packet = Packet(PROCOCOL_CELL_EXTRACTOR[upper_protocol].extract(pkt, lower_protocol=lower_protocol))
+            upper_packets.append(packet)
+        if lower_protocol in pkt:
+            lower_abs_frame_numbers.append(int(pkt.number))
 
-    However, for protocols above the transport layer, there might be multiple layers for the same protocol, e.g.,
-    TCP/DATA/TLS/TLS/TLS/DATA/HTTP2/HTTP2. 
-                  ^   ^         ^     ^
 
-    One could deduce that for a given protocol, reassembly would only happen at the its first layer. Therefore, we
-    need to separately handle the remaining layers (marked with ^).
+    line = Line(upper_packets=upper_packets, lower_abs_frame_numbers=lower_abs_frame_numbers)
+    
+    if not line.continunity_check():
+        raise ValueError("Discontinuous line")
+
+    return line
+
+def get_reassemble_info(cap: pyshark.FileCapture, protocol_stack: List[str] = ['http2', 'tls', 'tcp']) -> Line: 
+    """
+    Extract the reassemble information for each packet given the protocol stack, and return the line of reassemble info.
+
+    Note that the caller is responsible to ensure that the protocol stack is valid, since many protocol stack that are less common are actually valid with respect to the RFC docs, which might be used for some special purposes, e.g., proxy.
 
 
     TODO: Add support to UDP stack.
@@ -1025,57 +1019,24 @@ def get_reassemble_info(cap: pyshark.FileCapture, protocol_stack: List[str] = ['
     cap: pyshark.FileCapture
         The capture file.
     protocol_stack: List[str]
-        The ordered list of protocols, the first one is the lower bound of the stack, the last one the upper bound.
+        The ordered list of protocols, the first one is the upper bound of the stack, the last one the lower bound.
         For example, for a protocol stack TCP/VMess/TLS/HTTP2, if we want to extract all the layer reassembly, one
-        should set the protocol_stack to ['TCP', 'VMess', 'TLS', 'HTTP2'].
+        should set the protocol_stack to ['http2', 'tls', 'vmess', 'tcp'].
 
     Returns 
     ------- 
-    res_dict: dict, {K: [v1, ...], ...} 
-        K is the packet index in the same form of Wireshark, namely, starts from 1. 
-        [v1, ...] denotes the reassembled indices, whose values will be K in turn and have the same reassembled list. 
-        For example, {1: [1, 2], 2: [1, 2]}. 
+    Line
+        The line of reassemble info.
     """
-    # res_dict = {} # {index: [reassemble packets]}
-    # for i in tqdm(range(packet_count(cap)), "get reassemble info"): 
-    #     if cap[i].transport_layer == 'TCP': # ignore the UDP based protocols 
-    #         frame_num = int(cap[i].frame_info.get_field('number')) # get the number of frame
-    #         res_dict[frame_num] = [] # init i-th position as empty 
-    #         segment_index = [] 
-    #         # print(f'${i}$: ${pcap[i].layers}')
-    #         for layer in cap[i].layers: 
-    #             if layer.layer_name == 'DATA': # fake-field-wrapper is renamed to data in pyshark
-    #                 for field in layer.field_names: 
-    #                     if field == 'tcp_segments': # reassemble will appearance in the last packet
-    #                         field_obj = layer.get_field(field) 
-    #                         content = field_obj.main_field.get_default_value() 
-    #                         segment_index.extend(match_segment_number(content)) 
-    #         for index in segment_index: # cover related values with its reassemble info
-    #             res_dict[index] = segment_index 
+    # Fetch 2 consecutive protocols from the protocol stack
+    merged_line = None
+    for i in range(len(protocol_stack) - 1):
+        upper_protocol = protocol_stack[i]
+        lower_protocol = protocol_stack[i + 1]
+        line = get_adjacent_protocol_reassemble_info(cap, upper_protocol, lower_protocol)
+        if merged_line is None:
+            merged_line = line
+        else:
+            merged_line = line_merge(merged_line, line)
     
-    # return res_dict
-    res_dict = {protocol: [] for protocol in protocol_stack} # {index: [reassemble packets]}
-    cell_extractor = CellExtractor()
-    for pkt in cap: 
-        # for protocol in protocol_stack: 
-        #     if protocol in pkt:
-        #         res_dict[protocol].extend(cell_extractor.extract(pkt, protocol))
-        # if protocol in pkt:
-        #     frame_num = int(pkt.frame_info.get_field('number')) # get the number of frame
-        #     res_dict[frame_num] = [] # init i-th position as empty 
-        #     segment_index = [] 
-        #     # print(f'${i}$: ${pcap[i].layers}')
-        #     for layer in pkt.layers: 
-        #         if layer.layer_name == 'DATA': # fake-field-wrapper is renamed to data in pyshark
-        #             for field in layer.field_names: 
-        #                 if field == 'tcp_segments': # reassemble will appearance in the last packet
-        #                     field_obj = layer.get_field(field) 
-        #                     content = field_obj.main_field.get_default_value() 
-        #                     segment_index.extend(match_segment_number(content)) 
-        #     for index in segment_index: # cover related values with its reassemble info
-        #         res_dict[index] = segment_index 
-        frame_num = int(pkt.frame_info.get_field('number'))
-        if frame_num == 58:
-            pass
-    
-    return res_dict
+    return merged_line
