@@ -5,10 +5,15 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 import argparse
 from tqdm import tqdm
+import time
 
 from WFlib.tools.visualize import *
 from WFlib.tools.capture import *
 from WFlib.tools.analyzer import *
+
+from WFlib.utils.config import SUPPORTED_BASE, SUPPORTED_PROTOCOL
+
+DEBUG = False
 
 custom_parameters=["-C", "Customized", "-2"]
 
@@ -46,7 +51,8 @@ def main(input_root, protocol, host, sni, base, output_root, dry_run=False):
 
 
     lines = []
-    for file in tqdm(sorted(pcap_dir_path.iterdir())):
+    limit = 30
+    for file in tqdm(sorted(pcap_dir_path.iterdir())[:limit]):
         if file.is_file() and file.suffix in ['.pcapng', '.pcap']:
             tcp_stream_filter = extract_tcp_stream(file, sni, keylog_file, custom_parameters, override_prefs)
             if tcp_stream_filter == "":
@@ -60,12 +66,25 @@ def main(input_root, protocol, host, sni, base, output_root, dry_run=False):
                                         custom_parameters=custom_parameters,
                                         override_prefs=override_prefs)
             
+            if DEBUG:
+                cap.set_debug()
+            
+            protocol_stack = ['http2', 'tls']
+            if base == 'tcp':
+                if protocol == 'normal':
+                    protocol_stack.append('tcp')
+                elif protocol == 'vmess':
+                    protocol_stack.append('vmess')
+                    protocol_stack.append('tcp')
+
             try:
-                lines.append(get_adjacent_protocol_reassemble_info(cap, upper_protocol="http2", lower_protocol="tls"))
+                lines.append(get_reassemble_info(cap, protocol_stack=protocol_stack))
             except Exception as e:
                 print(f"Error in file {file.name}: {e}")
-                
-            cap.close()
+            try:
+                cap.close()
+            except Exception as e:
+                print(f"Error in file {file.name}: {e}")
 
     if not dry_run:
         byte_segments = generate_byte_segment(lines)
@@ -106,5 +125,10 @@ if __name__ == '__main__':
     parser.add_argument("-o", "--output_root", required=True, type=str, help="The root directory of the output")
     parser.add_argument("--dry-run", action='store_true', help="Test the stream filter or other results instead of generating Lines")
     args = parser.parse_args()
+
+    if args.base not in SUPPORTED_BASE:
+        raise ValueError(f"Unsupported base: {args.base}. Supported bases: {SUPPORTED_BASE}")
+    if args.protocol not in SUPPORTED_PROTOCOL:
+        raise ValueError(f"Unsupported protocol: {args.protocol}. Supported protocols: {SUPPORTED_PROTOCOL}")
 
     main(args.input_root, args.protocol, args.host, args.sni, args.base, args.output_root, args.dry_run)

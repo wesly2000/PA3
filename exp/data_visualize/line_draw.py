@@ -9,7 +9,7 @@ import seg_compute
 avg_color_map = {"Normal": "blue", "VMess": "green"}
 std_color_map = {"Normal": "yellow", "VMess": "purple"}
 
-def draw_single_byte_segment(ax: plt.Axes, avg_byte_segments: np.ndarray, std_byte_segments: np.ndarray, proto: str):
+def draw_single_byte_segment(fig: plt.Figure, ax: plt.Axes, avg_byte_segments: np.ndarray, std_byte_segments: np.ndarray, proto: str):
     """
     Draw the byte segment array. The array is a list of segment index. The length of the list is the cutoff.
     """
@@ -42,7 +42,7 @@ def draw_byte_segment(input_root: str, host: str, sni: str, base: str, output_ro
     ax.set_ylabel('Relative Segment Index')
     ax.set_title(f'Host: {host}, SNI: {sni}', fontsize=12)
 
-    output_path = f"{args.output_root}/line_draw/{args.host}_{args.sni}.pdf"
+    output_path = f"{args.output_root}/line_draw/{base}/{args.host}_{args.sni}.pdf"
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
     fig_format = output_path.split('.')[-1]
