@@ -66,7 +66,8 @@ def h2_stream_analysis_per_host(root: str, protocol: str, host: str, host_filter
                         'vmess.keylog_file': os.path.abspath(proxy_keylog_file)}
     
     stats = dict()
-    for file in tqdm(sorted(pcap_dir_path.iterdir())):
+    limit = 30
+    for file in tqdm(sorted(pcap_dir_path.iterdir())[:limit]):
         if file.is_file() and file.suffix in ['.pcapng', '.pcap']:
             for SNI, h2, avail_h2 in h2_stream_analysis_per_sni(file, host_filter,   
                                                                     custom_parameters=custom_parameters, 
@@ -95,6 +96,7 @@ def h2_stream_analysis_per_host(root: str, protocol: str, host: str, host_filter
 def h2_stream_analysis(root: str, host_list: List[str], database_file: str, host_filter: List[str]):
     existed_df = pd.read_csv(database_file)[['host', 'protocol']]
     for host in host_list:
+        print(f"Processing {host}")
         for protocol in PROTOCOLS:
             # Check if the host with the given protocol has been computed
             if ((existed_df['host'] == host) & (existed_df['protocol'] == protocol)).any():
@@ -102,25 +104,26 @@ def h2_stream_analysis(root: str, host_list: List[str], database_file: str, host
             df = h2_stream_analysis_per_host(root, protocol, host, host_filter)
             df.to_csv(database_file, mode='a', index=False, header=False)
 
-def main(root: str, host_list_file: str, database_file: str, host_filter_file: str):
+def main(input_root: str, output_root: str, host_list_file: str, host_filter_file: str):
+    database_file = f"{output_root}/h2_stream_analysis/database.csv"
+    Path(database_file).parent.mkdir(parents=True, exist_ok=True)
     if not Path(database_file).exists():
         print("H2 stream database does not exist, create a new one")
         df = pd.DataFrame(columns=['host', 'SNI', 'protocol', 'h2_avg', 'h2_std', 'avail_h2_avg', 'avail_h2_std'])
         df.to_csv(database_file, index=False)
-    
     host_list = read_host_list(host_list_file)
     host_filter = read_host_list(host_filter_file)
 
-    h2_stream_analysis(root, host_list, database_file, host_filter)
+    h2_stream_analysis(input_root, host_list, database_file, host_filter)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # Flag argument
-    parser.add_argument("-r", "--root", default="exp", type=str, help="The root directory of the capture and keylog")
+    parser.add_argument("-i", "--input_root", required=True, type=str, help="The root directory of the capture and keylog")
+    parser.add_argument("-o", "--output_root", required=True, type=str, help="The root directory of the output")
     parser.add_argument("--host", default="exp/data_analysis/host_list.txt", type=str, help="The host list file")
-    parser.add_argument("-d", "--database", default="exp/data_analysis/database/h2.csv", help="The H2 analysis results")
     parser.add_argument("-f", "--filter", default="exp/data_analysis/filter.txt", help="The host filter file")
     args = parser.parse_args()
 
-    main(args.root, args.host, args.database, args.filter)
+    main(args.input_root, args.output_root, args.host, args.filter)
