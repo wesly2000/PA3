@@ -24,3 +24,9 @@ api.infinitynewtab.com
 www.google-analytics.com
 update.googleapis.com
 mtalk.google.com
+doh.dns.sb
+natfrp-rm.globalslb.net
+natfrp-api.globalslb.net
+storage.codegpt.co
+default.exp-tas.com  # VSCode user experience service
+mobile.events.data.microsoft.com
