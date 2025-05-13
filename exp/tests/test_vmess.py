@@ -8,7 +8,7 @@ import os
 import pytest
 import pandas as pd
 
-from WFlib.utils.config import get_config
+from WFlib.utils.config import get_config, default_override_prefs
 from WFlib.tools.analyzer import *
 from WFlib.tools.visualize import *
 from exp.data_analysis.http2_stream_analysis import *
@@ -32,7 +32,7 @@ skip_vmess = pytest.mark.skipif(
     reason="VMess dissector not available, skip the test."
 )
 
-custom_parameters = ["-C", "Customized", "-2"]
+custom_parameters = ["-2"]
 
 @pytest.fixture
 def capture_gen(request):
@@ -56,8 +56,7 @@ def capture_gen(request):
     proxy_keylog_file = os.path.join(pcap_dir, "proxy_keylog.txt")
     keylog_file = os.path.join(pcap_dir, "keylog.txt")
 
-    override_prefs = {'tls.keylog_file': os.path.abspath(keylog_file),
-                      'vmess.keylog_file': os.path.abspath(proxy_keylog_file)}
+    override_prefs = default_override_prefs('vmess', os.path.abspath(keylog_file), os.path.abspath(proxy_keylog_file), None)
     
     cap = pyshark.FileCapture(
         input_file=pcap_file, 
