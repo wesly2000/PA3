@@ -8,9 +8,9 @@ import argparse
 
 from WFlib.tools.capture import *
 from WFlib.utils.statistics import *
-
+from WFlib.utils.config import default_override_prefs
 PROTOCOLS = ['normal', 'vmess']
-custom_parameters=["-C", "Customized", "-2"]
+custom_parameters=["-2"]
 
 def h2_stream_analysis_per_sni(file: Path, host_filter: Set[str], custom_parameters = None, override_prefs = None):
     """
@@ -36,7 +36,11 @@ def h2_stream_analysis_per_sni(file: Path, host_filter: Set[str], custom_paramet
         tcp_stream_numbers, _ = SNI_stream_extract(file, [SNI], custom_parameters, override_prefs)
         h2_stream_number = len(tcp_stream_numbers)
         # Fetch the number of all available HTTP/2 streams for the same SNI
-        tcp_stream_numbers = h2data_SNI_intersect(file, [SNI], None, custom_parameters, override_prefs)
+        try:
+            tcp_stream_numbers = h2data_SNI_intersect(file, [SNI], None, custom_parameters, override_prefs)
+        except Exception as e:
+            print(f"Error in file {file}: {e}")
+            continue
         available_h2_stream_number = len(tcp_stream_numbers)
 
         yield SNI, h2_stream_number, available_h2_stream_number
@@ -59,11 +63,7 @@ def h2_stream_analysis_per_host(root: str, protocol: str, host: str, host_filter
 
     pcap_dir_path = Path(pcap_dir)
 
-    if protocol == 'normal':
-        override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)}
-    elif protocol == 'vmess':
-        override_prefs={'tls.keylog_file': os.path.abspath(keylog_file),
-                        'vmess.keylog_file': os.path.abspath(proxy_keylog_file)}
+    override_prefs = default_override_prefs(protocol, os.path.abspath(keylog_file), os.path.abspath(proxy_keylog_file), None)
     
     stats = dict()
     limit = 30

@@ -11,11 +11,11 @@ from WFlib.tools.visualize import *
 from WFlib.tools.capture import *
 from WFlib.tools.analyzer import *
 
-from WFlib.utils.config import SUPPORTED_BASE, SUPPORTED_PROTOCOL
+from WFlib.utils.config import SUPPORTED_BASE, SUPPORTED_PROTOCOL, default_override_prefs
 
 DEBUG = False
 
-custom_parameters=["-C", "Customized", "-2"]
+custom_parameters=["-2"]
 
 def extract_tcp_stream(pcap_file: Path, sni, keylog_file, custom_parameters, override_prefs):
     """
@@ -43,12 +43,7 @@ def main(input_root, protocol, host, sni, base, output_root, dry_run=False):
 
     pcap_dir_path = Path(pcap_dir)
 
-    if protocol == 'normal':
-        override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)}
-    elif protocol == 'vmess':
-        override_prefs={'tls.keylog_file': os.path.abspath(keylog_file),
-                        'vmess.keylog_file': os.path.abspath(proxy_keylog_file)}
-
+    override_prefs = default_override_prefs(protocol, os.path.abspath(keylog_file), os.path.abspath(proxy_keylog_file), None)
 
     lines = []
     limit = 30
