@@ -45,13 +45,13 @@ the capture.
 
 The semantics of the filter is that we ONLY want TCP or UDP packets, but the following protocols are NOT considered:
 
-LLMNR (5355), MDNS (5353), SOAP (3702), NTP (123), SSDP (1900), SSH (22), RDP (3389), DOT (853), HTTP (80), Radan HTTP (8088),
+LLMNR (5355), MDNS (5353), SOAP (3702), NTP (123), SSDP (1900), SSH (22/2222), RDP (3389), DOT (853), HTTP (80), Radan HTTP (8088),
 YDService (5574), tat_agent (8186)
 
 NOTE: This filter is not exhausted, and further updates are possible in the future.
 NOTE: Plain HTTP (port 80) is excluded after some consideration, since most of the request are based on HTTPS 
 """
-common_filter = 'not (port 53 or port 22 or port 3389 or port 5355 or port 5353 or port 3702 or port 123 or port 1900 or port 853 or port 80 or port 8088 or port 5574 or port 8186) and (tcp or udp)'
+common_filter = 'not (port 53 or port 22 or port 2222 or port 3389 or port 5355 or port 5353 or port 3702 or port 123 or port 1900 or port 853 or port 80 or port 8088 or port 5574 or port 8186) and (tcp or udp)'
 
 def capture(url, iface, output_file, timeout=200, capture_filter=common_filter, ill_files=None, log_output=None, proxy_log=None):
     stop_event = multiprocessing.Event()
@@ -274,7 +274,7 @@ def batch_capture(base_dir, host_list, iface,
         stdout = open(proxy_log, 'a+') if proxy_log is not None else subprocess.DEVNULL
 
         clash_process = subprocess.Popen(
-            ['/home/lxyu/clash/bin/clash-linux-amd64', '-key-trojan', keylog],
+            ['/home/lxyu/clash/bin/clash-linux-amd64-debug', '-key-vmess', keylog],
             stdout=stdout,
             stderr=subprocess.STDOUT 
         )
@@ -321,7 +321,7 @@ def batch_capture(base_dir, host_list, iface,
                 monitor_process = multiprocessing.Process(target=launch_proxy, kwargs={"keylog": keylog, "proxy_log": proxy_log})
                 monitor_process.start()
 
-                time.sleep(2)  # maybe waiting for proxy client to launch?
+                time.sleep(1)  # maybe waiting for proxy client to launch?
             
             capture(url=url, 
                     timeout=timeout, 
