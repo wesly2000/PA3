@@ -8,6 +8,7 @@ import re
 from typing import List, Callable, Optional, Tuple
 
 AES_128_GCM_TAG_LEN = 16
+CHACHA20_POLY1305_TAG_LEN = 16
 
 def feature_attr(model, attr_method, X, y, num_classes):
     """
@@ -286,12 +287,52 @@ class VMessByteCounter(ByteCounter):
             cnt += sum(vmess_layer_lengths)
 
         return cnt
+    
 
+class SSByteCounter(ByteCounter):
+    TYPE_SALT = '1'
+    TYPE_RELAY_HEADER = '2'
+    TYPE_STREAM_DATA = '3'
+    def __init__(self, name='ss'):
+        super().__init__(name)
+        self.salt_len = 32  # The length of the salt
+        # According to Clash Imple., Shadowsocks with AEAD contains a length field of size 2 for each relay header.
+        # Moreover, the size of length field in Stream Data layer coincide with the value, we abuse the notation.
+        self.length_len = 2  
+        self.port_len = 2  # The length of the port
+        self.domain_type_len = 1  # The length of the domain type
+        self.domain_length_len = 2  # The size of the domain length
+
+    def layer_count(self, layer, extra_data = None) -> int:
+        cnt = 0
+        if layer.layer_type == self.TYPE_SALT:
+            cnt += self.salt_len
+        elif layer.layer_type == self.TYPE_RELAY_HEADER:  
+            # In AEAD mode of Clash Imple., the Shadowsocks length and request are encrypted separately, each of which
+            # contains a 16-byte (AES-128-GCM, which is commonly used) authentication tag.
+            cnt += self.port_len + self.domain_type_len + self.domain_length_len + int(layer.domain_length) + CHACHA20_POLY1305_TAG_LEN + self.length_len + CHACHA20_POLY1305_TAG_LEN
+        elif layer.layer_type == self.TYPE_STREAM_DATA:
+            cnt += self.length_len + int(layer.payload_length)
+        else:
+            raise ValueError(f"Unknown Shadowsocks layer type: {layer.layer_type}")
+
+        return cnt
+    
+    def packet_count(self, pkt) -> int:
+        cnt = 0
+        if "Shadowsocks" in pkt:  
+            ss_layers = filter(lambda layer: layer.layer_name == "shadowsocks", pkt.layers)  # One packet may contain multiple TLS layers
+            ss_layer_lengths = map(self.layer_count, ss_layers)
+            cnt += sum(ss_layer_lengths)
+
+        return cnt
+    
 PROTOCOL_BYTE_COUNTER = {
     "tls": TLSByteCounter(),
     "tcp": TCPByteCounter(),
     "http2": HTTP2ByteCounter(),
     "vmess": VMessByteCounter(),
+    "ss": SSByteCounter(),
 }
 
 class CaptureCounter():
