@@ -429,6 +429,115 @@ class Cell():
                 else:
                     return False
                 
+class CellExtractor(object):
+    """
+    Select the reassemble info related field for each protocol in DATA layer.
+    """
+    def __init__(self):
+        self._name = "abstract" 
+
+    @property
+    def name(self):
+        return self._name
+    
+    def layer_extract(self, layer, frame_number: int, lower_protocol) -> Cell:
+        cell = Cell(upper_protocol=self.name, lower_protocol=lower_protocol, abs_frame_number=frame_number)
+        
+        if lower_protocol is not None and layer.layer_name == "DATA":
+            # Make tls_segments to more generic.
+            for segment_frame_number, segment_size in match_segment_number(
+                layer.get_field(
+                    PROTOCOL_REASSEMBLE_FIELD[lower_protocol]
+                    )
+                ):
+
+                cell.abs_segment_frame_number.append(segment_frame_number)
+                cell.segment_size.append(segment_size)
+
+        elif layer.layer_name == self.name:
+            counter = PROTOCOL_BYTE_COUNTER[self.name]
+            cell.abs_segment_frame_number.append(frame_number)
+            cell.segment_size.append(counter.layer_count(layer))
+
+        else:
+            raise ValueError(f"Protocol mismatch: only support {self.name} and DATA layer, but got {layer.layer_name}")
+        
+        cell.size = sum(cell.segment_size)
+        
+        return cell
+    
+    def extract(self, pkt, lower_protocol: str) -> List[Cell]:
+        """
+        Extract reassemble information from the given packet with the given protocol.
+
+        Params
+        ------
+        pkt: 
+            The packet to extract reassemble information from.
+        lower_protocol: str | None
+            The protocol to extract reassemble information from. If None, this function does not
+            extract reassemble information from the given packet. Please always set it to
+            not None value unless you are extracting the reassemble info for the lowest protocol
+            in a protocol stack, whose reassemble info is not needed or not implemented.
+        """
+        lower_protocol = lower_protocol.lower()
+        filtered_layers = seq_filter(layer_extractor(pkt, self.name, lower_protocol), lower_protocol)
+        cells = []
+
+        for layer in filtered_layers:
+            cell = self.layer_extract(layer, int(pkt.number), lower_protocol)
+            cells.append(cell)
+        
+        return cells
+    
+
+class HTTP2CellExtractor(CellExtractor):
+    def __init__(self):
+        self._name = "http2"
+
+    def extract(self, pkt, lower_protocol="TLS") -> List[Cell]:
+        return super().extract(pkt, lower_protocol)
+    
+
+class TLSCellExtractor(CellExtractor):
+    def __init__(self):
+        self._name = "tls"
+
+    def extract(self, pkt, lower_protocol="TCP") -> List[Cell]:
+        return super().extract(pkt, lower_protocol)
+    
+
+class VMessCellExtractor(CellExtractor):
+    def __init__(self):
+        self._name = "vmess"
+
+    def extract(self, pkt, lower_protocol='tcp') -> List[Cell]:
+        return super().extract(pkt, lower_protocol)
+    
+
+class SSCellExtractor(CellExtractor):
+    def __init__(self):
+        self._name = "ss"
+
+    def extract(self, pkt, lower_protocol='tcp') -> List[Cell]:
+        return super().extract(pkt, lower_protocol)
+
+class TCPCellExtractor(CellExtractor):
+    def __init__(self):
+        self._name = "tcp"
+
+    def extract(self, pkt, lower_protocol='tcp') -> List[Cell]:
+        return super().extract(pkt, lower_protocol)
+    
+
+PROCOCOL_CELL_EXTRACTOR = {
+    "tcp": TCPCellExtractor(),  
+    "tls": TLSCellExtractor(),
+    "vmess": VMessCellExtractor(),
+    "http2": HTTP2CellExtractor(),
+    "ss": SSCellExtractor(),
+}
+                
 class Packet():
     """
     Abstraction of Wireshark packet, whose bytes comes from the Cells with the same abs_frame_number and protocol.
@@ -667,107 +776,6 @@ PROTOCOL_REASSEMBLE_FIELD = {
     "tls": "tls_segments",
     "tcp": "tcp_segments",
     "vmess": "vmess_fragments",
-}
-
-class CellExtractor(object):
-    """
-    Select the reassemble info related field for each protocol in DATA layer.
-    """
-    def __init__(self):
-        self._name = "abstract" 
-
-    @property
-    def name(self):
-        return self._name
-    
-    def layer_extract(self, layer, frame_number: int, lower_protocol) -> Cell:
-        cell = Cell(upper_protocol=self.name, lower_protocol=lower_protocol, abs_frame_number=frame_number)
-        
-        if lower_protocol is not None and layer.layer_name == "DATA":
-            # Make tls_segments to more generic.
-            for segment_frame_number, segment_size in match_segment_number(
-                layer.get_field(
-                    PROTOCOL_REASSEMBLE_FIELD[lower_protocol]
-                    )
-                ):
-
-                cell.abs_segment_frame_number.append(segment_frame_number)
-                cell.segment_size.append(segment_size)
-
-        elif layer.layer_name == self.name:
-            counter = PROTOCOL_BYTE_COUNTER[self.name]
-            cell.abs_segment_frame_number.append(frame_number)
-            cell.segment_size.append(counter.layer_count(layer))
-
-        else:
-            raise ValueError(f"Protocol mismatch: only support {self.name} and DATA layer, but got {layer.layer_name}")
-        
-        cell.size = sum(cell.segment_size)
-        
-        return cell
-    
-    def extract(self, pkt, lower_protocol: str) -> List[Cell]:
-        """
-        Extract reassemble information from the given packet with the given protocol.
-
-        Params
-        ------
-        pkt: 
-            The packet to extract reassemble information from.
-        lower_protocol: str | None
-            The protocol to extract reassemble information from. If None, this function does not
-            extract reassemble information from the given packet. Please always set it to
-            not None value unless you are extracting the reassemble info for the lowest protocol
-            in a protocol stack, whose reassemble info is not needed or not implemented.
-        """
-        lower_protocol = lower_protocol.lower()
-        filtered_layers = seq_filter(layer_extractor(pkt, self.name, lower_protocol), lower_protocol)
-        cells = []
-
-        for layer in filtered_layers:
-            cell = self.layer_extract(layer, int(pkt.number), lower_protocol)
-            cells.append(cell)
-        
-        return cells
-    
-
-class HTTP2CellExtractor(CellExtractor):
-    def __init__(self):
-        self._name = "http2"
-
-    def extract(self, pkt, lower_protocol="TLS") -> List[Cell]:
-        return super().extract(pkt, lower_protocol)
-    
-
-class TLSCellExtractor(CellExtractor):
-    def __init__(self):
-        self._name = "tls"
-
-    def extract(self, pkt, lower_protocol="TCP") -> List[Cell]:
-        return super().extract(pkt, lower_protocol)
-    
-
-class VMessCellExtractor(CellExtractor):
-    def __init__(self):
-        self._name = "vmess"
-
-    def extract(self, pkt, lower_protocol='tcp') -> List[Cell]:
-        return super().extract(pkt, lower_protocol)
-    
-
-class TCPCellExtractor(CellExtractor):
-    def __init__(self):
-        self._name = "tcp"
-
-    def extract(self, pkt, lower_protocol='tcp') -> List[Cell]:
-        return super().extract(pkt, lower_protocol)
-    
-
-PROCOCOL_CELL_EXTRACTOR = {
-    "tcp": TCPCellExtractor(),  
-    "tls": TLSCellExtractor(),
-    "vmess": VMessCellExtractor(),
-    "http2": HTTP2CellExtractor(),
 }
 
 DATA_LAYER_MARKER = {'tcp': 'tcp_segments', 'tls': 'tls_segments', 'vmess': 'vmess_fragments'}
