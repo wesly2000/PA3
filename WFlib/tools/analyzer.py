@@ -5,7 +5,9 @@ import numpy as np
 import pyshark 
 from pathlib import Path
 import re
-from typing import List, Callable, Optional
+from typing import List, Callable, Optional, Tuple
+
+AES_128_GCM_TAG_LEN = 16
 
 def feature_attr(model, attr_method, X, y, num_classes):
     """
@@ -245,10 +247,51 @@ class UDPByteCounter(ByteCounter):
         return cnt
     
 
+class VMessByteCounter(ByteCounter):
+    TYPE_REQUEST = '1'
+    TYPE_RESPONSE = '2'
+    TYPE_DATA = '3'  # The VMess Data layer, DO NOT confuse with the DATA layer in reassemble.
+    def __init__(self, name='vmess'):
+        super().__init__(name)
+        self.auth_len = 16  # VMess authentication length
+        self.nonce_len = 8   # VMess nonce length
+        # According to Clash Imple., VMess response header contains 4 bytes.
+        # The port command is not used. See https://xtls.github.io/development/protocols/vmess.html
+        self.response_hdr_len = 4  
+        # According to Clash Imple., VMess with AEAD contains a length field of size 2 for each request and response.
+        # Moreover, the size of length field in Data layer coincide with the value, we abuse the notation.
+        self.length_len = 2  
+
+    def layer_count(self, layer, extra_data = None) -> int:
+        cnt = 0
+        if layer.layer_type == self.TYPE_REQUEST:
+            # In AEAD mode of Clash Imple., the length and request are encrypted separately, each of which
+            # contains a 16-byte (AES-128-GCM, which is commonly used) authentication tag.
+            cnt += self.auth_len + self.nonce_len + self.length_len + AES_128_GCM_TAG_LEN + int(layer.request_length) + AES_128_GCM_TAG_LEN
+        elif layer.layer_type == self.TYPE_RESPONSE:  
+            # FIX: The attached VMess Data frame is now considered as a part of the response.
+            cnt += self.response_hdr_len + AES_128_GCM_TAG_LEN + self.length_len + AES_128_GCM_TAG_LEN + self.length_len + int(layer.payload_length)
+        elif layer.layer_type == self.TYPE_DATA:
+            cnt += self.length_len + int(layer.payload_length)
+        else:
+            raise ValueError(f"Unknown VMess layer type: {layer.layer_type}")
+
+        return cnt
+
+    def packet_count(self, pkt) -> int:
+        cnt = 0
+        if "VMess" in pkt:  
+            vmess_layers = filter(lambda layer: layer.layer_name == "vmess", pkt.layers)  # One packet may contain multiple TLS layers
+            vmess_layer_lengths = map(self.layer_count, vmess_layers)
+            cnt += sum(vmess_layer_lengths)
+
+        return cnt
+
 PROTOCOL_BYTE_COUNTER = {
     "tls": TLSByteCounter(),
     "tcp": TCPByteCounter(),
     "http2": HTTP2ByteCounter(),
+    "vmess": VMessByteCounter(),
 }
 
 class CaptureCounter():
@@ -274,8 +317,9 @@ class Cell():
     Especially, the == operator checks if two cells have the same abs_frame_number and abs_segment_frame_number.
     Don't use it as a check for all the attributes of two cells.
     """
-    def __init__(self, proto, abs_frame_number):
-        self.proto = proto
+    def __init__(self, upper_protocol, lower_protocol, abs_frame_number):
+        self.upper_protocol = upper_protocol
+        self.lower_protocol = lower_protocol
         self.abs_frame_number = abs_frame_number 
         self.abs_segment_frame_number = []
         self.rel_frame_number = None
@@ -286,7 +330,7 @@ class Cell():
     def __eq__(self, other):
         if not isinstance(other, Cell):
             raise TypeError("Can only compare with another Cell object")
-        if self.proto != other.proto:
+        if self.upper_protocol != other.upper_protocol or self.lower_protocol != other.lower_protocol:
             raise ValueError(f"Cannot compare {self} with {other}, since they are not from the same protocol.")
         if self.abs_frame_number == other.abs_frame_number and \
             self.abs_segment_frame_number == other.abs_segment_frame_number:
@@ -298,7 +342,7 @@ class Cell():
         if not isinstance(other, Cell):
             raise TypeError("Can only compare with another Cell object")
         
-        if self.proto != other.proto:
+        if self.upper_protocol != other.upper_protocol or self.lower_protocol != other.lower_protocol:
             raise ValueError(f"Cannot compare {self} with {other}, since they are not from the same protocol.")
         
         if self.abs_frame_number < other.abs_frame_number:
@@ -323,7 +367,7 @@ class Cell():
         if not isinstance(other, Cell):
             raise TypeError("Can only compare with another Cell object")
 
-        if self.proto!= other.proto:
+        if self.upper_protocol != other.upper_protocol or self.lower_protocol != other.lower_protocol:
             raise ValueError(f"Cannot compare {self} with {other}, since they are not from the same protocol.")
 
         if self.abs_frame_number > other.abs_frame_number:
@@ -344,6 +388,53 @@ class Cell():
                 else:
                     return False
                 
+class Packet():
+    """
+    Abstraction of Wireshark packet, whose bytes comes from the Cells with the same abs_frame_number and protocol.
+    For example, an HTTP/2 Packet consists of a list of HTTP/2 Cells with the same abs_frame_number. Packet object
+    merges the segments in the cells with the same frame number, which is more continuous, and avoids repetitive
+    segment information. Therefore, using Frame the caller is responsible to assure all the cells have the same
+    frame number.
+
+    Packet uses dictionary to store segment information, which should be more convenient to fetch values.
+
+    The partial order of packets only depends on frame number.
+    """
+    def __init__(self, cells: List[Cell] = None):
+        self._segments = dict()
+        # If cells is not None, initialize the packet with the cells.
+        self.upper_protocol = None
+        self.lower_protocol = None
+        self.abs_frame_number = None
+        if cells is not None:
+            self.upper_protocol = cells[0].upper_protocol  
+            self.lower_protocol = cells[0].lower_protocol  
+            # The absolute frame number is the same as the cells' abs_frame_number
+            self.abs_frame_number = cells[0].abs_frame_number  
+            for cell in cells:
+                for segment_frame_number, segment_size in zip(cell.abs_segment_frame_number, cell.segment_size):
+                    # Merge sizes with the same segment_frame_number
+                    self._segments[segment_frame_number] = self._segments.setdefault(segment_frame_number, 0) + segment_size
+
+    @property
+    def segments(self):
+        return self._segments
+    
+    @segments.setter
+    def segments(self, segments):
+        self._segments = segments
+
+    def __lt__(self, other):
+        if not isinstance(other, Packet):
+            raise TypeError("Can only compare with another Packet object")
+        
+        return self.abs_frame_number < other.abs_frame_number
+    
+    def __gt__(self, other):
+        if not isinstance(other, Packet):
+            raise TypeError("Can only compare with another Packet object")
+        
+        return self.abs_frame_number > other.abs_frame_number
 
 class Line():
     """
@@ -361,19 +452,49 @@ class Line():
     TLS Layer     ----------  --------------    -----------      --------------      --------------------
     """
     def __init__(self, 
-                 upper_protocol: str, upper_cells: List[Cell], 
+                 upper_packets: List[Packet], 
+                 lower_abs_frame_numbers: List[int],
                  sanity_check = False
                  ):
-        self.upper_layer = upper_protocol
-        self.upper_cells = upper_cells
+        self._upper_protocol = upper_packets[0].upper_protocol
+        self._lower_protocol = upper_packets[0].lower_protocol
+        self._upper_packets = sorted(upper_packets)  # Defer the sorting to the Line instead of CellExtractor
+        
+        """
+        COMMENT: Shall we make lower_abs_frame_numbers a dict, whose values indicate the relative
+        index of each lower frame?
+        Currently, such work is deferred to generate_byte_stream, and the line does not maintain
+        that dict.
+        """
+        self._lower_abs_frame_numbers = lower_abs_frame_numbers
 
         if sanity_check:
             self.sanity_check()
 
         self._upper_abs_byte_map = None  # COMMENT: shall we build the map in lazy mode?
+        self._lower_span_map = None  # COMMENT: shall we build the map in lazy mode?
         self._byte_counter = 0  # Count how many bytes in the upper layer in total
 
-    
+    def continunity_check(self):
+        """
+        Continunity Check: All cover, sorted by their beginning (or ending) point, should be continuous
+        as a byte stream.
+        """
+        if len(self.upper_abs_byte_map) <= 1:
+            return True  # We define that when there are less than 2 covers within a map, it is continuous
+
+        total_covers = []
+        for covers in self.upper_abs_byte_map.values():
+            total_covers += covers
+
+        total_covers.sort(key=lambda x: x[0])
+
+        for i in range(len(total_covers) - 1):
+            if total_covers[i][1] != total_covers[i+1][0]:
+                return False 
+            
+        return True
+
     def sanity_check(self):
         """
         Check if the line is valid.
@@ -398,6 +519,31 @@ class Line():
         if self._upper_abs_byte_map is None:  # Lazy build the map if not built yet.
             self.upper_rel_building()
         return self._upper_abs_byte_map
+    
+    @property
+    def lower_span_map(self):
+        if self._lower_span_map is None:  # Lazy build the map if not built yet.
+            self.lower_span_building()
+        return self._lower_span_map
+    
+    @property
+    def lower_abs_frame_numbers(self):
+        return self._lower_abs_frame_numbers
+    
+    @property
+    def upper_protocol(self):
+        return self._upper_protocol
+    
+    @property
+    def lower_protocol(self):
+        return self._lower_protocol
+    
+    @property
+    def upper_packet_frame_numbers(self):
+        """
+        We only provide the frame numbers of the upper packets instead of packets for protection.
+        """
+        return [packet.abs_frame_number for packet in self._upper_packets]
 
     def upper_rel_building(self):
         """
@@ -409,15 +555,14 @@ class Line():
         #          to implicitly ignore the last byte index?
         upper_abs_byte_map = dict()
 
-        for i in range(len(self.upper_cells)):
-            for segment_frame_number, segment_size in zip(self.upper_cells[i].abs_segment_frame_number, self.upper_cells[i].segment_size):
+        for packet in self._upper_packets:
+            for segment_frame_number, segment_size in sorted(packet.segments.items()):
                 if segment_frame_number in upper_abs_byte_map:
-                    upper_abs_byte_map[segment_frame_number] = (  # If the segment frame number is already in the map, update the byte range
-                        upper_abs_byte_map[segment_frame_number][0],
-                        upper_abs_byte_map[segment_frame_number][1] + segment_size
+                    upper_abs_byte_map[segment_frame_number].append(  # If the segment frame number is already in the map, update the byte range
+                        (byte_counter, byte_counter + segment_size)
                     )
                 else:  # If the segment frame number is not in the map, create the entry
-                    upper_abs_byte_map[segment_frame_number] = (byte_counter, byte_counter + segment_size)
+                    upper_abs_byte_map[segment_frame_number] = [(byte_counter, byte_counter + segment_size)]
 
                 byte_counter += segment_size  # Update the byte counter
 
@@ -425,11 +570,62 @@ class Line():
 
         self._upper_abs_byte_map = upper_abs_byte_map
 
+    def lower_span_building(self):
+        lower_span_map = dict()
+        for lower_segment_frame_number in self._upper_abs_byte_map:
+            lower_span_map[lower_segment_frame_number] = self.span(lower_segment_frame_number)
+
+        self._lower_span_map = lower_span_map 
+
+    def seg(self, upper_abs_frame_number: int) -> dict:
+        """
+        Given the absolute frame number of a upper layer frame, return its segment and segment size list.
+        """
+        for packet in self._upper_packets:
+            if packet.abs_frame_number == upper_abs_frame_number:
+                return packet.segments
+            
+        raise ValueError(f"No packet found with frame number {upper_abs_frame_number}")
+
+    def span(self, lower_abs_frame_number: int) -> dict:
+        """
+        Given the absolute frame number of a lower layer frame, return the upper segment and segment size it spans.
+        """
+        span = dict()
+        # Note that the required segment may consist all packets with frame number larger or equal than its frame number.
+        # For multiple stream case, even the segment does not consists the next packet, it may consist the packets after the
+        # next packet.
+        # However, if a packet contains segments equal to it, meanwhile, this packet contains segments whose frame numbers
+        # are larger than the required frame number, the searching process could terminate.
+        # NOTE: the claims above requires packets sorted.
+        no_further_search = False
+        for packet in self._upper_packets:
+            if packet.abs_frame_number >= lower_abs_frame_number:
+                # Search all the segments of the packet, and find if there are the required segment
+                possible_no_further_search = False
+                for abs_segment_frame_number, segment_size in packet.segments.items():
+                    if abs_segment_frame_number == lower_abs_frame_number:
+                        # When the packet contains the lower_abs_frame_number, check if there are segment numbers larger than it
+                        # for early termination.
+                        possible_no_further_search = True
+                        span[packet.abs_frame_number] = span.setdefault(packet.abs_frame_number, 0) + segment_size
+
+                if possible_no_further_search:
+                    for frame_number in packet.segments.keys():
+                        if frame_number > lower_abs_frame_number:
+                            no_further_search = True 
+                            break
+            
+            if no_further_search:
+                break
+
+        return span
+
 
 PROTOCOL_REASSEMBLE_FIELD = {
     "tls": "tls_segments",
     "tcp": "tcp_segments",
-    "vmess": "vmess_segments",
+    "vmess": "vmess_fragments",
 }
 
 class CellExtractor(object):
@@ -444,7 +640,7 @@ class CellExtractor(object):
         return self._name
     
     def layer_extract(self, layer, frame_number: int, lower_protocol) -> Cell:
-        cell = Cell(self.name, frame_number)
+        cell = Cell(upper_protocol=self.name, lower_protocol=lower_protocol, abs_frame_number=frame_number)
         
         if lower_protocol is not None and layer.layer_name == "DATA":
             # Make tls_segments to more generic.
@@ -484,16 +680,12 @@ class CellExtractor(object):
             in a protocol stack, whose reassemble info is not needed or not implemented.
         """
         lower_protocol = lower_protocol.lower()
-        layers = layer_extractor(pkt, self.name, lower_protocol)
-        filtered_layers = seq_filter(layers, lower_protocol)
+        filtered_layers = seq_filter(layer_extractor(pkt, self.name, lower_protocol), lower_protocol)
         cells = []
 
         for layer in filtered_layers:
             cell = self.layer_extract(layer, int(pkt.number), lower_protocol)
             cells.append(cell)
-
-        # Defer the sorting work to the Cell instead of layers.
-        cells.sort()
         
         return cells
     
@@ -514,6 +706,14 @@ class TLSCellExtractor(CellExtractor):
         return super().extract(pkt, lower_protocol)
     
 
+class VMessCellExtractor(CellExtractor):
+    def __init__(self):
+        self._name = "vmess"
+
+    def extract(self, pkt, lower_protocol='tcp') -> List[Cell]:
+        return super().extract(pkt, lower_protocol)
+    
+
 class TCPCellExtractor(CellExtractor):
     def __init__(self):
         self._name = "tcp"
@@ -525,23 +725,30 @@ class TCPCellExtractor(CellExtractor):
 PROCOCOL_CELL_EXTRACTOR = {
     "tcp": TCPCellExtractor(),  
     "tls": TLSCellExtractor(),
+    "vmess": VMessCellExtractor(),
     "http2": HTTP2CellExtractor(),
 }
+
+DATA_LAYER_MARKER = {'tcp': 'tcp_segments', 'tls': 'tls_segments', 'vmess': 'vmess_fragments'}
 
 
 def layer_extractor(pkt, upper_protocol, lower_protocol):
     """
-    Extract all layers of the given protocol, if the layer is built upon a DATA layer, 
-    prepend the DATA layer to the layer list. Caller is responsible to ensure that
-    the order of upper_protocol and lower_protocol is correct. Moreover, caller is
-    responsible to ensure the continuity of upper_protocol and lower_protocol.
+    In PyShark, the reassembly information is wrapped in the DATA layer, which is a fake-field-wrapper. When there are multiple upper layers, multiple DATA layer might be used. For example, given a packet TCP/TLS/HTTP2, there are 3 possible cases, we list the corresponding layers for each of them:
+
+    + 1. The TLS layer is reassembled, but HTTP2 layer is not (TCP/DATA/TLS/HTTP2/DATA);
+    + 2. The TLS layer is not reassembled, but HTTP2 layer is (TCP/TLS/DATA/HTTP2/DATA);
+    + 3. Both TLS and HTTP2 layers are reassembled (TCP/DATA/TLS/DATA/HTTP2/DATA),
+
+    where the last DATA layer is for Lua-related information that should be ignored.
+
+    Extract all layers of the given protocol, if the layer is built upon a DATA layer, prepend the DATA layer to the layer list. Caller is responsible to ensure that the order of upper_protocol and lower_protocol is correct. Moreover, caller is responsible to ensure the continuity of upper_protocol and lower_protocol.
 
     For example, if the packet stack is TCP/TLS/HTTP2, the following params:
     {upper_protocol: 'http2', lower_protocol: 'tcp'},
     {upper_protocol: 'tls', lower_protocol: 'http2'},
 
-    will lead to unexpected behavior. Callee does not handle the above cases since in 
-    practice they are valid, e.g., HTTP tunnel may build TLS upon HTTP.
+    will lead to unexpected behavior. Callee does not handle the above cases since in practice they are valid, e.g., HTTP tunnel may build TLS upon HTTP.
 
     If the packet does not contain either upper_protocol or lower_protocol, return an empty list.
     """
@@ -556,12 +763,11 @@ def layer_extractor(pkt, upper_protocol, lower_protocol):
         return []  
     
     layers = []
-    data_layer_marker = {'tcp': 'tcp_segments', 'tls': 'tls_segments'}
 
     for layer in pkt.layers:
         # When upper_protocol == lower_protocol, no need to extract reassemble info
         if layer.layer_name == 'DATA' and upper_protocol != lower_protocol:
-            if data_layer_marker[lower_protocol] in layer.field_names:
+            if DATA_LAYER_MARKER[lower_protocol] in layer.field_names:
                 layers.append(layer)
         elif layer.layer_name == upper_protocol:
             layers.append(layer)
@@ -589,12 +795,12 @@ def seq_filter(seq, lower_protocol):
 
     to_remove = set()
 
-    for layer in seq:
+    for i, layer in enumerate(seq):
         if layer.layer_name == 'DATA':
-            for i in range(len(seq)):
-                if i not in to_remove and seq[i].layer_name != 'DATA':
+            for j in range(i + 1, len(seq)):
+                if j not in to_remove and seq[j].layer_name != 'DATA':
                     # Compute current layer size
-                    layer_size = PROTOCOL_BYTE_COUNTER[seq[i].layer_name].layer_count(seq[i])
+                    layer_size = PROTOCOL_BYTE_COUNTER[seq[j].layer_name].layer_count(seq[j])
                     data_layer_size = 0
                     # Compute DATA layer size
                     for _, segment_size in match_segment_number(
@@ -602,7 +808,8 @@ def seq_filter(seq, lower_protocol):
                         data_layer_size += segment_size
 
                     if layer_size == data_layer_size:
-                        to_remove.add(i)
+                        to_remove.add(j)
+                        break
 
     new_seq = [seq[i] for i in range(len(seq)) if i not in to_remove]
     return new_seq
@@ -616,6 +823,162 @@ def match_segment_number(s: str):
     res = [(int(idx), int(size)) for idx, size in results]
     return res
 
+
+def cross_layer_segment_merge_single_cell():
+    pass
+
+def cross_layer_segment_merge():
+    pass
+
+def anchor_line(seq: list)-> list:
+    """
+    Given a list of positive numbers, return a list of anchor points. Suppose the input list is [x_0, x_2, ..., x_{n-1}],
+    the anchor points a_0, a_1, ..., a_n are computed as follows:
+    1. a_0 = 0;
+    2. a_i = a_{i-1} + x_{i-1}, for i = 1, 2, ..., n.
+    """
+    anchor_points = [0]
+    cur_anchor = 0
+    for number in seq:
+        cur_anchor += number
+        anchor_points.append(cur_anchor)
+    return anchor_points
+
+def find_anchor_indices(anchor_list: list, base: int) -> int:
+    """
+    Find the index of the point in anchor list that is the largest element less than or equal to the base.
+    
+    Args:
+        anchor_list: List of anchor points (must be non-decreasing)
+        base: The base point (must be non-negative and less than last anchor point)
+        
+    Returns:
+        int: The index of the largest element <= base
+            
+    Raises:
+        ValueError: If input constraints are violated
+    """
+    if not anchor_list:
+        raise ValueError("Anchor list cannot be empty")
+    if base < 0:
+        raise ValueError("Base must be non-negative")
+    if base >= anchor_list[-1]:
+        raise ValueError("Base must be less than the last anchor point")
+        
+    idx = 0
+    for i, anchor in enumerate(anchor_list):
+        if anchor <= base:
+            idx = i
+        else:
+            break
+    return idx
+
+def line_merge_single_packet(upper_line: Line, lower_line: Line, upper_packet_frame_number: int) -> Packet:
+    """
+    For a given packet within the line, find its reassemble info in across the lines, and create
+    the new packet representing the cross-layer reassemble info.
+    """
+    def span_range(span: dict, upper_packet_frame_number: int) -> Tuple[int, int]:
+        """
+        Given the span of a middle packet, find the byte range it spans for the given upper packet.
+        """
+        upper_segment_sizes = []
+        span_start_idx = span_end_idx = 0
+        for idx, (upper_segment_frame_number, upper_segment_size) in enumerate(sorted(span.items())):
+            upper_segment_sizes.append(upper_segment_size)
+            if upper_segment_frame_number == upper_packet_frame_number:
+                span_start_idx = idx
+                span_end_idx = idx + 1
+                break
+        
+        bases = anchor_line(upper_segment_sizes)
+        span_start, span_end = bases[span_start_idx], bases[span_end_idx]
+        return span_start, span_end
+
+    NEXT_INDEX_OFFSET = 1
+    packet = Packet()
+    segments = packet.segments
+    packet.abs_frame_number = upper_packet_frame_number
+    packet.upper_protocol, packet.lower_protocol = upper_line.upper_protocol, lower_line.lower_protocol
+    upper_seg = upper_line.seg(upper_packet_frame_number)
+    for middle_segment_frame_number in upper_seg:
+        middle_seg = lower_line.seg(middle_segment_frame_number)
+        middle_span = upper_line.span(middle_segment_frame_number)
+        # Create base sequence, and find the start and end byte index in the span.
+        span_start, span_end = span_range(middle_span, upper_packet_frame_number)
+
+        sorted_middle_keys = sorted(middle_seg.keys())
+        # Create anchor sequence
+        anchors = anchor_line([middle_seg[key] for key in sorted_middle_keys])
+        anchor_start_idx, anchor_end_idx = find_anchor_indices(anchors, span_start), find_anchor_indices(anchors, span_end)
+        first_segment_number = sorted_middle_keys[anchor_start_idx]
+        last_segment_number = sorted_middle_keys[anchor_end_idx]
+        # If anchor_start_idx == anchor_end_idx, such case is illustrated in the following figure:
+        # + represents the anchor points;
+        # * represents the bases;
+        # 0 represents the starting point of bases and anchors.
+        #
+        #    target_base_idx  target_base_idx + 1
+        # 0-----------------------*--------------*--------------------*-----------*
+        # 
+        #    anchor_end_idx
+        #   anchor_start_idx  span_start     span_end
+        # 0--------+--------------^--------------^------+------------------------------------+----------+
+        #                         |--------------|
+        #                           segment_size    
+        #
+        # In this case, only one segment (span_end - span_start) is needed.
+        if anchor_start_idx == anchor_end_idx:
+            segments[first_segment_number] = segments.setdefault(first_segment_number, 0) + (span_end - span_start)
+            continue
+
+        # Compute the number of entire segments in the span, note that the first entire segment, if any, must start
+        # at the point right after anchor_start_idx, so we need to add 1 to the anchor_start_idx when computing the
+        # number of entire segments.
+        entire_segments_num = anchor_end_idx - (anchor_start_idx + NEXT_INDEX_OFFSET)
+        for i in range(entire_segments_num):
+            # Append the reassemble info for entire segments to the packet
+            lower_segment_frame_number = sorted_middle_keys[anchor_start_idx + NEXT_INDEX_OFFSET + i]
+            lower_segment_size = middle_seg[lower_segment_frame_number]
+            segments[lower_segment_frame_number] = segments.setdefault(lower_segment_frame_number, 0) + lower_segment_size
+
+        # Append the reassemble info for partial segments to the packet
+        # Like in the case of the first entire segment, the size of the first segment is computed left-to-right,
+        # which means we should compute the distance between the span_start and the point right after anchor_start_idx.
+        # We illustrate the case in the following figure:
+        #
+        #                    target_base_idx                           target_base_idx + 1
+        # 0----------*--------------*--------------------------------------------*-----------*
+        # 
+        #                               (also anchor_end_idx + 1 in this case)
+        #   anchor_start_idx   span_start            anchor_end_idx          span_end
+        # 0--------+----------------^----------------------+---------------------^--------------+----------+
+        #                           |----------------------|---------------------|
+        #                              first_segment_size     last_segment_size
+        # Therefore, the segments are segments[sorted(middle_seg.keys())[anchor_start_idx]] = first_segment_size
+        # and segments[sorted(middle_seg.keys())[anchor_end_idx]] = last_segment_size.
+        #
+        first_segment_size = anchors[anchor_start_idx + NEXT_INDEX_OFFSET] - span_start
+        last_segment_size = span_end - anchors[anchor_end_idx]
+        segments[first_segment_number] = segments.setdefault(first_segment_number, 0) + first_segment_size
+        segments[last_segment_number] = segments.setdefault(last_segment_number, 0) + last_segment_size
+        
+    return packet
+    
+def line_merge(upper_line: Line, lower_line: Line) -> Line:
+    """
+    Merge two lines with adjacent protocol stack, and create a new line for cross-layer segmentation 
+    analysis.
+
+    COMMENT: Shall we make this method a method of Line class? In other words, shall we change the upper_line
+    to a new line or create a new line?
+    """
+    assert upper_line.lower_protocol == lower_line.upper_protocol, f"Not adjacent lines, upper_line.lower_protocol is {upper_line.lower_protocol}, lower_line.upper_protocol is {lower_line.upper_protocol}"
+    merged_packets = [
+        line_merge_single_packet(upper_line, lower_line, frame_number) for frame_number in upper_line.upper_packet_frame_numbers]
+    
+    return Line(upper_packets=merged_packets, lower_abs_frame_numbers=lower_line.lower_abs_frame_numbers)
+    
 def get_adjacent_protocol_reassemble_info(cap: pyshark.FileCapture, upper_protocol: str, lower_protocol: str) -> Line:
     """
     Extract the reassemble information for each packet given the adjacent upper_protocol and lower_protocol, e.g.,
@@ -624,35 +987,29 @@ def get_adjacent_protocol_reassemble_info(cap: pyshark.FileCapture, upper_protoc
     upper_protocol = upper_protocol.lower()
     lower_protocol = lower_protocol.lower()
 
-    upper_cells = []
+    upper_packets = []
+    lower_abs_frame_numbers = []
 
     for pkt in cap:
         if upper_protocol in pkt:
-            upper_cells += PROCOCOL_CELL_EXTRACTOR[upper_protocol].extract(pkt, lower_protocol=lower_protocol)
+            packet = Packet(PROCOCOL_CELL_EXTRACTOR[upper_protocol].extract(pkt, lower_protocol=lower_protocol))
+            upper_packets.append(packet)
+        if lower_protocol in pkt:
+            lower_abs_frame_numbers.append(int(pkt.number))
 
-    line = Line(
-        upper_protocol=upper_protocol, 
-        upper_cells=upper_cells, 
-        )
+
+    line = Line(upper_packets=upper_packets, lower_abs_frame_numbers=lower_abs_frame_numbers)
+    
+    if not line.continunity_check():
+        raise ValueError("Discontinuous line")
 
     return line
 
-def get_reassemble_info(cap: pyshark.FileCapture, protocol_stack: List[str] = ['TCP', 'TLS',]): 
+def get_reassemble_info(cap: pyshark.FileCapture, protocol_stack: List[str] = ['http2', 'tls', 'tcp']) -> Line: 
     """
-    Extract the reassemble information for each packet given the protocol stack. In PyShark, the reassembly information is wrapped in the DATA layer, which is a fake-field-wrapper. When there are multiple upper layers, multiple DATA layer might be used. For example, given a packet TCP/TLS/HTTP2, there are 3 possible cases, we list the corresponding layers for each of them:
+    Extract the reassemble information for each packet given the protocol stack, and return the line of reassemble info.
 
-    + 1. The TLS layer is reassembled, but HTTP2 layer is not (TCP/DATA/TLS/HTTP2/DATA);
-    + 2. The TLS layer is not reassembled, but HTTP2 layer is (TCP/TLS/DATA/HTTP2/DATA);
-    + 3. Both TLS and HTTP2 layers are reassembled (TCP/DATA/TLS/DATA/HTTP2/DATA),
-
-    where the last DATA layer is for Lua-related information that should be ignored.
-
-    However, for protocols above the transport layer, there might be multiple layers for the same protocol, e.g.,
-    TCP/DATA/TLS/TLS/TLS/DATA/HTTP2/HTTP2. 
-                  ^   ^         ^     ^
-
-    One could deduce that for a given protocol, reassembly would only happen at the its first layer. Therefore, we
-    need to separately handle the remaining layers (marked with ^).
+    Note that the caller is responsible to ensure that the protocol stack is valid, since many protocol stack that are less common are actually valid with respect to the RFC docs, which might be used for some special purposes, e.g., proxy.
 
 
     TODO: Add support to UDP stack.
@@ -662,57 +1019,24 @@ def get_reassemble_info(cap: pyshark.FileCapture, protocol_stack: List[str] = ['
     cap: pyshark.FileCapture
         The capture file.
     protocol_stack: List[str]
-        The ordered list of protocols, the first one is the lower bound of the stack, the last one the upper bound.
+        The ordered list of protocols, the first one is the upper bound of the stack, the last one the lower bound.
         For example, for a protocol stack TCP/VMess/TLS/HTTP2, if we want to extract all the layer reassembly, one
-        should set the protocol_stack to ['TCP', 'VMess', 'TLS', 'HTTP2'].
+        should set the protocol_stack to ['http2', 'tls', 'vmess', 'tcp'].
 
     Returns 
     ------- 
-    res_dict: dict, {K: [v1, ...], ...} 
-        K is the packet index in the same form of Wireshark, namely, starts from 1. 
-        [v1, ...] denotes the reassembled indices, whose values will be K in turn and have the same reassembled list. 
-        For example, {1: [1, 2], 2: [1, 2]}. 
+    Line
+        The line of reassemble info.
     """
-    # res_dict = {} # {index: [reassemble packets]}
-    # for i in tqdm(range(packet_count(cap)), "get reassemble info"): 
-    #     if cap[i].transport_layer == 'TCP': # ignore the UDP based protocols 
-    #         frame_num = int(cap[i].frame_info.get_field('number')) # get the number of frame
-    #         res_dict[frame_num] = [] # init i-th position as empty 
-    #         segment_index = [] 
-    #         # print(f'${i}$: ${pcap[i].layers}')
-    #         for layer in cap[i].layers: 
-    #             if layer.layer_name == 'DATA': # fake-field-wrapper is renamed to data in pyshark
-    #                 for field in layer.field_names: 
-    #                     if field == 'tcp_segments': # reassemble will appearance in the last packet
-    #                         field_obj = layer.get_field(field) 
-    #                         content = field_obj.main_field.get_default_value() 
-    #                         segment_index.extend(match_segment_number(content)) 
-    #         for index in segment_index: # cover related values with its reassemble info
-    #             res_dict[index] = segment_index 
+    # Fetch 2 consecutive protocols from the protocol stack
+    merged_line = None
+    for i in range(len(protocol_stack) - 1):
+        upper_protocol = protocol_stack[i]
+        lower_protocol = protocol_stack[i + 1]
+        line = get_adjacent_protocol_reassemble_info(cap, upper_protocol, lower_protocol)
+        if merged_line is None:
+            merged_line = line
+        else:
+            merged_line = line_merge(merged_line, line)
     
-    # return res_dict
-    res_dict = {protocol: [] for protocol in protocol_stack} # {index: [reassemble packets]}
-    cell_extractor = CellExtractor()
-    for pkt in cap: 
-        # for protocol in protocol_stack: 
-        #     if protocol in pkt:
-        #         res_dict[protocol].extend(cell_extractor.extract(pkt, protocol))
-        # if protocol in pkt:
-        #     frame_num = int(pkt.frame_info.get_field('number')) # get the number of frame
-        #     res_dict[frame_num] = [] # init i-th position as empty 
-        #     segment_index = [] 
-        #     # print(f'${i}$: ${pcap[i].layers}')
-        #     for layer in pkt.layers: 
-        #         if layer.layer_name == 'DATA': # fake-field-wrapper is renamed to data in pyshark
-        #             for field in layer.field_names: 
-        #                 if field == 'tcp_segments': # reassemble will appearance in the last packet
-        #                     field_obj = layer.get_field(field) 
-        #                     content = field_obj.main_field.get_default_value() 
-        #                     segment_index.extend(match_segment_number(content)) 
-        #     for index in segment_index: # cover related values with its reassemble info
-        #         res_dict[index] = segment_index 
-        frame_num = int(pkt.frame_info.get_field('number'))
-        if frame_num == 58:
-            pass
-    
-    return res_dict
+    return merged_line

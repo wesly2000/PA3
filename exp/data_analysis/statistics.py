@@ -22,7 +22,7 @@ def tls_stat(base_dir_path : Path, SNIs, keylog_file):
         if file.is_file() and file.suffix in ['.pcapng', '.pcap']:
             idx = str(file).split('.')[-2].split('_')[-1]  # Only the index of the filename is needed.
             pkt_count, byte_count = 0, 0
-            tcp_stream, _ = h2data_SNI_intersect(file, SNIs, keylog_file=keylog_file, custom_parameters={"-C": "Customized"})
+            tcp_stream = h2data_SNI_intersect(file, SNIs, keylog_file=keylog_file, custom_parameters={"-C": "Customized"})
             tcp_stream_filter = stream_extract_filter(tcp_stream, [])
             display_filter = "tls" + " and " + tcp_stream_filter
             if tcp_stream_filter == "":
@@ -57,7 +57,7 @@ def tcp_stat(base_dir_path : Path, SNIs, keylog_file):
             idx = str(file).split('.')[-2].split('_')[-1]  # Only the index of the filename is needed.
             pkt_count, byte_count = 0, 0
 
-            tcp_stream, _ = h2data_SNI_intersect(file, SNIs, keylog_file=keylog_file, custom_parameters={"-C": "Customized"})
+            tcp_stream = h2data_SNI_intersect(file, SNIs, keylog_file=keylog_file, custom_parameters={"-C": "Customized"})
             tcp_stream_filter = stream_extract_filter(tcp_stream, [])
             display_filter = tcp_stream_filter
             if tcp_stream_filter == "":
@@ -116,7 +116,7 @@ def http2_stat(base_dir_path : Path, SNIs, keylog_file):
     for file in sorted(base_dir_path.iterdir()):
         if file.is_file() and file.suffix in ['.pcapng', '.pcap']:
             idx = str(file).split('.')[-2].split('_')[-1]  # Only the index of the filename is needed.
-            tcp_stream, _ = h2data_SNI_intersect(file, SNIs, keylog_file=keylog_file, 
+            tcp_stream = h2data_SNI_intersect(file, SNIs, keylog_file=keylog_file, 
                                                  custom_parameters=["-C", "Customized", "-2"])
             tcp_stream_filter = stream_extract_filter(tcp_stream, [])
             if tcp_stream_filter == "":
@@ -158,7 +158,7 @@ def http3_stat(base_dir_path : Path, SNIs, keylog_file):
         if file.is_file() and file.suffix in ['.pcapng', '.pcap']:
             idx = str(file).split('.')[-2].split('_')[-1]  # Only the index of the filename is needed.
 
-            _, udp_stream = h3data_SNI_intersect(file, SNIs, keylog_file=keylog_file, 
+            udp_stream = h3data_SNI_intersect(file, SNIs, keylog_file=keylog_file, 
                                                  custom_parameters=["-C", "Customized", "-2"])
             udp_stream_filter = stream_extract_filter([], udp_stream)
             if udp_stream_filter == "":

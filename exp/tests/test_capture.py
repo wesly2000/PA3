@@ -138,8 +138,19 @@ def test_h2data_SNI_intersect_1():
     '''
     SNIs = ["is1-ssl.mzstatic.com"]
     keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
-    tcp_stream_numbers, _ = h2data_SNI_intersect(file=apple_file, SNIs=SNIs, keylog_file=keylog_file)
+    tcp_stream_numbers = h2data_SNI_intersect(file=apple_file, SNIs=SNIs, keylog_file=keylog_file)
     target = {'0'}
+
+    assert tcp_stream_numbers == target
+
+def test_h2data_SNI_intersect_2():
+    '''
+    This test covers the a non-existent SNI, and the result should be empty.
+    '''
+    SNIs = ["is1-ssl.mzstatic"]
+    keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
+    tcp_stream_numbers = h2data_SNI_intersect(file=apple_file, SNIs=SNIs, keylog_file=keylog_file)
+    target = set()
 
     assert tcp_stream_numbers == target
 
@@ -149,8 +160,32 @@ def test_h3data_SNI_intersect_1():
     '''
     SNIs = ["lf16-cdn-tos.tiktokcdn-us.com"]
     keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
-    _, udp_stream_numbers = h3data_SNI_intersect(file=tiktok_file, SNIs=SNIs, keylog_file=keylog_file)
+    udp_stream_numbers = h3data_SNI_intersect(file=tiktok_file, SNIs=SNIs, keylog_file=keylog_file)
 
     target = {'0'}
 
     assert udp_stream_numbers == target
+
+def test_h3data_SNI_intersect_2():
+    '''
+    This test covers the a non-existent SNI, and the result should be empty.
+    '''
+    SNIs = ["lf16-cdn-tos.tiktokcdn-us."]
+    keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
+    udp_stream_numbers = h3data_SNI_intersect(file=tiktok_file, SNIs=SNIs, keylog_file=keylog_file)
+
+    target = set()
+
+    assert udp_stream_numbers == target
+
+def test_select_stream_with_max_packet_count():
+    """
+    This test covers the selection of the stream with the maximum packet count.
+    """
+    tcp_stream_numbers = {'1', '2', '3'}
+    result = select_stream(apple_file, tcp_stream_numbers, mapper=packet_count, criteria=max)
+
+    target = {'3'}
+
+    assert result == target
+    

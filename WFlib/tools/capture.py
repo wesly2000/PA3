@@ -23,7 +23,7 @@ import time
 import threading
 import multiprocessing
 import subprocess
-from typing import Union, Tuple, Any
+from typing import Union, Tuple, Callable, List
 from pathlib import Path
 from urllib.parse import urlparse
 import os
@@ -152,7 +152,7 @@ def read_host_list(file) -> list:
         else:
             return url
         
-    host_list = []
+    host_list = set()  # Use set to eliminate dups
     with open(file, 'r') as f:
         for line in f:
             stripped_line = line.strip()  # Remove leading and trailing whitespace
@@ -162,7 +162,7 @@ def read_host_list(file) -> list:
             url = stripped_line.split("#")[0].strip() # Ignore inline comments
             hostname = strip_url(url.strip())
             if hostname and hostname not in host_list:
-                host_list.append(hostname)
+                host_list.add(hostname)
 
     return host_list
 
@@ -430,10 +430,58 @@ def stream_exclude_filter(tcp_stream_numbers : Union[list, set], udp_stream_numb
 
     return display_filter
 
+def select_stream(pcap_file: Union[str, Path], 
+                  stream_numbers: set, 
+                  mapper: Callable[[Capture], int],
+                  criteria: Callable[[List[int]], int],
+                  proto: str = "tcp", **extra_data) -> set:
+    """
+    Select a stream from the given.pcap(ng) file. The selection is based on the given criteria over the property of the stream. 
+    The property is obtained using the mapper.
+
+    Params
+    ------
+    pcap_file : str
+        The file path to the.pcap(ng) file.
+
+    stream_numbers : set
+        The set of stream numbers to select from.
+
+    mapper : Callable[[Capture], int]
+        The mapper to obtain the property of the stream. Currently, the property could only be integers.
+
+    proto : str
+        The protocol of the stream. Currently, only "tcp" and "udp" are supported.
+
+    criteria : Callable[[List[int]], int]
+        The criteria to select the stream. The criteria is a function that takes a list of integers as input, and returns the index of the stream to select.
+
+    Returns
+    -------
+    set : The set contains ONE stream number which has the best property judged by criteria.
+    """
+    if proto not in ["tcp", "udp"]:
+        raise ValueError("proto must be either 'tcp' or 'udp'")
+    
+    if len(stream_numbers) <= 1:  # If the candidates are less than 2, no need to select.
+        return stream_numbers
+    
+    stream_property = dict()
+    for stream_number in stream_numbers:
+        stream_filter = f"{proto}.stream == " + stream_number
+        cap = pyshark.FileCapture(input_file=pcap_file, display_filter=stream_filter, **extra_data)
+        stream_property[mapper(cap)] = stream_number
+        cap.close()
+
+    selected_property = criteria(list(stream_property.keys()))
+    selected_stream_number = stream_property[selected_property]
+    # Don't use set("something"), which causing {'s', 'o', ..., 'g'}
+    # Instead, use set(["something"])
+    return set([selected_stream_number])
+
 def contains_SNI(SNIs, pkt):
     if SNIs is None or len(SNIs) == 0:
         return False
-    result = False
 
     if 'TLS' in pkt:
         tls_layer = pkt['TLS']
@@ -448,9 +496,9 @@ def contains_SNI(SNIs, pkt):
             if SNI in SNIs:
                 return True
             
-    return result
+    return False
 
-def SNI_exclude_filter(file, SNIs):
+def SNI_exclude_filter(file, SNIs, custom_parameters = None, override_prefs = None):
     """
     Create a display filter for the given .pcap file which exclude all the TCP streams that contains the SNI in SNIs.
 
@@ -469,61 +517,85 @@ def SNI_exclude_filter(file, SNIs):
     """
     if SNIs is None or len(SNIs) == 0:
         return None
-    client_hello_capture = pyshark.FileCapture(input_file=file, display_filter="tls.handshake.type == 1")
-    tcp_stream_numbers, udp_stream_numbers = stream_number_extract(capture=client_hello_capture, check=lambda pkt: contains_SNI(SNIs, pkt))
-    client_hello_capture.close()
+    
+    tcp_stream_numbers, udp_stream_numbers = SNI_stream_extract(file, SNIs, custom_parameters, override_prefs)
     display_filter = stream_exclude_filter(tcp_stream_numbers, udp_stream_numbers)
     return display_filter
 
-def h2data_SNI_intersect(file, SNIs, keylog_file, custom_parameters = None, override_prefs = None) -> Tuple[set, set]:
+def SNI_stream_extract(file, SNIs, custom_parameters = None, override_prefs = None) -> Tuple[set, set]:
+    """
+    Util function: for a given file, extract the TCP/UDP streams satisfying:
+    1. It is the TLS stream with given SNIs;
+
+    Params
+    ------
+    file : str
+        The file path to the.pcap(ng) file.
+
+    SNIs : list
+        The target SNIs, each TCP stream containing the SNI is included.
+
+    Returns
+    -------
+    The sets contains the TCP and UDP stream numbers, respectively.
+    """
+    client_hello_capture = pyshark.FileCapture( input_file=file, 
+                                                display_filter="tls.handshake.type == 1", 
+                                                custom_parameters=custom_parameters,
+                                                override_prefs=override_prefs)
+    tcp_stream_numbers, udp_stream_numbers = stream_number_extract(capture=client_hello_capture, check=lambda pkt: contains_SNI(SNIs, pkt))
+    client_hello_capture.close()
+
+    return tcp_stream_numbers, udp_stream_numbers
+
+def h2data_SNI_intersect(file, SNIs, keylog_file, custom_parameters = None, override_prefs = None) -> set:
     """
     Util function: for a given file, extract the TCP/UDP streams satisfying:
     1. It is the TLS stream with given SNIs;
     2. It contains HTTP/2 DATA frames.
 
-    If override_prefs is given, keylog_file will be surpressed.
+    If override_prefs is given, keylog_file will be suppressed.
     """
-    capture_tls = pyshark.FileCapture(input_file=file, 
-                                      display_filter="tls.handshake.type == 1", 
-                                      custom_parameters=custom_parameters,
-                                      override_prefs=override_prefs)
-    tcp_stream_numbers_tls, udp_stream_numbers_tls = stream_number_extract(capture=capture_tls, check=lambda pkt: contains_SNI(SNIs, pkt))
-    capture_tls.close()
+    # HTTP/2 runs atop of TCP, no need to concern about UDP streams
+    tcp_stream_numbers_tls, _ = SNI_stream_extract(file, SNIs, custom_parameters, override_prefs)
 
-    SNI_filter = stream_extract_filter(tcp_stream_numbers_tls, udp_stream_numbers_tls)
-    
-    capture_h2data = pyshark.FileCapture(input_file=file, 
-                                         display_filter=f"({SNI_filter}) and http2.type == 0",
-                                         custom_parameters=custom_parameters,
-                                         override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)} if override_prefs is None else override_prefs)
-    tcp_stream_numbers_h2data, udp_stream_numbers_h2data = stream_number_extract(capture=capture_h2data, check=lambda _: True)
-    capture_h2data.close()
+    tcp_stream_numbers_h2data = set()
+    for tcp_stream_number in tcp_stream_numbers_tls:
+        capture_h2data = pyshark.FileCapture(input_file=file, 
+                                            display_filter=f"tcp.stream eq {tcp_stream_number} and http2.type == 0",
+                                            only_summaries=True,
+                                            custom_parameters=custom_parameters,
+                                            override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)} if override_prefs is None else override_prefs)
+        for _ in capture_h2data:
+            # If it enters the loop, the stream must contains at least one HTTP/2 DATA frame
+            tcp_stream_numbers_h2data.add(tcp_stream_number)
+            break
+        capture_h2data.close()
 
-    return tcp_stream_numbers_h2data & tcp_stream_numbers_tls, udp_stream_numbers_h2data & udp_stream_numbers_tls
+    return tcp_stream_numbers_h2data
 
-def h3data_SNI_intersect(file, SNIs, keylog_file, custom_parameters = None, override_prefs = None) -> Tuple[set, set]:
+def h3data_SNI_intersect(file, SNIs, keylog_file, custom_parameters = None, override_prefs = None) -> set:
     """
     Util function: for a given file, extract the TCP/UDP streams satisfying:
     1. It is the QUIC stream with given SNIs;
     2. It contains HTTP/3 DATA frames.
 
-    If override_prefs is given, keylog_file will be surpressed.
+    If override_prefs is given, keylog_file will be suppressed.
     """
     # Note that Client Hello is embedded in QUIC, so we need to use tls.handshake.type == 1 to filter.
-    capture_quic = pyshark.FileCapture(input_file=file, 
-                                      display_filter="tls.handshake.type == 1", 
-                                      custom_parameters=custom_parameters,
-                                      override_prefs=override_prefs)
-    tcp_stream_numbers_quic, udp_stream_numbers_quic = stream_number_extract(capture=capture_quic, check=lambda pkt: contains_SNI(SNIs, pkt))
-    capture_quic.close()
+    # HTTP/3 runs atop of UDP, no need to concern about TCP streams
+    _, udp_stream_numbers_quic = SNI_stream_extract(file, SNIs, custom_parameters, override_prefs)
 
-    SNI_filter = stream_extract_filter(tcp_stream_numbers_quic, udp_stream_numbers_quic)
-    
-    capture_h3data = pyshark.FileCapture(input_file=file, 
-                                         display_filter=f"({SNI_filter}) and http3.frame_type == 0",
-                                         custom_parameters=custom_parameters,
-                                         override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)} if override_prefs is None else override_prefs)
-    tcp_stream_numbers_h3data, udp_stream_numbers_h2data = stream_number_extract(capture=capture_h3data, check=lambda _: True)
-    capture_h3data.close()
+    udp_stream_numbers_h3data = set()
+    for udp_stream_number in udp_stream_numbers_quic:
+        capture_h3data = pyshark.FileCapture(input_file=file, 
+                                            display_filter=f"udp.stream eq {udp_stream_number} and http3.frame_type == 0",
+                                            custom_parameters=custom_parameters,
+                                            override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)} if override_prefs is None else override_prefs)
+        for pkt in capture_h3data:
+            if 'http3' in pkt:
+                udp_stream_numbers_h3data.add(udp_stream_number)
+                break
+        capture_h3data.close()
 
-    return tcp_stream_numbers_h3data & tcp_stream_numbers_quic, udp_stream_numbers_h2data & udp_stream_numbers_quic
+    return udp_stream_numbers_h3data

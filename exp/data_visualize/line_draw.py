@@ -1,55 +1,62 @@
-import pyshark
-import os
+
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
+import os
+import argparse
+import seg_compute
 
-from WFlib.tools.visualize import *
-from WFlib.tools.capture import *
-from WFlib.tools.analyzer import *
+avg_color_map = {"Normal": "blue", "VMess": "green"}
+std_color_map = {"Normal": "yellow", "VMess": "purple"}
 
-def draw_byte_segment(avg_byte_segments: np.ndarray, std_byte_segments: np.ndarray, output_path: str):
+def draw_single_byte_segment(fig: plt.Figure, ax: plt.Axes, avg_byte_segments: np.ndarray, std_byte_segments: np.ndarray, proto: str):
     """
     Draw the byte segment array. The array is a list of segment index. The length of the list is the cutoff.
     """
-    plt.figure(figsize=(12, 6))
-    plt.plot(avg_byte_segments, '-', linewidth=1, color='blue', label='Average')
-    plt.plot(std_byte_segments, '-', linewidth=1, color='red', label='Standard Deviation')
+    ax.plot(avg_byte_segments, '-', linewidth=1, color=avg_color_map[proto], label=f"{proto} Avg")
+    ax.plot(std_byte_segments, '-', linewidth=1, color=std_color_map[proto], label=f"{proto} Std")
+
+
+def draw_byte_segment(input_root: str, host: str, sni: str, base: str, output_root: str):
+    """
+    Draw the byte segment array. The array is a list of segment index. The length of the list is the cutoff.
+    """
+    fig, ax = plt.subplots(figsize=(12, 6))
+    fig.suptitle('Byte Segment Map', fontdict={'size': 16})
+    for protocol in avg_color_map:
+        avg_array_path = Path(f"{output_root}/seg_compute/{base}/{protocol}/avg_{host}_{sni}.npy")
+        std_array_path = Path(f"{output_root}/seg_compute/{base}/{protocol}/std_{host}_{sni}.npy")
+        if avg_array_path.exists() and std_array_path.exists():
+            print("Array exists, use stored array.")
+            avg_byte_segments, std_byte_segments = np.load(avg_array_path), np.load(std_array_path)
+        else:
+            print("Array does not exist, start computing...")
+            seg_compute.main(input_root, protocol.lower(), host, sni, base, output_root)
+
+            avg_byte_segments, std_byte_segments = np.load(avg_array_path), np.load(std_array_path)
+            
+        draw_single_byte_segment(fig, ax, avg_byte_segments, std_byte_segments, protocol)
     
-    plt.xlabel('Byte Index')
-    plt.ylabel('Stream Relative Segment Index')
-    plt.title('Byte Segment Map')
+    ax.legend(loc='upper left')
+    ax.set_xlabel('Byte Index')
+    ax.set_ylabel('Relative Segment Index')
+    ax.set_title(f'Host: {host}, SNI: {sni}', fontsize=12)
+
+    output_path = f"{args.output_root}/line_draw/{base}/{args.host}_{args.sni}.pdf"
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+
     fig_format = output_path.split('.')[-1]
     plt.savefig(output_path, dpi=300, format=fig_format, bbox_inches='tight')
     plt.close()
 
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    # Flag argument
+    parser.add_argument("-i", "--input_root", required=True, type=str, help="The root directory of the capture and keylog")
+    parser.add_argument("-o", "--output_root", required=True, type=str, help="The root directory of the output")
+    parser.add_argument("-b", "--base", default="tls", type=str, help="The lowest layer protocol as the segment index")
+    parser.add_argument("--host", required=True, type=str, help="The host to analyze")
+    parser.add_argument("-s", "--sni", required=True, type=str, help="The SNI to analyze")
+    args = parser.parse_args()
 
-if __name__ == '__main__':
-    pcap_dir = Path("exp/normal_capture/www.apple.com")
-    # file = "exp/test_dataset/realworld_dataset/decryption/www.apple.com.pcapng"
-
-    # tcp_filter = "tcp.stream == 0"
-    keylog_file = "exp/normal_capture/www.apple.com/keylog.txt"
-    SNIs = ["is1-ssl.mzstatic.com"]
-    lines = []
-    for file in sorted(pcap_dir.iterdir()):
-        if file.is_file() and file.suffix in ['.pcapng', '.pcap']:
-            tcp_stream, _ = h2data_SNI_intersect(file, SNIs, keylog_file=keylog_file, custom_parameters={"-C": "Customized"})
-            tcp_stream_filter = stream_extract_filter(tcp_stream, [])
-            display_filter = tcp_stream_filter
-            if tcp_stream_filter == "":
-                continue
-
-            cap = pyshark.FileCapture(input_file=file, display_filter=tcp_stream_filter, 
-                                        custom_parameters=["-C", "Customized", "-2"],
-                                        override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
-            
-            lines.append(get_adjacent_protocol_reassemble_info(cap, upper_protocol="http2", lower_protocol="tls"))
-
-            cap.close()
-
-    byte_segments = generate_byte_segment(lines)
-    avg_byte_segments = np.mean(np.array(byte_segments), axis=0)
-    std_byte_segments = np.std(np.array(byte_segments), axis=0)
-
-    draw_byte_segment(avg_byte_segments, std_byte_segments, "exp/data_visualize/img/example.pdf")
+    draw_byte_segment(args.input_root, args.host, args.sni, args.base, args.output_root)
