@@ -289,11 +289,11 @@ class VMessByteCounter(ByteCounter):
         return cnt
     
 
-class SSByteCounter(ByteCounter):
+class ShadowsocksByteCounter(ByteCounter):
     TYPE_SALT = '1'
     TYPE_RELAY_HEADER = '2'
     TYPE_STREAM_DATA = '3'
-    def __init__(self, name='ss'):
+    def __init__(self, name='shadowsocks'):
         super().__init__(name)
         self.salt_len = 32  # The length of the salt
         # According to Clash Imple., Shadowsocks with AEAD contains a length field of size 2 for each relay header.
@@ -332,7 +332,7 @@ PROTOCOL_BYTE_COUNTER = {
     "tcp": TCPByteCounter(),
     "http2": HTTP2ByteCounter(),
     "vmess": VMessByteCounter(),
-    "ss": SSByteCounter(),
+    "shadowsocks": ShadowsocksByteCounter(),
 }
 
 class CaptureCounter():
@@ -515,9 +515,9 @@ class VMessCellExtractor(CellExtractor):
         return super().extract(pkt, lower_protocol)
     
 
-class SSCellExtractor(CellExtractor):
+class ShadowsocksCellExtractor(CellExtractor):
     def __init__(self):
-        self._name = "ss"
+        self._name = "shadowsocks"
 
     def extract(self, pkt, lower_protocol='tcp') -> List[Cell]:
         return super().extract(pkt, lower_protocol)
@@ -535,7 +535,7 @@ PROCOCOL_CELL_EXTRACTOR = {
     "tls": TLSCellExtractor(),
     "vmess": VMessCellExtractor(),
     "http2": HTTP2CellExtractor(),
-    "ss": SSCellExtractor(),
+    "shadowsocks": ShadowsocksCellExtractor(),
 }
                 
 class Packet():
@@ -776,9 +776,10 @@ PROTOCOL_REASSEMBLE_FIELD = {
     "tls": "tls_segments",
     "tcp": "tcp_segments",
     "vmess": "vmess_fragments",
+    "shadowsocks": "shadowsocks_msg_fragments"
 }
 
-DATA_LAYER_MARKER = {'tcp': 'tcp_segments', 'tls': 'tls_segments', 'vmess': 'vmess_fragments'}
+DATA_LAYER_MARKER = {'tcp': 'tcp_segments', 'tls': 'tls_segments', 'vmess': 'vmess_fragments', 'shadowsocks': 'shadowsocks_msg_fragments'}
 
 
 def layer_extractor(pkt, upper_protocol, lower_protocol):
@@ -804,7 +805,7 @@ def layer_extractor(pkt, upper_protocol, lower_protocol):
     upper_protocol = upper_protocol.lower()
     lower_protocol = lower_protocol.lower()
 
-    supported_protocols = ['tcp', 'tls', 'http2', 'vmess']
+    supported_protocols = ['tcp', 'tls', 'http2', 'vmess', 'shadowsocks']
     if upper_protocol not in supported_protocols or lower_protocol not in supported_protocols:
         raise ValueError(f"Unsupported protocol: only the following protocols are supported: {supported_protocols}")
     # Assure the packet protocol stack contains both upper and lower protocols.

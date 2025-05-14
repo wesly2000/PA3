@@ -32,7 +32,7 @@ skip_ss = pytest.mark.skipif(
     reason="Shadowsocks dissector not available, skip the test."
 )
 
-custom_parameters = ["-C", "Customized", "-2"]
+custom_parameters = ["-2"]
 
 
 @pytest.fixture
@@ -48,7 +48,7 @@ def capture_gen(request):
         display_filter = request.param['display_filter']
     else:
         display_filter = None
-    pcap_dir = f"exp/test_dataset/realworld_dataset/ss_capture/{host}"
+    pcap_dir = f"exp/test_dataset/realworld_dataset/shadowsocks_capture/{host}"
     if index is None:
         pcap_file =  os.path.join(pcap_dir, f"{host}.pcapng")
     else:

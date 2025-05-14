@@ -26,7 +26,7 @@ def default_override_prefs(protocol: str, keylog_file: str, proxy_keylog_file: s
     elif protocol == 'vmess':
         DEFAULT_OVERRIDE_PREFS['tls.keylog_file'] = keylog_file
         DEFAULT_OVERRIDE_PREFS['vmess.keylog_file'] = proxy_keylog_file
-    elif protocol == 'ss':
+    elif protocol == 'shadowsocks':
         DEFAULT_OVERRIDE_PREFS['tls.keylog_file'] = keylog_file
         DEFAULT_OVERRIDE_PREFS['shadowsocks.password'] = password
     return DEFAULT_OVERRIDE_PREFS
