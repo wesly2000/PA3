@@ -155,7 +155,7 @@ def test_line_rel_building_2(capture_gen):
     assert line.byte_counter == byte_counter and \
            cnt == line.byte_counter
     
-@pytest.mark.parametrize("capture_gen", [{'host': 'ai.zjnav.com', 'index': 1, 'display_filter': 'tcp.stream eq 2'}], indirect=True)
+@pytest.mark.parametrize("capture_gen", [{'host': 'ai.zjnav.com', 'index': 1, 'display_filter': 'tcp.stream eq 4'}], indirect=True)
 @skip_shadowsocks
 def test_line_rel_building_3(capture_gen):
     """
