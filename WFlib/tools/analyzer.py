@@ -502,7 +502,7 @@ class HTTP2CellExtractor(CellExtractor):
     def __init__(self):
         self._name = "http2"
 
-    def extract(self, pkt, lower_protocol="TLS") -> List[Cell]:
+    def extract(self, pkt, lower_protocol="tls") -> List[Cell]:
         return super().extract(pkt, lower_protocol)
     
 
@@ -510,7 +510,7 @@ class TLSCellExtractor(CellExtractor):
     def __init__(self):
         self._name = "tls"
 
-    def extract(self, pkt, lower_protocol="TCP") -> List[Cell]:
+    def extract(self, pkt, lower_protocol="tcp") -> List[Cell]:
         return super().extract(pkt, lower_protocol)
     
 
@@ -528,6 +528,7 @@ class ShadowsocksCellExtractor(CellExtractor):
 
     def extract(self, pkt, lower_protocol='tcp') -> List[Cell]:
         return super().extract(pkt, lower_protocol)
+    
 
 class TCPCellExtractor(CellExtractor):
     def __init__(self):
