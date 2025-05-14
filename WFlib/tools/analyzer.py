@@ -301,7 +301,7 @@ class SSByteCounter(ByteCounter):
         self.length_len = 2  
         self.port_len = 2  # The length of the port
         self.domain_type_len = 1  # The length of the domain type
-        self.domain_length_len = 2  # The size of the domain length
+        self.domain_length_len = 1  # The size of the domain length
 
     def layer_count(self, layer, extra_data = None) -> int:
         cnt = 0
@@ -310,9 +310,9 @@ class SSByteCounter(ByteCounter):
         elif layer.layer_type == self.TYPE_RELAY_HEADER:  
             # In AEAD mode of Clash Imple., the Shadowsocks length and request are encrypted separately, each of which
             # contains a 16-byte (AES-128-GCM, which is commonly used) authentication tag.
-            cnt += self.port_len + self.domain_type_len + self.domain_length_len + int(layer.domain_length) + CHACHA20_POLY1305_TAG_LEN + self.length_len + CHACHA20_POLY1305_TAG_LEN
+            cnt += self.port_len + self.domain_type_len + self.domain_length_len + int(layer.dst_addr_domainname_len) + CHACHA20_POLY1305_TAG_LEN + self.length_len + CHACHA20_POLY1305_TAG_LEN
         elif layer.layer_type == self.TYPE_STREAM_DATA:
-            cnt += self.length_len + int(layer.payload_length)
+            cnt += self.length_len + CHACHA20_POLY1305_TAG_LEN + int(layer.payload_length) + CHACHA20_POLY1305_TAG_LEN
         else:
             raise ValueError(f"Unknown Shadowsocks layer type: {layer.layer_type}")
 
