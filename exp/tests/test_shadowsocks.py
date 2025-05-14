@@ -96,4 +96,4 @@ def test_layer_extractor_1(capture_gen):
                     layers[0].layer_name == "DATA" and \
                     layers[1].layer_name == "tls" and \
                     layers[2].layer_name == "tls" and \
-                    DATA_LAYER_MARKER['shadowsocks'] in layers[0].field_names  # Assert we are extracting the correct DATA layer.
+                    PROTOCOL_REASSEMBLE_FIELD['shadowsocks'] in layers[0].field_names  # Assert we are extracting the correct DATA layer.

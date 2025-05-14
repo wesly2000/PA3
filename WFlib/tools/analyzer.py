@@ -10,6 +10,13 @@ from typing import List, Callable, Optional, Tuple
 AES_128_GCM_TAG_LEN = 16
 CHACHA20_POLY1305_TAG_LEN = 16
 
+PROTOCOL_REASSEMBLE_FIELD = {
+    "tls": "tls_segments",
+    "tcp": "tcp_segments",
+    "vmess": "vmess_fragments",
+    "shadowsocks": "shadowsocks_msg_fragments"
+}
+
 def feature_attr(model, attr_method, X, y, num_classes):
     """
     Calculate feature attributions for a given model using a specified attribution method.
@@ -770,17 +777,7 @@ class Line():
                 break
 
         return span
-
-
-PROTOCOL_REASSEMBLE_FIELD = {
-    "tls": "tls_segments",
-    "tcp": "tcp_segments",
-    "vmess": "vmess_fragments",
-    "shadowsocks": "shadowsocks_msg_fragments"
-}
-
-DATA_LAYER_MARKER = {'tcp': 'tcp_segments', 'tls': 'tls_segments', 'vmess': 'vmess_fragments', 'shadowsocks': 'shadowsocks_msg_fragments'}
-
+    
 
 def layer_extractor(pkt, upper_protocol, lower_protocol):
     """
@@ -817,7 +814,7 @@ def layer_extractor(pkt, upper_protocol, lower_protocol):
     for layer in pkt.layers:
         # When upper_protocol == lower_protocol, no need to extract reassemble info
         if layer.layer_name == 'DATA' and upper_protocol != lower_protocol:
-            if DATA_LAYER_MARKER[lower_protocol] in layer.field_names:
+            if PROTOCOL_REASSEMBLE_FIELD[lower_protocol] in layer.field_names:
                 layers.append(layer)
         elif layer.layer_name == upper_protocol:
             layers.append(layer)

@@ -98,11 +98,11 @@ def test_layer_extractor_1(capture_gen):
                     layers[2].layer_name == "http2" and \
                     layers[3].layer_name == "http2" and \
                     layers[4].layer_name == "http2" and \
-                    DATA_LAYER_MARKER['tls'] in layers[0].field_names  # Assert we are extracting the correct DATA layer.
+                    PROTOCOL_REASSEMBLE_FIELD['tls'] in layers[0].field_names  # Assert we are extracting the correct DATA layer.
             layers = layer_extractor(pkt, upper_protocol="tls", lower_protocol='vmess')
             assert len(layers) == 3 and \
                     layers[0].layer_name == "DATA" and \
-                    DATA_LAYER_MARKER['vmess'] in layers[0].field_names and \
+                    PROTOCOL_REASSEMBLE_FIELD['vmess'] in layers[0].field_names and \
                     layers[1].layer_name == "tls" and \
                     layers[2].layer_name == "tls"
         elif pkt.number == "15":
@@ -110,7 +110,7 @@ def test_layer_extractor_1(capture_gen):
             assert len(layers) == 2 and \
                     layers[0].layer_name == "DATA" and \
                     layers[1].layer_name == "vmess" and \
-                    DATA_LAYER_MARKER['tcp'] in layers[0].field_names  # Assert we are extracting the correct DATA layer.
+                    PROTOCOL_REASSEMBLE_FIELD['tcp'] in layers[0].field_names  # Assert we are extracting the correct DATA layer.
         elif pkt.number == "63":
             layers = layer_extractor(pkt, upper_protocol="http2", lower_protocol='tls') 
             assert len(layers) == 2 and \

@@ -3,7 +3,7 @@ from pathlib import Path
 from configparser import ConfigParser
 
 SUPPORTED_BASE = ['tcp', 'tls']
-SUPPORTED_PROTOCOL = ['normal', 'vmess']
+SUPPORTED_PROTOCOL = ['normal', 'vmess', 'shadowsocks']
 
 def get_config(config_path: Path):
     if config_path.exists():
