@@ -185,3 +185,25 @@ def test_line_rel_building_3(capture_gen):
 
     assert line.byte_counter == byte_counter and \
            cnt == line.byte_counter
+    
+@pytest.mark.parametrize("capture_gen", [{'host': 'ai.zjnav.com', 'index': 1, 'display_filter': 'tcp.stream eq 4'}], indirect=True)
+@skip_shadowsocks
+def test_line_merge_1(capture_gen):
+    """
+    This test covers Shadowsocks data based line merging, which contains multiple streams.
+    """    
+    upper_line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="http2", lower_protocol="tls")
+    proxy_line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="tls", lower_protocol="shadowsocks")
+    lower_line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="shadowsocks", lower_protocol="tcp")
+
+    merged_line = line_merge(line_merge(upper_line, proxy_line), lower_line)
+
+    # Assert the total bytes in HTTP/2 layer is not changed by merging.
+    http2_byte_counter = 0
+    for span in upper_line.lower_span_map.values():
+        for segment_size in span.values():
+            http2_byte_counter += segment_size
+
+    assert merged_line.byte_counter == http2_byte_counter
+    # Check the continuity of the merged line.
+    assert merged_line.continunity_check()
