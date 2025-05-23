@@ -1,5 +1,1 @@
-gitee.com
-github.com 
-telegram.org
-top.baidu.com
-www.runoob.com
+openai.com
