@@ -1,4 +1,4 @@
-from WFlib.tools.extractor import DirectionExtractor
+from WFlib.tools.extractor import PcapDirExtractor
 from WFlib.tools.formatter import *
 
 import io
@@ -18,7 +18,7 @@ def test_PcapFormatter_1():
     This test covers reading the first 10 packets from a .pcap file, and extract the direction feature.
     This test makes feature vector length smaller than the number of packets to test truncation.
     """
-    extractor = DirectionExtractor(src="192.168.5.5")
+    extractor = PcapDirExtractor(src="192.168.5.5")
 
     formatter = PcapFormatter(length=5)
     formatter.load("exp/test_dataset/simple_dataset/simple_pcap_01.pcapng")
@@ -43,7 +43,7 @@ def test_PcapFormatter_2():
     This test covers reading the first 10 packets from a .pcap file, and extract the direction feature.
     This test makes feature vector length larger than the number of packets to test padding.
     """
-    extractor = DirectionExtractor(src="192.168.5.5")
+    extractor = PcapDirExtractor(src="192.168.5.5")
 
     formatter = PcapFormatter(length=12)
     formatter.load("exp/test_dataset/simple_dataset/simple_pcap_01.pcapng")
@@ -69,7 +69,7 @@ def test_PcapFormatter_3():
     """
     formatter = PcapFormatter(length=10)
 
-    extractor = DirectionExtractor(src="192.168.5.5")
+    extractor = PcapDirExtractor(src="192.168.5.5")
 
     formatter.load("exp/test_dataset/simple_dataset/simple_pcap_01.pcapng")
     formatter.transform("www.baidu.com", 0, extractor)
@@ -107,7 +107,7 @@ def test_PcapFormatter_4():
     """
     formatter = PcapFormatter(length=10, display_filter='tls')
 
-    extractor = DirectionExtractor(src="192.168.5.5")
+    extractor = PcapDirExtractor(src="192.168.5.5")
     
     formatter.load("exp/test_dataset/simple_dataset/simple_pcap_01.pcapng")
     formatter.transform("www.baidu.com", 0, extractor)
@@ -145,7 +145,7 @@ def test_PcapFormatter_5():
     """
     formatter = PcapFormatter(display_filter='tls')
 
-    extractor = DirectionExtractor(src="192.168.5.5")
+    extractor = PcapDirExtractor(src="192.168.5.5")
     
     formatter.load("exp/test_dataset/simple_dataset/simple_pcap_01.pcapng")
     formatter.transform("www.baidu.com", 0, extractor)
@@ -185,7 +185,7 @@ def test_PcapFormatter_6():
     """
     formatter = PcapFormatter(length=10)
 
-    extractor = DirectionExtractor(src="192.168.5.5")
+    extractor = PcapDirExtractor(src="192.168.5.5")
 
     # Create an in-memory bytes buffer
     buffer = io.BytesIO()
@@ -217,7 +217,7 @@ def test_PcapFormatter_7():
     """
     formatter = PcapFormatter(length=10, keep_packets=False)
 
-    extractor = DirectionExtractor(src="192.168.5.5")
+    extractor = PcapDirExtractor(src="192.168.5.5")
 
     # Create an in-memory bytes buffer
     buffer = io.BytesIO()
@@ -266,7 +266,7 @@ def test_PcapFormatter_9():
     This test covers reading the first 10 packets from a .pcap file, and extract the direction feature.
     This test makes feature vector length smaller than the number of packets to test truncation.
     """
-    extractor = DirectionExtractor(src="192.168.5.5")
+    extractor = PcapDirExtractor(src="192.168.5.5")
 
     formatter = PcapFormatter(length=10)
     formatter.load("exp/test_dataset/realworld_dataset/www.google.com.pcapng")
@@ -293,7 +293,7 @@ def test_JsonFormatter_1():
     """
     pcap_formatter = PcapFormatter(display_filter='tls')
 
-    extractor = DirectionExtractor(src="192.168.5.5")
+    extractor = PcapDirExtractor(src="192.168.5.5")
     
     pcap_formatter.load("exp/test_dataset/simple_dataset/simple_pcap_01.pcapng")
     pcap_formatter.transform("www.baidu.com", 0, extractor)
@@ -342,7 +342,7 @@ def test_JsonFormatter_2():
     """
     pcap_formatter = PcapFormatter(display_filter='tls')
 
-    extractor = DirectionExtractor(src="192.168.5.5")
+    extractor = PcapDirExtractor(src="192.168.5.5")
     
     pcap_formatter.load("exp/test_dataset/simple_dataset/simple_pcap_01.pcapng")
     pcap_formatter.transform("www.baidu.com", 0, extractor)
@@ -379,7 +379,7 @@ def test_JsonFormatter_2():
 def test_DistriPcapFormatter_1():
     formatter = DistriPcapFormatter(length=10, keep_packets=False)
 
-    extractor = DirectionExtractor(src="192.168.5.5")
+    extractor = PcapDirExtractor(src="192.168.5.5")
 
     # Create an in-memory bytes buffer
     buffer = io.BytesIO()
