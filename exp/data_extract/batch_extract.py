@@ -7,7 +7,8 @@ NOTE: Currently, only .pcap files are supported. More file format (.json, .csv, 
 NOTE: The extractors are now hard-coded into the script. Passing extractors as flags might be supported in the future.
 """
 
-from WFlib.tools.formatter import DistriPcapFormatter, DirectionExtractor, TimeExtractor
+from WFlib.tools.formatter import DistriPcapFormatter
+from WFlib.tools.extractor import DirectionExtractor, TimeExtractor
 from WFlib.tools.capture import read_host_list
 import argparse
 

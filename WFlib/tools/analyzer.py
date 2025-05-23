@@ -14,7 +14,8 @@ PROTOCOL_REASSEMBLE_FIELD = {
     "tls": "tls_segments",
     "tcp": "tcp_segments",
     "vmess": "vmess_fragments",
-    "shadowsocks": "shadowsocks_msg_fragments"
+    "shadowsocks": "shadowsocks_msg_fragments",
+    "trojan": "trojan_fragments"
 }
 
 def feature_attr(model, attr_method, X, y, num_classes):
@@ -334,12 +335,33 @@ class ShadowsocksByteCounter(ByteCounter):
 
         return cnt
     
+class TrojanByteCounter(ByteCounter):
+    TYPE_TLS = '1'
+    TYPE_HTTP = '2'
+    def __init__(self, name='trojan'):
+        super().__init__(name)
+
+    def layer_count(self, layer, extra_data = None) -> int:
+        cnt = layer.data_length
+
+        return cnt
+    
+    def packet_count(self, pkt) -> int:
+        cnt = 0
+        if "Trojan" in pkt:  
+            trojan_layers = filter(lambda layer: layer.layer_name == "trojan", pkt.layers)  # One packet may contain multiple TLS layers
+            trojan_layer_lengths = map(self.layer_count, trojan_layers)
+            cnt += sum(trojan_layer_lengths)
+
+        return cnt
+    
 PROTOCOL_BYTE_COUNTER = {
     "tls": TLSByteCounter(),
     "tcp": TCPByteCounter(),
     "http2": HTTP2ByteCounter(),
     "vmess": VMessByteCounter(),
     "shadowsocks": ShadowsocksByteCounter(),
+    "trojan": TrojanByteCounter(),
 }
 
 class CaptureCounter():
@@ -537,6 +559,14 @@ class TCPCellExtractor(CellExtractor):
     def extract(self, pkt, lower_protocol='tcp') -> List[Cell]:
         return super().extract(pkt, lower_protocol)
     
+
+class TrojanCellExtractor(CellExtractor):
+    def __init__(self):
+        self._name = "trojan"
+
+    def extract(self, pkt, lower_protocol='tcp') -> List[Cell]:
+        return super().extract(pkt, lower_protocol)
+
 
 PROCOCOL_CELL_EXTRACTOR = {
     "tcp": TCPCellExtractor(),  
@@ -854,7 +884,8 @@ def seq_filter(seq, lower_protocol):
                     for _, segment_size in match_segment_number(
                         layer.get_field(PROTOCOL_REASSEMBLE_FIELD[lower_protocol])):
                         data_layer_size += segment_size
-
+                    # TODO: A (quite rare) is that a DATA layer covers multiple layers, but searching the exact Cells
+                    # that the DATA layer covers seems hard. We do not handle this case now :(
                     if layer_size == data_layer_size:
                         to_remove.add(j)
                         break
