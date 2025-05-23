@@ -162,10 +162,10 @@ def test_line_rel_building_3(capture_gen):
     This test covers building the lower relation of a line using MORE COMPLEX real-world data, and
     test Shadowsocks over TCP line building.
 
-    NOTE: This test fails when "tcp.stream eq 1" is used, where Frame 872 and Frame 876 are spanned from Frame 870,
+    NOTE: This test fails when "tcp.stream eq 1" is used, where Frame 977 and Frame 981 are spanned from Frame 975,
     in the following OOO form:
-    --------- Frame 872 ---+----           ----+----- Frame 876 ----------
-                           |---- Frame 870 ----|
+    --------- Frame 977 ---+----           ----+----- Frame 981 ----------
+                           |---- Frame 975 ----|
     causing wrong dissection which leads to wrong segmentation in Line building.
     """
     

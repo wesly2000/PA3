@@ -7,7 +7,8 @@ NOTE: Currently, only .pcap files are supported. More file format (.json, .csv, 
 NOTE: The extractors are now hard-coded into the script. Passing extractors as flags might be supported in the future.
 """
 
-from WFlib.tools.formatter import DistriPcapFormatter, DirectionExtractor, TimeExtractor
+from WFlib.tools.formatter import DistriPcapFormatter
+from WFlib.tools.extractor import PcapDirExtractor, PcapTsExtractor
 from WFlib.tools.capture import read_host_list
 import argparse
 
@@ -25,9 +26,9 @@ if __name__ == '__main__':
     formatter = DistriPcapFormatter(length=args.length, num_worker=args.num_worker)
 
     if args.feature == "direction":
-        extractor = DirectionExtractor(src=args.src)
+        extractor = PcapDirExtractor(src=args.src)
     elif args.feature == "time":
-        extractor = TimeExtractor(src=args.src)
+        extractor = PcapTsExtractor(src=args.src)
     else:
         raise NotImplementedError(f"The feature {args.feature} is not supported yet, exit...")
     
