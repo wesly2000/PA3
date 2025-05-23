@@ -1,5 +1,11 @@
 from typing import Union, List
+import numpy as np
+import pandas as pd
 
+'''
+COMMENT: Shall we name a class capitalizing all letters of an abbrev., e.g., extension name of a file?
+         Currently, only the first letter is capitalized, please follow the convention.
+'''
 
 class Extractor(object):
     """
@@ -22,7 +28,35 @@ class Extractor(object):
         raise NotImplementedError
 
 
-class DirectionExtractor(Extractor):
+class PcapExtractor(Extractor):
+    """
+    Extractors that directly extract features from .pcap files through PyShark packet iteration.
+    """
+
+
+class CsvExtractor(Extractor):
+    """
+    Extractors that extract features from .csv files (DataFrame actually) using frameworks like Pandas. Note that the .csv is generated
+    directly from TShark, so the column name MUST be consistent with the corresponding field name of TShark.
+
+    For example, the source IP address in TShark is exported with name ip.src, so the input .csv with IP source
+    address MUST maintain a column named ip.src.
+    """
+
+
+class CsvDirExtractor(CsvExtractor):
+    """
+    The class that extracts direction feature from .csv files.
+    """
+    def __init__(self, src: Union[str, List[str]], name="dir"):
+        super().__init__(name=name)
+        self._src = src if isinstance(src, list) else [src]
+
+    def extract(self, df: pd.DataFrame):
+        return np.where(df['ip.src'].isin(self._src), 1, -1)
+
+
+class PcapDirExtractor(PcapExtractor):
     """
     The class provides methods for the packet direction extraction.
 
@@ -31,7 +65,7 @@ class DirectionExtractor(Extractor):
     src : List[str]
         The source IP addresses for the extractor to decide ingress or egress.
     """
-    def __init__(self, src: Union[str, List[str]], name="direction"):
+    def __init__(self, src: Union[str, List[str]], name="dir"):
         super().__init__(name=name)
         self._src = src if isinstance(src, list) else [src]
 
@@ -58,7 +92,7 @@ class DirectionExtractor(Extractor):
         target.append(1 if src in self._src else -1) # 1 for egress, -1 for ingress
 
 
-class TimeExtractor(Extractor):
+class PcapTsExtractor(PcapExtractor):
     """
     The timestamp extractor. Note that the time is relative time, i.e., the time after
     the first packet which is set to 0.
@@ -67,7 +101,7 @@ class TimeExtractor(Extractor):
     e.g., an ingress packet (-1 direction) at time 0.114514s would lead to the timestamp
     -0.114514.
     """
-    def __init__(self, name="time", src=None):
+    def __init__(self, name="ts", src=None):
         super().__init__(name=name)
         if src:
             self._src = src if isinstance(src, list) else [src]
@@ -107,7 +141,7 @@ class TimeExtractor(Extractor):
             target.append(ts)
 
 
-class DeltaExtractor(Extractor):
+class PcapDeltaExtractor(PcapExtractor):
     """
     The delta time extractor. Delta time denotes for the duration between 2 consecutive packets.
     TODO: Note that since we are using display filter in analysis, one should use frame.time_delta_displayed

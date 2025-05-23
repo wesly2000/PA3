@@ -4,7 +4,10 @@ from WFlib.tools.formatter import *
 import io
 import json
 import tempfile
-import os
+import tracemalloc
+import os 
+import nest_asyncio
+nest_asyncio.apply()
 
 delete_file = True if os.name == "posix" else False # Only delete the file on Unix-like systems.
 
@@ -377,14 +380,20 @@ def test_JsonFormatter_2():
         os.unlink(filename)
 
 def test_DistriPcapFormatter_1():
-    formatter = DistriPcapFormatter(length=10, keep_packets=False)
+    formatter = DistriPcapFormatter(length=10, keep_packets=False, only_summaries=False)
 
     extractor = PcapDirExtractor(src="192.168.5.5")
 
     # Create an in-memory bytes buffer
     buffer = io.BytesIO()
     
-    formatter.batch_extract("exp/test_dataset", buffer, ["dns.alidns.com", "firefox.settings.services.mozilla.com"], extractor)
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(formatter.batch_extract("exp/test_dataset", 
+                                                    buffer, 
+                                                    ["dns.alidns.com", "firefox.settings.services.mozilla.com"], 
+                                                    8,
+                                                    extractor))
+    loop.close()
 
     buffer.seek(0)  # Move to the start of the buffer
     loaded_data = np.load(buffer)

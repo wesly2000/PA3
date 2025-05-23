@@ -2,7 +2,7 @@ import io
 
 import numpy as np
 
-from WFlib.tools.extractor import DirectionExtractor, TimeExtractor
+from WFlib.tools.extractor import PcapDirExtractor, PcapTsExtractor
 from WFlib.tools.formatter import PcapFormatter
 from exp.tests.test_formatter import google_file, apple_file, tiktok_file
 
@@ -12,7 +12,7 @@ def test_DirectionExtractor_1():
     This test covers reading the first 10 packets from a .pcap file, and extract the direction feature.
     This test makes feature vector length smaller than the number of packets to test truncation.
     """
-    extractor = DirectionExtractor(src=["192.168.5.5", "10.4.0.3"])
+    extractor = PcapDirExtractor(src=["192.168.5.5", "10.4.0.3"])
 
     formatter = PcapFormatter(length=10)
     formatter.load(google_file)
@@ -49,7 +49,7 @@ def test_TimeExtractor_1():
     This test covers reading the first 10 packets from a .pcap file, and extract the timestamp feature.
     This test makes feature vector length smaller than the number of packets to test truncation.
     """
-    extractor = TimeExtractor()
+    extractor = PcapTsExtractor()
 
     formatter = PcapFormatter(length=10, display_filter="tcp.stream != 1")
 
@@ -78,7 +78,7 @@ def test_TimeExtractor_2():
     This test covers reading the first 10 packets from a .pcap file, and extract the timestamp feature.
     This test makes feature vector length smaller than the number of packets to test truncation.
     """
-    extractor = TimeExtractor(src='192.168.5.5')
+    extractor = PcapTsExtractor(src='192.168.5.5')
 
     formatter = PcapFormatter(length=10, display_filter="quic")
 
@@ -108,7 +108,7 @@ def test_TimeExtractor_3():
     This test covers reading the first 10 packets from a .pcap file, and extract the timestamp feature.
     This test makes feature vector length smaller than the number of packets to test truncation.
     """
-    extractor = TimeExtractor(src=["192.168.5.5", "10.4.0.3"])
+    extractor = PcapTsExtractor(src=["192.168.5.5", "10.4.0.3"])
 
     formatter = PcapFormatter(length=5)
 

@@ -308,13 +308,12 @@ class DistriPcapFormatter(PcapFormatter):
         # fix (https://github.com/KimiNewt/pyshark/commit/78b48d65a7b3745456c30e37b1ebac75af984657).
         # Therefore, we only create explicit event loop when the platform is *nix.
         # UPDATE: The issue remains, no idea about this:(
-
         tmp_buf = {extractor.name : [] for extractor in extractors}
 
         cap = pyshark.FileCapture(input_file=file, 
-                                  display_filter=self.display_filter,
-                                  only_summaries=self._only_summaries,
-                                  keep_packets=self._keep_packets)
+                                display_filter=self.display_filter,
+                                only_summaries=self._only_summaries,
+                                keep_packets=self._keep_packets)
         
         for pkt in cap:
             for extractor in extractors:
@@ -334,7 +333,7 @@ class DistriPcapFormatter(PcapFormatter):
             else:
                 buf[extractor.name].append(tmp_buf[extractor.name])
 
-    def batch_extract(self, base_dir, output_file, SNIs=None, *extractors: Extractor):
+    async def batch_extract(self, base_dir, output_file, SNIs=None, num_workers=8, *extractors: Extractor):
         '''
         Example
         -------
@@ -365,18 +364,23 @@ class DistriPcapFormatter(PcapFormatter):
         '''
         base_dir_path = Path(base_dir)
         subdir_list = sorted(filter(lambda subdir: subdir.is_dir(), base_dir_path.iterdir()))
-        # hosts = [subdir.name for subdir in subdir_list]
-        with multiprocessing.Manager() as manager:
-            self._raw_buf = manager.list()
-            num_workers = self._num_worker
+        hosts = [subdir.name for subdir in subdir_list]
+        semaphore = asyncio.Semaphore(num_workers)
+        # self._raw_buf = []
+        # with multiprocessing.Manager() as manager:
+        #     self._raw_buf = manager.list()
+        #     num_workers = self._num_worker
 
-            with multiprocessing.Pool(num_workers) as pool:
-                # Note that multiprocessing uses pickle to dump the single-process task, and it re-import the task
-                # during the execution. Therefore, the single-process task must in the top-level (importable) scope.
-                # See https://stackoverflow.com/questions/72766345/attributeerror-cant-pickle-local-object-in-multiprocessing.
-                pool.starmap(single_dir_batch_extract, [(self, SNIs, subdir, self._raw_buf, *extractors) for subdir in subdir_list])
+        #     with multiprocessing.Pool(num_workers) as pool:
+        #         # Note that multiprocessing uses pickle to dump the single-process task, and it re-import the task
+        #         # during the execution. Therefore, the single-process task must in the top-level (importable) scope.
+        #         # See https://stackoverflow.com/questions/72766345/attributeerror-cant-pickle-local-object-in-multiprocessing.
+        #         pool.starmap(single_dir_batch_extract, [(self, SNIs, subdir, self._raw_buf, *extractors) for subdir in subdir_list])
 
-            self._raw_buf = list(self._raw_buf)
+        #     self._raw_buf = list(self._raw_buf)
+        tasks = [asyncio.create_task(single_dir_batch_extract(self, SNIs, subdir, semaphore, *extractors)) for subdir in subdir_list]
+        results = await asyncio.gather(*tasks)
+        self._raw_buf = list(results)
         # Merge stage
         # First, we sort self._raw_buf according to the alphabetical order of the hostnames.
         self._raw_buf.sort(key=lambda x: x[0])
@@ -394,7 +398,7 @@ class DistriPcapFormatter(PcapFormatter):
 
         self.dump(output_file)
         
-def single_dir_batch_extract(formatter : DistriPcapFormatter, SNIs : None, subdir : Path, results : list, *extractors : Extractor):
+async def single_dir_batch_extract(formatter : DistriPcapFormatter, SNIs : None, subdir : Path, semaphore: asyncio.Semaphore, *extractors : Extractor):
     """
     Extract the feature array for the subdir, and prepend the name of the host to it
     to extract the Name-Feature pair.
@@ -407,16 +411,17 @@ def single_dir_batch_extract(formatter : DistriPcapFormatter, SNIs : None, subdi
     results : list
         The pool to append all the sub-process results.
     """
-    print(f"Processing directory {subdir.name}")
-    host = subdir.name #  Consider using subdir.name
-    buf = {extractor.name : [] for extractor in extractors}
-    for file in subdir.iterdir():
-        if file.is_file() and file.suffix in ['.pcapng', '.pcap']:  # Ensure it's a pcap(ng) file
-            display_filter = SNI_exclude_filter(file, SNIs)
-            formatter.display_filter = display_filter
-            formatter.load_and_transform(buf, file, *extractors)
+    async with semaphore:
+        print(f"Processing directory {subdir.name}")
+        host = subdir.name #  Consider using subdir.name
+        buf = {extractor.name : [] for extractor in extractors}
+        for file in subdir.iterdir():
+            if file.is_file() and file.suffix in ['.pcapng', '.pcap']:  # Ensure it's a pcap(ng) file
+                display_filter = SNI_exclude_filter(file, SNIs)
+                formatter.display_filter = display_filter
+                formatter.load_and_transform(buf, file, *extractors)
 
-    results.append((host, buf))
+        return (host, buf)
 
 
 class JsonFormatter(Formatter):
