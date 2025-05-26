@@ -54,6 +54,32 @@ class CsvDirExtractor(CsvExtractor):
 
     def extract(self, df: pd.DataFrame):
         return np.where(df['ip.src'].isin(self._src), 1, -1)
+    
+    
+class CsvTsExtractor(CsvExtractor):
+    """
+    The class that extracts timestamp feature from .csv files.
+    """
+    def __init__(self, name="timestamp"):
+        super().__init__(name=name)
+
+    def extract(self, df: pd.DataFrame):
+        return df['frame.relative_time'].to_numpy()
+    
+
+class CsvLenExtractor(CsvExtractor):
+    """
+    The class that extracts length feature of a specific protocol from .csv files.
+    Currently, only TCP is supported.
+    """
+    def __init__(self, name="length"):
+        super().__init__(name=name)
+
+    def extract(self, df: pd.DataFrame, protocol: str="tcp"):
+        if protocol == "tcp":
+            return df['tcp.len'].to_numpy() + df['tcp.hdr_len'].to_numpy()
+        else:
+            raise NotImplementedError(f"Protocol {protocol} is not supported.")
 
 
 class PcapDirExtractor(PcapExtractor):

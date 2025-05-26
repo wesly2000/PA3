@@ -1,13 +1,14 @@
 import io
 
 import numpy as np
+import pandas as pd
+import pytest
 
-from WFlib.tools.extractor import PcapDirExtractor, PcapTsExtractor
+from WFlib.tools.extractor import *
 from WFlib.tools.formatter import PcapFormatter
 from exp.tests.test_formatter import google_file, apple_file, tiktok_file
 
-
-def test_DirectionExtractor_1():
+def test_PcapDirExtractor_1():
     """
     This test covers reading the first 10 packets from a .pcap file, and extract the direction feature.
     This test makes feature vector length smaller than the number of packets to test truncation.
@@ -44,7 +45,7 @@ def test_DirectionExtractor_1():
     loaded_data.close()
 
 
-def test_TimeExtractor_1():
+def test_PcapTsExtractor_1():
     """
     This test covers reading the first 10 packets from a .pcap file, and extract the timestamp feature.
     This test makes feature vector length smaller than the number of packets to test truncation.
@@ -73,7 +74,7 @@ def test_TimeExtractor_1():
     loaded_data.close()
 
 
-def test_TimeExtractor_2():
+def test_PcapTsExtractor_2():
     """
     This test covers reading the first 10 packets from a .pcap file, and extract the timestamp feature.
     This test makes feature vector length smaller than the number of packets to test truncation.
@@ -103,7 +104,7 @@ def test_TimeExtractor_2():
     loaded_data.close()
 
 
-def test_TimeExtractor_3():
+def test_PcapTsExtractor_3():
     """
     This test covers reading the first 10 packets from a .pcap file, and extract the timestamp feature.
     This test makes feature vector length smaller than the number of packets to test truncation.
@@ -139,3 +140,49 @@ def test_TimeExtractor_3():
         assert np.all(target[k] == v)
 
     loaded_data.close()
+
+@pytest.fixture
+def simple_csv_data():
+    """
+    Fixture that provides a DataFrame with realistic network packet data.
+    The DataFrame contains common TShark fields with realistic values.
+    """
+    data = {
+        'ip.src': ['192.168.1.100', '10.0.0.15', '172.16.0.25', '192.168.1.100', '10.0.0.15'],
+        'ip.dst': ['8.8.8.8', '192.168.1.100', '10.0.0.15', '172.16.0.25', '8.8.8.8'],
+        'frame.relative_time': [0.000000, 0.023456, 0.045678, 0.078901, 0.123456],
+        'tcp.hdr_len': [20, 32, 20, 32, 20],
+        'tcp.len': [1460, 1460, 1460, 1460, 1460]
+    }
+    return pd.DataFrame(data)
+
+def test_CsvDirExtractor_1(simple_csv_data):
+    """
+    This test covers reading the first 5 packets from a .csv file, and extract the direction feature.
+    """
+    extractor = CsvDirExtractor(src=["192.168.1.100", "10.0.0.15"])
+
+    result = extractor.extract(simple_csv_data)
+    target = np.array([1, 1, -1, 1, 1])
+    assert np.all(result == target)
+
+def test_CsvTsExtractor_1(simple_csv_data):
+    """
+    This test covers reading the first 5 packets from a .csv file, and extract the timestamp feature.
+    """
+    extractor = CsvTsExtractor()
+
+    result = extractor.extract(simple_csv_data)
+    target = np.array([0.000000, 0.023456, 0.045678, 0.078901, 0.123456])
+    assert np.all(result == target)
+
+
+def test_CsvLenExtractor_1(simple_csv_data):
+    """
+    This test covers reading the first 5 packets from a .csv file, and extract the length feature.
+    """
+    extractor = CsvLenExtractor()
+
+    result = extractor.extract(simple_csv_data)
+    target = np.array([1480, 1492, 1480, 1492, 1480])
+    assert np.all(result == target)
