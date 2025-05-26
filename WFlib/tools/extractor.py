@@ -48,7 +48,7 @@ class CsvDirExtractor(CsvExtractor):
     """
     The class that extracts direction feature from .csv files.
     """
-    def __init__(self, src: Union[str, List[str]], name="dir"):
+    def __init__(self, src: Union[str, List[str]], name="direction"):
         super().__init__(name=name)
         self._src = src if isinstance(src, list) else [src]
 
@@ -65,7 +65,7 @@ class PcapDirExtractor(PcapExtractor):
     src : List[str]
         The source IP addresses for the extractor to decide ingress or egress.
     """
-    def __init__(self, src: Union[str, List[str]], name="dir"):
+    def __init__(self, src: Union[str, List[str]], name="direction"):
         super().__init__(name=name)
         self._src = src if isinstance(src, list) else [src]
 
@@ -101,7 +101,7 @@ class PcapTsExtractor(PcapExtractor):
     e.g., an ingress packet (-1 direction) at time 0.114514s would lead to the timestamp
     -0.114514.
     """
-    def __init__(self, name="ts", src=None):
+    def __init__(self, name="timestamp", src=None):
         super().__init__(name=name)
         if src:
             self._src = src if isinstance(src, list) else [src]

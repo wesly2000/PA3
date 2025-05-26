@@ -7,6 +7,7 @@ import multiprocessing
 from WFlib.tools.capture import SNI_exclude_filter
 
 from WFlib.tools.extractor import Extractor
+import asyncio
 
 
 class Formatter(object):
