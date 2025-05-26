@@ -66,7 +66,7 @@ def test_TimeExtractor_1():
 
     target = {"hosts" : np.array(["www.google.com"]),
               "labels": np.array([0]),
-              "time": np.array([[0.000000000, 0.019226000, 5.562068000, 5.562802000, 0, 0, 0, 0, 0, 0]])}
+              "timestamp": np.array([[0.000000000, 0.019226000, 5.562068000, 5.562802000, 0, 0, 0, 0, 0, 0]])}
     for k, v in loaded_data.items():
         assert np.all(target[k] == v)
 
@@ -95,7 +95,7 @@ def test_TimeExtractor_2():
 
     target = {"hosts" : np.array(["www.google.com"]),
               "labels": np.array([0]),
-              "time": np.array([[5.065814000, 5.065865000, -5.074124000, -5.074849000, -5.074850000,
+              "timestamp": np.array([[5.065814000, 5.065865000, -5.074124000, -5.074849000, -5.074850000,
                                  -5.074850000, -5.234382000, 5.236719000, -5.246387000, 5.475373000]])}
     for k, v in loaded_data.items():
         assert np.all(target[k] == v)
@@ -131,7 +131,7 @@ def test_TimeExtractor_3():
 
     target = {"hosts" : np.array(["www.google.com", "www.apple.com", "www.tiktok.com"]),
               "labels": np.array([0, 1, 2]),
-              "time": np.array([[0.000000, 0.019226, 2.936487, -3.055774, -3.055790],
+              "timestamp": np.array([[0.000000, 0.019226, 2.936487, -3.055774, -3.055790],
                                 [0.000000000, 0.000096556, -0.001713993, 0.001745523, -0.001829495],
                                 [0.000000000, -0.001680410, 0.001703165, 0.002265464, 0.002269337]
                                  ])}

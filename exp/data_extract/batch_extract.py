@@ -22,7 +22,7 @@ if __name__ == '__main__':
     # parser.add_argument('-f', '--filter', type=str, default=None, help="The DISPLAY filter")
     parser.add_argument('-s', '--src', nargs='+', type=str, default="192.168.5.5", help="The source IP address")
     parser.add_argument('-o', '--output_file', type=str, help="The path to the files to hold the output file")
-    parser.add_argument('-f', '--feature', default='direction', type=str, help="The name of the feature, current support [direction, time]")
+    parser.add_argument('-f', '--feature', default='direction', type=str, help="The name of the feature, current support [direction, timestamp]")
     parser.add_argument('-n', '--num_worker', type=int, default=6, help="Number of processes to extract features")
     args = parser.parse_args()
 
@@ -30,7 +30,7 @@ if __name__ == '__main__':
 
     if args.feature == "direction":
         extractor = PcapDirExtractor(src=args.src)
-    elif args.feature == "time":
+    elif args.feature == "timestamp":
         extractor = PcapTsExtractor(src=args.src)
     else:
         raise NotImplementedError(f"The feature {args.feature} is not supported yet, exit...")
