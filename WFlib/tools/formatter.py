@@ -3,10 +3,11 @@ import pyshark
 import json
 from pathlib import Path
 import warnings
-import multiprocessing
 from WFlib.tools.capture import SNI_exclude_filter
-
 from WFlib.tools.extractor import Extractor
+import asyncio
+import nest_asyncio
+nest_asyncio.apply()
 
 
 class Formatter(object):

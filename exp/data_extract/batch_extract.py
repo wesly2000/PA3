@@ -11,6 +11,9 @@ from WFlib.tools.formatter import DistriPcapFormatter
 from WFlib.tools.extractor import PcapDirExtractor, PcapTsExtractor
 from WFlib.tools.capture import read_host_list
 import argparse
+import asyncio
+import nest_asyncio
+nest_asyncio.apply()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -36,4 +39,6 @@ if __name__ == '__main__':
     filter_file = "exp/data_extract/filter.txt"
     SNIs = read_host_list(filter_file)
 
-    formatter.batch_extract(args.dir, args.output_file, SNIs, extractor)
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(formatter.batch_extract(args.dir, args.output_file, SNIs, args.num_worker, extractor))
+    loop.close()
