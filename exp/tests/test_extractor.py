@@ -6,7 +6,16 @@ import pytest
 
 from WFlib.tools.extractor import *
 from WFlib.tools.formatter import PcapFormatter
+from WFlib.utils.config import get_config
 from exp.tests.test_formatter import google_file, apple_file, tiktok_file
+
+config_path = Path.cwd() / 'config.ini'
+if not config_path.exists():
+    tshark_path = "tshark"
+else:
+    config = get_config(config_path)
+    tshark_path = config['tshark'].get('path', fallback="tshark")
+
 
 def test_PcapDirExtractor_1():
     """
@@ -166,6 +175,17 @@ def test_CsvDirExtractor_1(simple_csv_data):
     target = np.array([1, 1, -1, 1, 1])
     assert np.all(result == target)
 
+def test_CsvDirExtractor_2():
+    """
+    This test covers reading real-world data from pcap file, and extract the direction feature.
+    """
+    df = pcap_to_dataframe(tshark_path, apple_file, display_filter="tcp.stream eq 1")
+    extractor = CsvDirExtractor(src=["10.4.0.3"])
+
+    result = extractor.extract(df)
+    target = np.array([1, -1, 1, 1, -1, -1, -1, 1, 1, -1, 1, -1, 1, 1, 1, -1, -1, 1, -1, -1, 1, 1])
+    assert np.all(result == target)
+
 def test_CsvTsExtractor_1(simple_csv_data):
     """
     This test covers reading the first 5 packets from a .csv file, and extract the timestamp feature.
@@ -187,11 +207,12 @@ def test_CsvLenExtractor_1(simple_csv_data):
     target = np.array([1480, 1492, 1480, 1492, 1480])
     assert np.all(result == target)
 
+
 def test_pcap_to_dataframe_1():
     """
     Test reading a .pcap file and convert it to a DataFrame.
     """
-    df = pcap_to_dataframe(apple_file, display_filter="tcp.stream eq 1")
+    df = pcap_to_dataframe(tshark_path, apple_file, display_filter="tcp.stream eq 1")
     assert df.shape[0] == 22
     assert df.shape[1] == 7
 

@@ -1,9 +1,10 @@
-from typing import Union, List
+from typing import Union, List, Set
 import numpy as np
 import pandas as pd
 import subprocess
 import logging
 import io
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -14,12 +15,21 @@ COMMENT: Shall we name a class capitalizing all letters of an abbrev., e.g., ext
 
 FIELDS = ["tcp.stream", "ip.src", "ip.dst", "frame.time_relative", "tcp.len", "tcp.hdr_len", "tls.handshake.extensions_server_name"]
 
-def pcap_to_dataframe(pcap_file: str, display_filter: str='tcp', fields: List[str]=FIELDS):
+def pcap_to_dataframe(tshark_path: str, 
+                      pcap_file: Union[str, Path], 
+                      display_filter: str='tcp', 
+                      override_prefs: dict=None,
+                      fields: List[str]=FIELDS):
     """
     Read in a .pcap file, and output the selected fields into a DataFrame without creating a .csv file.
     """
+    prefs = []
+    if override_prefs:
+        for key, value in override_prefs.items():
+            prefs.append(f'-o {key}:{value}')
+
     fields_args = [f'-e {field}' for field in fields]
-    cmd = ['tshark', '-r', pcap_file, '-Y', display_filter] + ['-T', 'fields'] + fields_args + ['-E', "separator=,", '-E', "header=y"]
+    cmd = [tshark_path, '-r', pcap_file, '-Y', display_filter] + ['-T', 'fields'] + fields_args + ['-E', "separator=,", '-E', "header=y"] + prefs
 
     result = subprocess.run(cmd, capture_output=True, text=True, check=True)
 
@@ -34,6 +44,56 @@ def pcap_to_dataframe(pcap_file: str, display_filter: str='tcp', fields: List[st
     df = pd.read_csv(io.StringIO(csv_data), dtype=str)
     df.columns = [col.strip() for col in df.columns]
     return df
+
+
+def single_pcap_extract(pcap_file: Union[str, Path], SNI_filter: Union[Set[str], List[str]], display_filter: str='tcp') -> List[dict]:
+    """
+    Extract features from a single .pcap file.
+    """
+    # Split the pcap file name into host and id.
+    host, id = pcap_file.split('.')[0].split('_')
+
+    # According to the answer, using a list of dictionaries to store the results, then convert it to a DataFrame
+    # is much more efficient than appending rows to a existing DataFrame, so we use a list of dictionaries to store the results.
+    # Ref: https://stackoverflow.com/a/47979665/20039811
+    result = []
+    df = pcap_to_dataframe(pcap_file, display_filter=display_filter)
+    dir_extractor = CsvDirExtractor(src=["10.4.0.3"])
+    ts_extractor = CsvTsExtractor()
+    len_extractor = CsvLenExtractor()
+    # Fetch the rows with SNI, filtered by the SNI_filter.
+    sni_rows = df[~df["tls.handshake.extensions_server_name"].isin(SNI_filter)]
+    for _, row in sni_rows.iterrows():
+        stream = row["tcp.stream"]
+        stream_df = df[df["tcp.stream"] == stream]
+        features = np.array([
+            dir_extractor.extract(stream_df), 
+            ts_extractor.extract(stream_df), 
+            len_extractor.extract(stream_df)
+            ])
+        
+        # Append a new row to the result.
+        result.append({
+            'host': host,
+            'id': id,
+            'sni': row["tls.handshake.extensions_server_name"],
+            'stream': stream,
+            'protocol': row["ip.proto"],
+            'feature': features}
+            )
+        
+    return result
+
+
+def multi_pcap_extract(pcap_dir: Union[str, Path], SNI_filter: Union[Set[str], List[str]], display_filter: str='tcp') -> List[dict]:
+    """
+    Extract features from multiple .pcap files.
+    """
+    result = []
+    for file in pcap_dir.iterdir():
+        if file.is_file() and file.suffix in ['.pcapng', '.pcap']:
+            result.extend(single_pcap_extract(file, SNI_filter, display_filter))
+    return result
 
 
 class Extractor(object):
@@ -75,7 +135,7 @@ class CsvExtractor(Extractor):
 
 class CsvDirExtractor(CsvExtractor):
     """
-    The class that extracts direction feature from .csv files.
+    The class that extracts direction feature from DataFrame.
     """
     def __init__(self, src: Union[str, List[str]], name="direction"):
         super().__init__(name=name)
@@ -87,7 +147,7 @@ class CsvDirExtractor(CsvExtractor):
 
 class CsvTsExtractor(CsvExtractor):
     """
-    The class that extracts timestamp feature from .csv files.
+    The class that extracts timestamp feature from DataFrame.
     """
     def __init__(self, name="timestamp"):
         super().__init__(name=name)
@@ -98,7 +158,7 @@ class CsvTsExtractor(CsvExtractor):
 
 class CsvLenExtractor(CsvExtractor):
     """
-    The class that extracts length feature of a specific protocol from .csv files.
+    The class that extracts length feature of a specific protocol from DataFrame.
     Currently, only TCP is supported.
     """
     def __init__(self, name="length"):
