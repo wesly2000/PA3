@@ -186,3 +186,15 @@ def test_CsvLenExtractor_1(simple_csv_data):
     result = extractor.extract(simple_csv_data)
     target = np.array([1480, 1492, 1480, 1492, 1480])
     assert np.all(result == target)
+
+def test_pcap_to_dataframe_1():
+    """
+    Test reading a .pcap file and convert it to a DataFrame.
+    """
+    df = pcap_to_dataframe(apple_file, display_filter="tcp.stream eq 1")
+    assert df.shape[0] == 22
+    assert df.shape[1] == 7
+
+    sni_row = df[df["tls.handshake.extensions_server_name"].notna()]
+    assert sni_row.shape[0] == 1
+    assert sni_row.iloc[0]["tls.handshake.extensions_server_name"] == "is1-ssl.mzstatic.com"

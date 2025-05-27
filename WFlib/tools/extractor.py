@@ -1,11 +1,40 @@
 from typing import Union, List
 import numpy as np
 import pandas as pd
+import subprocess
+import logging
+import io
+
+logger = logging.getLogger(__name__)
 
 '''
 COMMENT: Shall we name a class capitalizing all letters of an abbrev., e.g., extension name of a file?
          Currently, only the first letter is capitalized, please follow the convention.
 '''
+
+FIELDS = ["tcp.stream", "ip.src", "ip.dst", "frame.time_relative", "tcp.len", "tcp.hdr_len", "tls.handshake.extensions_server_name"]
+
+def pcap_to_dataframe(pcap_file: str, display_filter: str='tcp', fields: List[str]=FIELDS):
+    """
+    Read in a .pcap file, and output the selected fields into a DataFrame without creating a .csv file.
+    """
+    fields_args = [f'-e {field}' for field in fields]
+    cmd = ['tshark', '-r', pcap_file, '-Y', display_filter] + ['-T', 'fields'] + fields_args + ['-E', "separator=,", '-E', "header=y"]
+
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+
+    if result.stderr:
+        logger.warning(f"tshark warnings: {result.stderr}")
+    csv_data = result.stdout
+
+    if not csv_data.strip():
+        raise ValueError("No data returned by tshark")
+    # NOTE: It seems that when using subprocess, the column names contain strange leading whitespace.
+    #       We need to strip them. Still don't know why this happens.
+    df = pd.read_csv(io.StringIO(csv_data), dtype=str)
+    df.columns = [col.strip() for col in df.columns]
+    return df
+
 
 class Extractor(object):
     """
@@ -55,7 +84,7 @@ class CsvDirExtractor(CsvExtractor):
     def extract(self, df: pd.DataFrame):
         return np.where(df['ip.src'].isin(self._src), 1, -1)
     
-    
+
 class CsvTsExtractor(CsvExtractor):
     """
     The class that extracts timestamp feature from .csv files.
