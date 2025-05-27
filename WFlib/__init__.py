@@ -1,4 +1,11 @@
 import shutil
+from .logging_config import setup_logging
+import logging
+
+setup_logging(
+    level=logging.INFO,
+    log_file="visualseg.log"
+)
 
 def check_dependency():
     # required_software = ['geckodriver', 'tshark']

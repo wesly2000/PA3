@@ -11,12 +11,7 @@ from WFlib.tools.capture import *
 from WFlib.utils.statistics import *
 from WFlib.utils.config import default_override_prefs
 
-# Configure logging
-logging.basicConfig(
-    filename='data_analysis.log',
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+logger = logging.getLogger(__name__)
 
 PROTOCOLS = ['normal', 'vmess']
 custom_parameters=["-2"]
@@ -48,7 +43,7 @@ def h2_stream_analysis_per_sni(file: Path, host_filter: Set[str], custom_paramet
         try:
             tcp_stream_numbers = h2data_SNI_intersect(file, [SNI], None, custom_parameters, override_prefs)
         except Exception as e:
-            logging.error(f"Error in file {file}: {e}")
+            logger.error(f"Error in file {file}: {e}")
             continue
         available_h2_stream_number = len(tcp_stream_numbers)
 
@@ -80,7 +75,7 @@ def h2_stream_analysis_per_host(root: str, protocol: str, host: str, host_filter
     limit = 30
     for file in sorted([f for f in pcap_dir_path.iterdir() 
                         if f.is_file() and f.suffix in ['.pcapng', '.pcap']])[:limit]:
-            logging.info(f"Processing {file}")
+            logger.info(f"Processing {file}")
             for SNI, h2, avail_h2 in h2_stream_analysis_per_sni(file, host_filter,   
                                                                     custom_parameters=custom_parameters, 
                                                                     override_prefs=override_prefs):
@@ -109,15 +104,15 @@ def h2_stream_analysis(root: str, host_list: List[str], database_file: str, host
     existed_df = pd.read_csv(database_file)[['host', 'protocol']]
     for host in host_list:
         for protocol in PROTOCOLS:
-            logging.info(f"Host: {host}, Protocol: {protocol}")
+            logger.info(f"Host: {host}, Protocol: {protocol}")
             # Check if the host with the given protocol has been computed
             if ((existed_df['host'] == host) & (existed_df['protocol'] == protocol)).any():
-                logging.info(f"Host: {host}, Protocol: {protocol} has been computed, skip")
+                logger.info(f"Host: {host}, Protocol: {protocol} has been computed, skip")
                 continue
             try:
                 df = h2_stream_analysis_per_host(root, protocol, host, host_filter)
             except Exception as e:
-                logging.error(f"Error in host: {host}, Protocol: {protocol}: {e}")
+                logger.error(f"Error in host: {host}, Protocol: {protocol}: {e}")
                 continue
             df.to_csv(database_file, mode='a', index=False, header=False)
 
@@ -125,7 +120,7 @@ def main(input_root: str, output_root: str, host_list_file: str, host_filter_fil
     database_file = f"{output_root}/h2_stream_analysis/database.csv"
     Path(database_file).parent.mkdir(parents=True, exist_ok=True)
     if not Path(database_file).exists():
-        logging.info("H2 stream database does not exist, create a new one")
+        logger.info("H2 stream database does not exist, create a new one")
         df = pd.DataFrame(columns=['host', 'SNI', 'protocol', 'h2_avg', 'h2_std', 'avail_h2_avg', 'avail_h2_std'])
         df.to_csv(database_file, index=False)
     host_list = read_host_list(host_list_file)
@@ -142,6 +137,6 @@ if __name__ == '__main__':
     parser.add_argument("--host", default="exp/data_analysis/host_list.txt", type=str, help="The host list file")
     parser.add_argument("-f", "--filter", default="exp/data_analysis/filter.txt", help="The host filter file")
     args = parser.parse_args()
-    logging.info("Task http2_stream_analysis started")
+    logger.info("Task http2_stream_analysis started")
     main(args.input_root, args.output_root, args.host, args.filter)
-    logging.info("Task http2_stream_analysis completed")
+    logger.info("Task http2_stream_analysis completed")
