@@ -26,12 +26,17 @@ def pcap_to_dataframe(tshark_path: str,
     prefs = []
     if override_prefs:
         for key, value in override_prefs.items():
-            prefs.append(f'-o {key}:{value}')
+            prefs.append(f'-o')
+            prefs.append(f'{key}:{value}')
 
     fields_args = [f'-e {field}' for field in fields]
     cmd = [tshark_path, '-r', pcap_file, '-Y', display_filter] + ['-T', 'fields'] + fields_args + ['-E', "separator=,", '-E', "header=y"] + prefs
 
-    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    except subprocess.CalledProcessError as e:
+        logger.error(f"tshark command failed: {e}")
+        raise e
 
     if result.stderr:
         logger.warning(f"tshark warnings: {result.stderr}")

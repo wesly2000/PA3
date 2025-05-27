@@ -12,7 +12,7 @@ from WFlib.utils.config import get_config, default_override_prefs
 from WFlib.tools.analyzer import *
 from WFlib.tools.visualize import *
 from exp.data_analysis.http2_stream_analysis import *
-
+from WFlib.tools.extractor import pcap_to_dataframe
 import nest_asyncio 
 nest_asyncio.apply()
 
@@ -25,6 +25,7 @@ else:
         VMESS_ENABLED = False
     else:
         VMESS_ENABLED = config['vmess'].getboolean('enabled', fallback=False)
+        tshark_path = config['tshark'].get('tshark_path', fallback="tshark")
 
 
 skip_vmess = pytest.mark.skipif(
@@ -352,3 +353,19 @@ def test_get_reassemble_info(capture_gen):
     assert line.byte_counter == http2_byte_counter
     # Check the continuity of the merged line.
     assert line.continunity_check()
+
+
+@skip_vmess
+def test_pcap_to_dataframe_1():
+    """
+    This test covers converting a pcap file to a dataframe.
+    """
+    proxy_keylog_file = "exp/test_dataset/realworld_dataset/vmess_capture/top.baidu.com/proxy_keylog.txt"
+    keylog_file = "exp/test_dataset/realworld_dataset/vmess_capture/top.baidu.com/keylog.txt"
+    pcap_file = "exp/test_dataset/realworld_dataset/vmess_capture/top.baidu.com/top.baidu.com_0.pcapng"
+
+    override_prefs = default_override_prefs('vmess', os.path.abspath(keylog_file), os.path.abspath(proxy_keylog_file), None)
+    df = pcap_to_dataframe(tshark_path, pcap_file, display_filter="tcp.stream eq 0", override_prefs=override_prefs)
+    assert df.shape[0] == 148 and \
+            df.shape[1] == 7 and \
+            df.iloc[5]['tls.handshake.extensions_server_name'] == 'fyb-2.cdn.bcebos.com'

@@ -14,7 +14,7 @@ if not config_path.exists():
     tshark_path = "tshark"
 else:
     config = get_config(config_path)
-    tshark_path = config['tshark'].get('path', fallback="tshark")
+    tshark_path = config['tshark'].get('tshark_path', fallback="tshark")
 
 
 def test_PcapDirExtractor_1():
