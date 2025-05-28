@@ -69,8 +69,18 @@ def single_pcap_extract(pcap_file: Union[str, Path], SNI_filter: Union[Set[str],
     # Fetch the rows with SNI, filtered by the SNI_filter.
     sni_rows = df[~df["tls.handshake.extensions_server_name"].isin(SNI_filter)]
     for _, row in sni_rows.iterrows():
-        stream = row["tcp.stream"]
-        stream_df = df[df["tcp.stream"] == stream]
+        # Check if the row is a TCP packet.
+        if row["tcp.stream"] is not None:
+            stream_df = df[df["tcp.stream"] == row["tcp.stream"]]
+            stream = row["tcp.stream"]
+            transport = "tcp"
+        elif row["udp.stream"] is not None:
+            stream_df = df[df["udp.stream"] == row["udp.stream"]]
+            stream = row["udp.stream"]
+            transport = "udp"
+        else:
+            raise ValueError("No stream number found in the row.")
+        
         features = np.array([
             dir_extractor.extract(stream_df), 
             ts_extractor.extract(stream_df), 
@@ -83,7 +93,8 @@ def single_pcap_extract(pcap_file: Union[str, Path], SNI_filter: Union[Set[str],
             'id': id,
             'sni': row["tls.handshake.extensions_server_name"],
             'stream': stream,
-            'protocol': row["ip.proto"],
+            'transport': transport,
+            'protocol': protocol,
             'feature': features}
             )
         
