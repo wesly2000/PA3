@@ -13,7 +13,7 @@ def get_config(config_path: Path):
     else:
         return None
     
-def default_override_prefs(protocol: str, keylog_file: str, proxy_keylog_file: str, password: str) -> dict:
+def default_override_prefs(protocol: str, keylog_file: str, proxy_keylog_file: str) -> dict:
     DEFAULT_OVERRIDE_PREFS = {
                                 'tcp.desegment_tcp_streams': 'TRUE',
                                 'tcp.reassemble_out_of_order': 'TRUE',
@@ -28,5 +28,7 @@ def default_override_prefs(protocol: str, keylog_file: str, proxy_keylog_file: s
         DEFAULT_OVERRIDE_PREFS['vmess.keylog_file'] = proxy_keylog_file
     elif protocol == 'shadowsocks':
         DEFAULT_OVERRIDE_PREFS['tls.keylog_file'] = keylog_file
+        with open(proxy_keylog_file, 'r') as f:
+            password = f.read().strip()
         DEFAULT_OVERRIDE_PREFS['shadowsocks.password'] = password
     return DEFAULT_OVERRIDE_PREFS
