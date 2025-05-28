@@ -129,9 +129,9 @@ def single_pcap_extract(
         # Append a new row to the result.
         result.append({
             'host': host,
-            'id': int(id),
+            'id': id,
             'sni': row["tls.handshake.extensions_server_name"],
-            'stream': int(stream),
+            'stream': stream,
             'transport': transport,
             'protocol': protocol,
             'feature': features}
@@ -147,7 +147,8 @@ def multi_pcap_extract(
         display_filter: str='tcp',
         protocol: str='normal',
         override_prefs: dict=None,
-        src: List[str]=None) -> List[dict]:
+        src: List[str]=None,
+        db: pd.DataFrame=None) -> List[dict]:
     """
     Extract features from multiple .pcap files.
     """
@@ -157,7 +158,17 @@ def multi_pcap_extract(
     result = []
     for file in pcap_dir.iterdir():
         if file.is_file() and file.suffix in ['.pcapng', '.pcap']:
-            result.extend(single_pcap_extract(tshark_path, file, SNI_filter, display_filter, protocol, override_prefs, src))
+            if db is not None:
+                # Check if the host and id of the current file are in the db.
+                host, id = file.stem.split('_')
+                if ((db['host'] == host) & (db['id'] == id) & (db['protocol'] == protocol)).any():
+                    logger.info(f"Host: {host}, ID: {id}, Protocol: {protocol} has been processed, skip")
+                    continue
+            try:
+                result.extend(single_pcap_extract(tshark_path, file, SNI_filter, display_filter, protocol, override_prefs, src))
+            except Exception as e:
+                logger.error(f"Error extracting features from {file}: {e}, skip")
+                continue
     return result
 
 

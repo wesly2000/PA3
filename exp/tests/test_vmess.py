@@ -409,11 +409,11 @@ def test_single_pcap_extract_1(param_gen):
     assert df.shape[0] == 3 and \
             df.iloc[0]['sni'] == 'fyb-2.cdn.bcebos.com' and \
             df.iloc[0]['feature'].shape == (3, 148) and \
-            df.iloc[0]['stream'] == 0 and \
+            df.iloc[0]['stream'] == '0' and \
             df.iloc[0]['transport'] == 'tcp' and \
             df.iloc[0]['protocol'] == 'vmess' and \
             df.iloc[0]['host'] == 'top.baidu.com' and \
-            df.iloc[0]['id'] == 0
+            df.iloc[0]['id'] == '0'
     
 
 @skip_vmess
@@ -437,3 +437,28 @@ def test_multi_pcap_extract_1(param_gen):
             set(df['feature'].apply(lambda x: x.shape[1])) == length_set and \
             set(df['sni']) == set(["fyb-2.cdn.bcebos.com"])
     
+@skip_vmess
+@pytest.mark.parametrize("param_gen", [{'host': 'top.baidu.com', 'index': 0}], indirect=True)
+def test_multi_pcap_extract_2(param_gen):
+    """
+    This test covers the case where the pcap files have already been processed.
+    """
+    src = ['192.168.5.5']
+    pcap_dir = 'exp/test_dataset/realworld_dataset/vmess_capture/top.baidu.com'
+    SNIs = ['firefox.settings.services.mozilla.com']
+
+    _, override_prefs = param_gen
+
+    db = pd.DataFrame(columns=['host', 'id', 'protocol'], 
+                      data=[('top.baidu.com', '0', 'vmess'),
+                            ('top.baidu.com', '1', 'normal'),
+                            ('top.baidu.com', '2', 'vmess'),
+                            ('www.baidu.com', '1', 'vmess')])
+    
+    result = multi_pcap_extract(tshark_path, pcap_dir, src=src, protocol='vmess', override_prefs=override_prefs, SNI_filter=SNIs, db=db)
+
+    df = pd.DataFrame(columns=['host', 'id', 'sni', 'stream', 'transport', 'protocol', 'feature'], data=result)
+    assert df.shape[0] == 1 and \
+            df.iloc[0]['sni'] == 'fyb-2.cdn.bcebos.com' and \
+            df.iloc[0]['feature'].shape == (3, 94) and \
+            df.iloc[0]['stream'] == '0'
