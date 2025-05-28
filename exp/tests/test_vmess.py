@@ -419,3 +419,25 @@ def test_single_pcap_extract_1(param_gen):
             df.iloc[0]['host'] == 'top.baidu.com' and \
             df.iloc[0]['id'] == 0
     
+
+@skip_vmess
+@pytest.mark.parametrize("param_gen", [{'host': 'top.baidu.com', 'index': 0}], indirect=True)
+def test_multi_pcap_extract_1(param_gen):
+    """
+    Test extracting features from multiple .pcap files. Moreover, we test the effect of filter SNIs.
+    """
+    src = ['192.168.5.5']
+    pcap_dir = 'exp/test_dataset/realworld_dataset/vmess_capture/top.baidu.com'
+    SNIs = ['firefox.settings.services.mozilla.com']
+
+    pcap_dir = Path(pcap_dir)
+    _, override_prefs = param_gen
+
+    result = multi_pcap_extract(tshark_path, pcap_dir, src=src, protocol='vmess', override_prefs=override_prefs, SNI_filter=SNIs)
+
+    df = pd.DataFrame(columns=['host', 'id', 'sni', 'stream', 'transport', 'protocol', 'feature'], data=result)
+    length_set = set([148, 94])
+    assert df.shape[0] == 3 and \
+            set(df['feature'].apply(lambda x: x.shape[1])) == length_set and \
+            set(df['sni']) == set(["fyb-2.cdn.bcebos.com"])
+    

@@ -143,7 +143,7 @@ def single_pcap_extract(
 def multi_pcap_extract(
         tshark_path: str, 
         pcap_dir: Union[str, Path], 
-        SNI_filter: Union[Set[str], List[str]], 
+        SNI_filter: Union[Set[str], List[str]]=None, 
         display_filter: str='tcp',
         protocol: str='normal',
         override_prefs: dict=None,
@@ -151,6 +151,9 @@ def multi_pcap_extract(
     """
     Extract features from multiple .pcap files.
     """
+    if isinstance(pcap_dir, str):
+        pcap_dir = Path(pcap_dir)
+
     result = []
     for file in pcap_dir.iterdir():
         if file.is_file() and file.suffix in ['.pcapng', '.pcap']:
