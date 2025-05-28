@@ -56,14 +56,17 @@ def single_pcap_extract(pcap_file: Union[str, Path], SNI_filter: Union[Set[str],
     Extract features from a single .pcap file.
     """
     # Split the pcap file name into host and id.
-    host, id = pcap_file.split('.')[0].split('_')
+    if isinstance(pcap_file, str):
+        pcap_file = Path(pcap_file)
+
+    host, id = pcap_file.stem.split('_')
 
     # According to the answer, using a list of dictionaries to store the results, then convert it to a DataFrame
     # is much more efficient than appending rows to a existing DataFrame, so we use a list of dictionaries to store the results.
     # Ref: https://stackoverflow.com/a/47979665/20039811
     result = []
-    df = pcap_to_dataframe(pcap_file, display_filter=display_filter)
-    dir_extractor = CsvDirExtractor(src=["10.4.0.3"])
+    df = pcap_to_dataframe(tshark_path, pcap_file, display_filter=display_filter, override_prefs=override_prefs)
+    dir_extractor = CsvDirExtractor(src=src)
     ts_extractor = CsvTsExtractor()
     len_extractor = CsvLenExtractor()
     # Fetch the rows with SNI, filtered by the SNI_filter.
