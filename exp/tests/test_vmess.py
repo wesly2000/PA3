@@ -12,7 +12,7 @@ from WFlib.utils.config import get_config, default_override_prefs
 from WFlib.tools.analyzer import *
 from WFlib.tools.visualize import *
 from exp.data_analysis.http2_stream_analysis import *
-from WFlib.tools.extractor import pcap_to_dataframe
+from WFlib.tools.extractor import pcap_to_dataframe, single_pcap_extract
 import nest_asyncio 
 nest_asyncio.apply()
 
@@ -369,3 +369,53 @@ def test_pcap_to_dataframe_1():
     assert df.shape[0] == 148 and \
             df.shape[1] == 8 and \
             df.iloc[5]['tls.handshake.extensions_server_name'] == 'fyb-2.cdn.bcebos.com'
+    
+@pytest.fixture
+def param_gen(request):
+    """
+    Used to generate the parameters for the pcap extraction test.
+    """
+    if 'index' in request.param:
+        index = request.param['index']
+    else:
+        index = None
+
+    host = request.param['host']
+
+    if 'display_filter' in request.param:
+        display_filter = request.param['display_filter']
+    else:
+        display_filter = None
+    pcap_dir = f"exp/test_dataset/realworld_dataset/vmess_capture/{host}"
+    if index is None:
+        pcap_file =  Path(os.path.join(pcap_dir, f"{host}.pcapng"))
+    else:
+        pcap_file =  Path(os.path.join(pcap_dir, f"{host}_{index}.pcapng"))
+
+    proxy_keylog_file = os.path.join(pcap_dir, "proxy_keylog.txt")
+    keylog_file = os.path.join(pcap_dir, "keylog.txt")
+
+    override_prefs = default_override_prefs('vmess', os.path.abspath(keylog_file), os.path.abspath(proxy_keylog_file), None)
+
+    return pcap_file, display_filter, override_prefs
+
+@skip_vmess
+@pytest.mark.parametrize("param_gen", [{'host': 'top.baidu.com', 'index': 0}], indirect=True)
+def test_single_pcap_extract_1(param_gen):
+    """
+    Test extracting features from a single .pcap file.
+    """
+    src = ['192.168.5.5']
+
+    pcap_file, display_filter, override_prefs = param_gen
+    result = single_pcap_extract(tshark_path, pcap_file, display_filter=display_filter, override_prefs=override_prefs, src=src, protocol='vmess')
+    df = pd.DataFrame(columns=['host', 'id', 'sni', 'stream', 'transport', 'protocol', 'feature'], data=result)
+    assert df.shape[0] == 3 and \
+            df.iloc[0]['sni'] == 'fyb-2.cdn.bcebos.com' and \
+            df.iloc[0]['feature'].shape == (3, 148) and \
+            df.iloc[0]['stream'] == 0 and \
+            df.iloc[0]['transport'] == 'tcp' and \
+            df.iloc[0]['protocol'] == 'vmess' and \
+            df.iloc[0]['host'] == 'top.baidu.com' and \
+            df.iloc[0]['id'] == 0
+    

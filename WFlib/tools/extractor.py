@@ -30,7 +30,12 @@ def pcap_to_dataframe(tshark_path: str,
             prefs.append(f'{key}:{value}')
 
     fields_args = [f'-e {field}' for field in fields]
-    cmd = [tshark_path, '-r', pcap_file, '-Y', display_filter] + ['-T', 'fields'] + fields_args + ['-E', "separator=,", '-E', "header=y"] + prefs
+    if display_filter:
+        display_filter = ['-Y',  f"{display_filter}"]
+    else:
+        display_filter = []
+
+    cmd = [tshark_path, '-r', pcap_file] + display_filter + ['-T', 'fields'] + fields_args + ['-E', "separator=,", '-E', "header=y"] + prefs
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
@@ -51,9 +56,38 @@ def pcap_to_dataframe(tshark_path: str,
     return df
 
 
-def single_pcap_extract(pcap_file: Union[str, Path], SNI_filter: Union[Set[str], List[str]], display_filter: str='tcp') -> List[dict]:
+def single_pcap_extract(
+        tshark_path: str, 
+        pcap_file: Union[str, Path], 
+        SNI_filter: Union[Set[str], List[str]]=None, 
+        display_filter: str=None,
+        protocol: str='normal',
+        override_prefs: dict=None,
+        src: List[str]=None) -> List[dict]:
     """
     Extract features from a single .pcap file.
+
+    Params
+    ------
+    tshark_path : str
+        The path to the tshark executable.
+    pcap_file : Union[str, Path]
+        The path to the .pcap file.
+    SNI_filter : Union[Set[str], List[str]]
+        The set of SNIs to exclude.
+    display_filter : str
+        The display filter to use.
+    protocol : str
+        The protocol of the pcap, if no proxy is used, it should be 'normal', otherwise, it is the name of the proxy protocol.
+    override_prefs : dict
+        The override preferences for tshark, which is mainly used for TCP reassembly and proxy traffic decryption.
+    src : List[str]
+        The source IP addresses to extract the direction feature.
+
+    Returns
+    -------
+    result : List[dict]
+        The list of dictionaries containing the extracted features.
     """
     # Split the pcap file name into host and id.
     if isinstance(pcap_file, str):
@@ -95,9 +129,9 @@ def single_pcap_extract(pcap_file: Union[str, Path], SNI_filter: Union[Set[str],
         # Append a new row to the result.
         result.append({
             'host': host,
-            'id': id,
+            'id': int(id),
             'sni': row["tls.handshake.extensions_server_name"],
-            'stream': stream,
+            'stream': int(stream),
             'transport': transport,
             'protocol': protocol,
             'feature': features}
@@ -106,14 +140,21 @@ def single_pcap_extract(pcap_file: Union[str, Path], SNI_filter: Union[Set[str],
     return result
 
 
-def multi_pcap_extract(pcap_dir: Union[str, Path], SNI_filter: Union[Set[str], List[str]], display_filter: str='tcp') -> List[dict]:
+def multi_pcap_extract(
+        tshark_path: str, 
+        pcap_dir: Union[str, Path], 
+        SNI_filter: Union[Set[str], List[str]], 
+        display_filter: str='tcp',
+        protocol: str='normal',
+        override_prefs: dict=None,
+        src: List[str]=None) -> List[dict]:
     """
     Extract features from multiple .pcap files.
     """
     result = []
     for file in pcap_dir.iterdir():
         if file.is_file() and file.suffix in ['.pcapng', '.pcap']:
-            result.extend(single_pcap_extract(file, SNI_filter, display_filter))
+            result.extend(single_pcap_extract(tshark_path, file, SNI_filter, display_filter, protocol, override_prefs, src))
     return result
 
 
@@ -163,7 +204,7 @@ class CsvDirExtractor(CsvExtractor):
         self._src = src if isinstance(src, list) else [src]
 
     def extract(self, df: pd.DataFrame):
-        return np.where(df['ip.src'].isin(self._src), 1, -1)
+        return np.where(df['ip.src'].isin(self._src), 1, -1).astype(int)
     
 
 class CsvTsExtractor(CsvExtractor):
@@ -174,7 +215,7 @@ class CsvTsExtractor(CsvExtractor):
         super().__init__(name=name)
 
     def extract(self, df: pd.DataFrame):
-        return df['frame.relative_time'].to_numpy()
+        return df['frame.time_relative'].to_numpy(dtype=float)
     
 
 class CsvLenExtractor(CsvExtractor):
@@ -187,7 +228,7 @@ class CsvLenExtractor(CsvExtractor):
 
     def extract(self, df: pd.DataFrame, protocol: str="tcp"):
         if protocol == "tcp":
-            return df['tcp.len'].to_numpy() + df['tcp.hdr_len'].to_numpy()
+            return df['tcp.len'].to_numpy(dtype=int) + df['tcp.hdr_len'].to_numpy(dtype=int)
         else:
             raise NotImplementedError(f"Protocol {protocol} is not supported.")
 

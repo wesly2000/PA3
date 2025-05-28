@@ -159,7 +159,7 @@ def simple_csv_data():
     data = {
         'ip.src': ['192.168.1.100', '10.0.0.15', '172.16.0.25', '192.168.1.100', '10.0.0.15'],
         'ip.dst': ['8.8.8.8', '192.168.1.100', '10.0.0.15', '172.16.0.25', '8.8.8.8'],
-        'frame.relative_time': [0.000000, 0.023456, 0.045678, 0.078901, 0.123456],
+        'frame.time_relative': [0.000000, 0.023456, 0.045678, 0.078901, 0.123456],
         'tcp.hdr_len': [20, 32, 20, 32, 20],
         'tcp.len': [1460, 1460, 1460, 1460, 1460]
     }
@@ -220,6 +220,7 @@ def test_pcap_to_dataframe_1():
     assert sni_row.shape[0] == 1
     assert sni_row.iloc[0]["tls.handshake.extensions_server_name"] == "is1-ssl.mzstatic.com"
 
+
 def test_pcap_to_dataframe_2():
     """
     Test reading a .pcap file and convert it to a DataFrame, this test covers the case that the pcap file contains UDP packets.
@@ -228,5 +229,4 @@ def test_pcap_to_dataframe_2():
     assert df.shape[0] == 80 and \
             df.shape[1] == 8 and \
             df.iloc[1]['tls.handshake.extensions_server_name'] == 'lf16-cdn-tos.tiktokcdn-us.com' and \
-            df[df['tcp.stream'].notna()].shape[0] == 0
-    
+            df[df['tcp.stream'].notna()].shape[0] == 0   
