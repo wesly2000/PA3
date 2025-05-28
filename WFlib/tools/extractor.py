@@ -13,7 +13,7 @@ COMMENT: Shall we name a class capitalizing all letters of an abbrev., e.g., ext
          Currently, only the first letter is capitalized, please follow the convention.
 '''
 
-FIELDS = ["tcp.stream", "ip.src", "ip.dst", "frame.time_relative", "tcp.len", "tcp.hdr_len", "tls.handshake.extensions_server_name"]
+FIELDS = ["tcp.stream", "udp.stream","ip.src", "ip.dst", "frame.time_relative", "tcp.len", "tcp.hdr_len", "tls.handshake.extensions_server_name"]
 
 def pcap_to_dataframe(tshark_path: str, 
                       pcap_file: Union[str, Path], 

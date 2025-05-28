@@ -12,6 +12,7 @@ from WFlib.utils.config import get_config, default_override_prefs
 from WFlib.tools.analyzer import *
 from WFlib.tools.visualize import *
 from exp.data_analysis.http2_stream_analysis import *
+from WFlib.tools.extractor import pcap_to_dataframe
 
 import nest_asyncio 
 nest_asyncio.apply()
@@ -25,6 +26,7 @@ else:
         SS_ENABLED = False
     else:
         SS_ENABLED = config['shadowsocks'].getboolean('enabled', fallback=False)
+        tshark_path = config['tshark'].get('tshark_path', fallback="tshark")
 
 
 skip_shadowsocks = pytest.mark.skipif(
@@ -207,3 +209,18 @@ def test_line_merge_1(capture_gen):
     assert merged_line.byte_counter == http2_byte_counter
     # Check the continuity of the merged line.
     assert merged_line.continunity_check()
+
+@skip_shadowsocks
+def test_pcap_to_dataframe_1():
+    """
+    This test covers converting a pcap file to a dataframe.
+    """
+    proxy_keylog_file = "exp/test_dataset/realworld_dataset/shadowsocks_capture/ai.zjnav.com/proxy_keylog.txt"
+    keylog_file = "exp/test_dataset/realworld_dataset/shadowsocks_capture/ai.zjnav.com/keylog.txt"
+    pcap_file = "exp/test_dataset/realworld_dataset/shadowsocks_capture/ai.zjnav.com/ai.zjnav.com_1.pcapng"
+
+    override_prefs = default_override_prefs('shadowsocks', os.path.abspath(keylog_file), None, '52564afb-8a21-4dae-be8d-991bdf3a13d8')
+    df = pcap_to_dataframe(tshark_path, pcap_file, display_filter="tcp.stream eq 4", override_prefs=override_prefs)
+    assert df.shape[0] == 117 and \
+            df.shape[1] == 8 and \
+            df.iloc[6]['tls.handshake.extensions_server_name'] == 't3.gstatic.cn'

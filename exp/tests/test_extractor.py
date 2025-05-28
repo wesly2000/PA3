@@ -214,8 +214,19 @@ def test_pcap_to_dataframe_1():
     """
     df = pcap_to_dataframe(tshark_path, apple_file, display_filter="tcp.stream eq 1")
     assert df.shape[0] == 22
-    assert df.shape[1] == 7
+    assert df.shape[1] == 8
 
     sni_row = df[df["tls.handshake.extensions_server_name"].notna()]
     assert sni_row.shape[0] == 1
     assert sni_row.iloc[0]["tls.handshake.extensions_server_name"] == "is1-ssl.mzstatic.com"
+
+def test_pcap_to_dataframe_2():
+    """
+    Test reading a .pcap file and convert it to a DataFrame, this test covers the case that the pcap file contains UDP packets.
+    """
+    df = pcap_to_dataframe(tshark_path, tiktok_file, display_filter="udp.stream eq 0")
+    assert df.shape[0] == 80 and \
+            df.shape[1] == 8 and \
+            df.iloc[1]['tls.handshake.extensions_server_name'] == 'lf16-cdn-tos.tiktokcdn-us.com' and \
+            df[df['tcp.stream'].notna()].shape[0] == 0
+    
