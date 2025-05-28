@@ -67,7 +67,9 @@ def single_pcap_extract(pcap_file: Union[str, Path], SNI_filter: Union[Set[str],
     ts_extractor = CsvTsExtractor()
     len_extractor = CsvLenExtractor()
     # Fetch the rows with SNI, filtered by the SNI_filter.
-    sni_rows = df[~df["tls.handshake.extensions_server_name"].isin(SNI_filter)]
+
+    sni_rows = df[(df["tls.handshake.extensions_server_name"].notna()) & ~(df["tls.handshake.extensions_server_name"].isin(SNI_filter if SNI_filter else []))]
+
     for _, row in sni_rows.iterrows():
         # Check if the row is a TCP packet.
         if row["tcp.stream"] is not None:
