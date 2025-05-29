@@ -13,7 +13,7 @@ COMMENT: Shall we name a class capitalizing all letters of an abbrev., e.g., ext
          Currently, only the first letter is capitalized, please follow the convention.
 '''
 
-FIELDS = ["tcp.stream", "udp.stream","ip.src", "ip.dst", "frame.time_relative", "tcp.len", "tcp.hdr_len", "tls.handshake.extensions_server_name"]
+FIELDS = ["tcp.stream", "udp.stream","ip.src", "ip.dst", "frame.time_relative", "tcp.len", "tcp.hdr_len", "udp.length", "tls.handshake.extensions_server_name"]
 
 def pcap_to_dataframe(tshark_path: str, 
                       pcap_file: Union[str, Path], 
@@ -23,7 +23,7 @@ def pcap_to_dataframe(tshark_path: str,
     """
     Read in a .pcap file, and output the selected fields into a DataFrame without creating a .csv file.
     """
-    prefs = []
+    prefs = ['-2']
     if override_prefs:
         for key, value in override_prefs.items():
             prefs.append(f'-o')
@@ -44,7 +44,7 @@ def pcap_to_dataframe(tshark_path: str,
         raise e
 
     if result.stderr:
-        logger.warning(f"tshark warnings: {result.stderr}")
+        logger.warning(f"tshark warnings in {pcap_file}: {result.stderr}")
     csv_data = result.stdout
 
     if not csv_data.strip():
@@ -243,6 +243,8 @@ class CsvLenExtractor(CsvExtractor):
     def extract(self, df: pd.DataFrame, protocol: str="tcp"):
         if protocol == "tcp":
             return df['tcp.len'].to_numpy(dtype=int) + df['tcp.hdr_len'].to_numpy(dtype=int)
+        elif protocol == "udp":
+            return df['udp.length'].to_numpy(dtype=int)
         else:
             raise NotImplementedError(f"Protocol {protocol} is not supported.")
 

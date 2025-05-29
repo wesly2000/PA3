@@ -367,7 +367,7 @@ def test_pcap_to_dataframe_1():
     override_prefs = default_override_prefs('vmess', os.path.abspath(keylog_file), os.path.abspath(proxy_keylog_file))
     df = pcap_to_dataframe(tshark_path, pcap_file, display_filter="tcp.stream eq 0", override_prefs=override_prefs)
     assert df.shape[0] == 148 and \
-            df.shape[1] == 8 and \
+            df.shape[1] == 9 and \
             df.iloc[5]['tls.handshake.extensions_server_name'] == 'fyb-2.cdn.bcebos.com'
     
 @pytest.fixture

@@ -223,5 +223,5 @@ def test_pcap_to_dataframe_1():
     override_prefs = default_override_prefs('shadowsocks', os.path.abspath(keylog_file), os.path.abspath(proxy_keylog_file))
     df = pcap_to_dataframe(tshark_path, pcap_file, display_filter="tcp.stream eq 4", override_prefs=override_prefs)
     assert df.shape[0] == 117 and \
-            df.shape[1] == 8 and \
+            df.shape[1] == 9 and \
             df.iloc[6]['tls.handshake.extensions_server_name'] == 't3.gstatic.cn'
