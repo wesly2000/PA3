@@ -323,9 +323,12 @@ class PcapDirExtractor(PcapExtractor):
             # When only_summaries == True, pkt.source should be used.
             src = pkt.source
         else:
-            if 'ip' not in pkt:
-                pass  # Add some warning here
-            src = pkt['ip'].src
+            if 'ip' in pkt:
+                src = pkt['ip'].src
+            elif 'ipv6' in pkt:
+                src = pkt['ipv6'].src
+            else:
+                raise NotImplementedError("Packet does not have IP or IPv6 layer")
 
         target.append(1 if src in self._src else -1) # 1 for egress, -1 for ingress
 

@@ -7,7 +7,7 @@ import pytest
 from WFlib.tools.extractor import *
 from WFlib.tools.formatter import PcapFormatter
 from WFlib.utils.config import get_config
-from exp.tests.test_formatter import google_file, apple_file, tiktok_file
+from exp.tests.test_formatter import google_file, apple_file, tiktok_file, yandex_file
 
 config_path = Path.cwd() / 'config.ini'
 if not config_path.exists():
@@ -53,6 +53,27 @@ def test_PcapDirExtractor_1():
 
     loaded_data.close()
 
+def test_PcapDirExtractor_2():
+    extractor = PcapDirExtractor(src=["58.206.207.126", "2001:da8:283:c004:8177:495b:d038:d48a"])
+    formatter = PcapFormatter(length=31)
+    formatter.load(yandex_file)
+    formatter.transform("www.yandex.com", 0, extractor)
+
+    buffer = io.BytesIO()
+    formatter.dump(buffer)
+    buffer.seek(0)
+    loaded_data = np.load(buffer)
+
+    target = {"hosts" : np.array(["www.yandex.com"]),
+              "labels": np.array([0]),
+              "direction": np.array(
+                  [1, -1, 1, 1, 1, -1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, 1, 1, -1, -1, -1, 1, -1, 1, -1, 1, 1, -1, 1, 1, 1]
+                )}
+    
+    for k, v in loaded_data.items():
+        assert np.all(target[k] == v)
+
+    loaded_data.close()
 
 def test_PcapTsExtractor_1():
     """
