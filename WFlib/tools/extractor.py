@@ -206,7 +206,7 @@ def multi_pcap_extract(
             if db is not None:
                 # Check if the host and id of the current file are in the db.
                 host, id = file.stem.split('_')
-                if ((db['host'] == host) & (db['id'] == id) & (db['protocol'] == protocol)).any():
+                if db.isin({'host': [host], 'id': [int(id)], 'protocol': [protocol]}).all(axis=1).any():
                     logger.info(f"Host: {host}, ID: {id}, Protocol: {protocol} has been processed, skip")
                     continue
             try:
