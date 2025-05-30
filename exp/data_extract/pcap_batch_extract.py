@@ -1,8 +1,5 @@
 """
-This file is used to test batch_extract. Also, it could be used as a simple script to for extract features from a 
-list of files.
-
-NOTE: Currently, only .pcap files are supported. More file format (.json, .csv, .etc.) would be supported in the future.
+Extract basic features from .pcap files, i.e., use the PcapExtractor and PcapFormatter backends.
 
 NOTE: The extractors are now hard-coded into the script. Passing extractors as flags might be supported in the future.
 """
