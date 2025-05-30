@@ -8,6 +8,8 @@ from pathlib import Path
 import os
 import argparse
 import logging
+import multiprocessing as mp
+from functools import partial
 
 from WFlib.tools.extractor import *
 from WFlib.utils.config import default_override_prefs
@@ -26,9 +28,8 @@ else:
 src = ["58.206.207.126", "192.168.5.5", "10.4.0.3", "192.168.5.7"]
 PROTOCOLS = ['normal', 'vmess']
 
-def extract_csv_db_per_host(root: str, protocol: str, host: str, host_filter: Set[str], display_filter: str='tcp', db: pd.DataFrame=None):
+def extract_csv_db_per_host_per_protocol(root: str, protocol: str, host: str, host_filter: Set[str], display_filter: str='tcp', db: pd.DataFrame=None):
     pcap_dir = f"{root}/{protocol}_capture/{host}"
-    keylog_file = f"{pcap_dir}/keylog.txt"
     proxy_keylog_file = f"{pcap_dir}/proxy_keylog.txt"
 
     pcap_dir_path = Path(pcap_dir)
@@ -42,39 +43,65 @@ def extract_csv_db_per_host(root: str, protocol: str, host: str, host_filter: Se
     return result
 
 
-def extract_csv_db(root: str, host_list: Set[str], database_file: str, host_filter: Set[str], display_filter: str='tcp'):
-    db = pd.read_csv(database_file)[['host', 'id', 'protocol']].drop_duplicates()
-
-    for host in host_list:
-        for protocol in PROTOCOLS:
-            logger.info(f"Host: {host}, Protocol: {protocol}")
-            result = extract_csv_db_per_host(root, protocol, host, host_filter, display_filter, db)
-            df = pd.DataFrame(columns=['host', 'id', 'sni', 'stream', 'transport', 'protocol', 'feature'], data=result)
-            df.to_csv(database_file, mode='a', index=False, header=False)
+def extract_csv_db_per_host(host: str, root: str, host_filter: set, 
+                         display_filter: str, db: pd.DataFrame, database_file: str, 
+                         write_lock) -> None:
+    """
+    Process a single host-protocol combination and write results to the database file.
+    Uses a lock to prevent write conflicts.
+    """
+    result = []
+    for protocol in PROTOCOLS:
+        try:
+            logger.info(f"Processing Host: {host}, Protocol: {protocol}")
+            result.extend(extract_csv_db_per_host_per_protocol(root, protocol, host, host_filter, display_filter, db))
             
+        except Exception as e:
+            logger.error(f"Error processing Host: {host}, Protocol: {protocol}: {e}")
 
-def main(input_root: str, output_root: str, host_list_file: str, host_filter_file: str):
+    df = pd.DataFrame(columns=['host', 'id', 'sni', 'stream', 'transport', 'protocol', 'feature'], 
+                    data=result)
+    
+    with write_lock:
+        df.to_csv(database_file, mode='a', index=False, header=False)
+
+def main(input_root: str, output_root: str, host_list_file: str, host_filter_file: str, 
+         display_filter: str = None, n_processes: int = None):
     database_file = f"{output_root}/csv_db_extract/database.csv"
     Path(database_file).parent.mkdir(parents=True, exist_ok=True)
     if not Path(database_file).exists():
-        logger.info("CSV DB database does not exist, create a new one")
+        logger.info("CSV database does not exist, create a new one")
         df = pd.DataFrame(columns=['host', 'id', 'sni', 'stream', 'transport', 'protocol', 'feature'])
         df.to_csv(database_file, index=False)
 
     host_list = read_host_list(host_list_file)
     host_filter = read_host_list(host_filter_file)
+    db = pd.read_csv(database_file)[['host', 'id', 'protocol']] if Path(database_file).exists() else None
 
-    extract_csv_db(input_root, host_list, database_file, host_filter)
+    # Create a lock for file writing
+    manager = mp.Manager()
+    write_lock = manager.Lock()
+    
+    # Create a process pool
+    n_processes = n_processes or mp.cpu_count()
+    logger.info(f"Using {n_processes} processes")
+    
+    # Create tasks for each host-protocol combination
+    tasks = [(host, input_root, host_filter, display_filter, db, database_file, write_lock) for host in host_list]
+    
+    # Process tasks in parallel
+    with mp.Pool(n_processes) as pool:
+        pool.starmap(extract_csv_db_per_host, tasks)
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--input_root", required=True, type=str, help="The root directory of the capture and keylog")
     parser.add_argument("-o", "--output_root", required=True, type=str, help="The root directory of the output")
     parser.add_argument("--host", default="exp/data_extract/host_list.txt", type=str, help="The host list file")
     parser.add_argument("-f", "--filter", default="exp/data_extract/filter.txt", help="The host filter file")
+    parser.add_argument("-p", "--processes", type=int, help="Number of processes to use (default: CPU count)")
     args = parser.parse_args()
-
+    
     logger.info("Task csv_db_extract started")
-    main(args.input_root, args.output_root, args.host, args.filter)
+    main(args.input_root, args.output_root, args.host, args.filter, n_processes=args.processes)
     logger.info("Task csv_db_extract completed")
