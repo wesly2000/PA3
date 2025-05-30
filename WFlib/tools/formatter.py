@@ -9,6 +9,10 @@ import asyncio
 import nest_asyncio
 nest_asyncio.apply()
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class Formatter(object):
     """
@@ -413,14 +417,22 @@ async def single_dir_batch_extract(formatter : DistriPcapFormatter, SNIs : None,
         The pool to append all the sub-process results.
     """
     async with semaphore:
-        print(f"Processing directory {subdir.name}")
+        logger.info(f"Processing directory {subdir.name}")
         host = subdir.name #  Consider using subdir.name
         buf = {extractor.name : [] for extractor in extractors}
         for file in subdir.iterdir():
             if file.is_file() and file.suffix in ['.pcapng', '.pcap']:  # Ensure it's a pcap(ng) file
-                display_filter = SNI_exclude_filter(file, SNIs)
+                try:
+                    display_filter = SNI_exclude_filter(file, SNIs)
+                except Exception as e:
+                    logger.error(f"Error processing file {file}: {e}")
+                    continue
                 formatter.display_filter = display_filter
-                formatter.load_and_transform(buf, file, *extractors)
+                try: 
+                    formatter.load_and_transform(buf, file, *extractors)
+                except Exception as e:
+                    logger.error(f"Error processing file {file}: {e}")
+                    continue
 
         return (host, buf)
 

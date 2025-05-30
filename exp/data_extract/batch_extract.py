@@ -15,6 +15,9 @@ import asyncio
 import nest_asyncio
 nest_asyncio.apply()
 
+import logging
+logger = logging.getLogger(__name__)
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--dir', type=str, help="The base dir of the .pcap files")
@@ -39,6 +42,8 @@ if __name__ == '__main__':
     filter_file = "exp/data_extract/filter.txt"
     SNIs = read_host_list(filter_file)
 
+    logger.info("Task batch_extract started")
     loop = asyncio.get_event_loop()
     loop.run_until_complete(formatter.batch_extract(args.dir, args.output_file, SNIs, args.num_worker, extractor))
     loop.close()
+    logger.info("Task batch_extract completed")
