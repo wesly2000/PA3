@@ -69,7 +69,7 @@ def h2_stream_analysis_per_host(root: str, protocol: str, host: str, host_filter
     if not pcap_dir_path.exists():
         raise FileNotFoundError(f"Directory {pcap_dir} does not exist")
 
-    override_prefs = default_override_prefs(protocol, os.path.abspath(keylog_file), os.path.abspath(proxy_keylog_file), None)
+    override_prefs = default_override_prefs(protocol, os.path.abspath(keylog_file), os.path.abspath(proxy_keylog_file))
     
     stats = dict()
     limit = 30
@@ -100,7 +100,7 @@ def h2_stream_analysis_per_host(root: str, protocol: str, host: str, host_filter
         
     return df
         
-def h2_stream_analysis(root: str, host_list: List[str], database_file: str, host_filter: List[str]):
+def h2_stream_analysis(root: str, host_list: Set[str], database_file: str, host_filter: Set[str]):
     existed_df = pd.read_csv(database_file)[['host', 'protocol']]
     for host in host_list:
         for protocol in PROTOCOLS:

@@ -43,7 +43,7 @@ def main(input_root, protocol, host, sni, base, output_root, dry_run=False):
 
     pcap_dir_path = Path(pcap_dir)
 
-    override_prefs = default_override_prefs(protocol, os.path.abspath(keylog_file), os.path.abspath(proxy_keylog_file), None)
+    override_prefs = default_override_prefs(protocol, os.path.abspath(keylog_file), os.path.abspath(proxy_keylog_file))
 
     lines = []
     limit = 30

@@ -7,7 +7,7 @@ import pytest
 from WFlib.tools.extractor import *
 from WFlib.tools.formatter import PcapFormatter
 from WFlib.utils.config import get_config
-from exp.tests.test_formatter import google_file, apple_file, tiktok_file
+from exp.tests.test_formatter import google_file, apple_file, tiktok_file, yandex_file
 
 config_path = Path.cwd() / 'config.ini'
 if not config_path.exists():
@@ -53,6 +53,27 @@ def test_PcapDirExtractor_1():
 
     loaded_data.close()
 
+def test_PcapDirExtractor_2():
+    extractor = PcapDirExtractor(src=["58.206.207.126", "2001:da8:283:c004:8177:495b:d038:d48a"])
+    formatter = PcapFormatter(length=31)
+    formatter.load(yandex_file)
+    formatter.transform("www.yandex.com", 0, extractor)
+
+    buffer = io.BytesIO()
+    formatter.dump(buffer)
+    buffer.seek(0)
+    loaded_data = np.load(buffer)
+
+    target = {"hosts" : np.array(["www.yandex.com"]),
+              "labels": np.array([0]),
+              "direction": np.array(
+                  [1, -1, 1, 1, 1, -1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, 1, 1, -1, -1, -1, 1, -1, 1, -1, 1, 1, -1, 1, 1, 1]
+                )}
+    
+    for k, v in loaded_data.items():
+        assert np.all(target[k] == v)
+
+    loaded_data.close()
 
 def test_PcapTsExtractor_1():
     """
@@ -214,7 +235,7 @@ def test_pcap_to_dataframe_1():
     """
     df = pcap_to_dataframe(tshark_path, apple_file, display_filter="tcp.stream eq 1")
     assert df.shape[0] == 22
-    assert df.shape[1] == 8
+    assert df.shape[1] == 9
 
     sni_row = df[df["tls.handshake.extensions_server_name"].notna()]
     assert sni_row.shape[0] == 1
@@ -227,6 +248,15 @@ def test_pcap_to_dataframe_2():
     """
     df = pcap_to_dataframe(tshark_path, tiktok_file, display_filter="udp.stream eq 0")
     assert df.shape[0] == 80 and \
-            df.shape[1] == 8 and \
+            df.shape[1] == 9 and \
             df.iloc[1]['tls.handshake.extensions_server_name'] == 'lf16-cdn-tos.tiktokcdn-us.com' and \
-            df[df['tcp.stream'].notna()].shape[0] == 0   
+            df[df['tcp.stream'].notna()].shape[0] == 0
+
+def test_pcap_to_dataframe_3():
+    """
+    Test reading a .pcap file and convert it to a DataFrame, this test covers the case that the pcap file contains UDP packets.
+    """
+    df = pcap_to_dataframe(tshark_path, tiktok_file, display_filter="udp.stream eq 0")
+    extractor = CsvLenExtractor()
+    result = extractor.extract(df, protocol="udp")
+    assert result[0] == 1260

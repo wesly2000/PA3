@@ -137,7 +137,7 @@ def capture(url, iface, output_file, timeout=200, capture_filter=common_filter, 
     browse_thread.join()
     monitor_process.join()
 
-def read_host_list(file) -> list:
+def read_host_list(file) -> set:
     """
     Read the hostname list file, remove the possible duplicates, and store the results into a list.
     """

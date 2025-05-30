@@ -15,6 +15,7 @@ baidu_proxied_file = "exp/test_dataset/realworld_dataset/www.baidu.com_proxied.p
 google_file = "exp/test_dataset/realworld_dataset/www.google.com.pcapng"
 apple_file = "exp/test_dataset/realworld_dataset/decryption/www.apple.com.pcapng"
 tiktok_file = "exp/test_dataset/realworld_dataset/decryption/www.tiktok.com.pcapng"
+yandex_file = "exp/test_dataset/realworld_dataset/decryption/yandex.com_10.pcapng"
 
 def test_PcapFormatter_1():
     """

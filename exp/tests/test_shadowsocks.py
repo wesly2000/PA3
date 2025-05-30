@@ -57,8 +57,9 @@ def capture_gen(request):
         pcap_file =  os.path.join(pcap_dir, f"{host}_{index}.pcapng")
 
     keylog_file = os.path.join(pcap_dir, "keylog.txt")
+    proxy_keylog_file = os.path.join(pcap_dir, "proxy_keylog.txt")
 
-    override_prefs = default_override_prefs('shadowsocks', os.path.abspath(keylog_file), None, '52564afb-8a21-4dae-be8d-991bdf3a13d8')
+    override_prefs = default_override_prefs('shadowsocks', os.path.abspath(keylog_file), os.path.abspath(proxy_keylog_file))
     
     cap = pyshark.FileCapture(
         input_file=pcap_file, 
@@ -219,8 +220,8 @@ def test_pcap_to_dataframe_1():
     keylog_file = "exp/test_dataset/realworld_dataset/shadowsocks_capture/ai.zjnav.com/keylog.txt"
     pcap_file = "exp/test_dataset/realworld_dataset/shadowsocks_capture/ai.zjnav.com/ai.zjnav.com_1.pcapng"
 
-    override_prefs = default_override_prefs('shadowsocks', os.path.abspath(keylog_file), None, '52564afb-8a21-4dae-be8d-991bdf3a13d8')
+    override_prefs = default_override_prefs('shadowsocks', os.path.abspath(keylog_file), os.path.abspath(proxy_keylog_file))
     df = pcap_to_dataframe(tshark_path, pcap_file, display_filter="tcp.stream eq 4", override_prefs=override_prefs)
     assert df.shape[0] == 117 and \
-            df.shape[1] == 8 and \
+            df.shape[1] == 9 and \
             df.iloc[6]['tls.handshake.extensions_server_name'] == 't3.gstatic.cn'

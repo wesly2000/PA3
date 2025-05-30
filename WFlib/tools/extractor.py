@@ -13,7 +13,7 @@ COMMENT: Shall we name a class capitalizing all letters of an abbrev., e.g., ext
          Currently, only the first letter is capitalized, please follow the convention.
 '''
 
-FIELDS = ["tcp.stream", "udp.stream","ip.src", "ip.dst", "frame.time_relative", "tcp.len", "tcp.hdr_len", "tls.handshake.extensions_server_name"]
+FIELDS = ["tcp.stream", "udp.stream","ip.src", "ip.dst", "frame.time_relative", "tcp.len", "tcp.hdr_len", "udp.length", "tls.handshake.extensions_server_name"]
 
 def pcap_to_dataframe(tshark_path: str, 
                       pcap_file: Union[str, Path], 
@@ -23,7 +23,7 @@ def pcap_to_dataframe(tshark_path: str,
     """
     Read in a .pcap file, and output the selected fields into a DataFrame without creating a .csv file.
     """
-    prefs = []
+    prefs = ['-2']
     if override_prefs:
         for key, value in override_prefs.items():
             prefs.append(f'-o')
@@ -44,7 +44,7 @@ def pcap_to_dataframe(tshark_path: str,
         raise e
 
     if result.stderr:
-        logger.warning(f"tshark warnings: {result.stderr}")
+        logger.warning(f"tshark warnings in {pcap_file}: {result.stderr}")
     csv_data = result.stdout
 
     if not csv_data.strip():
@@ -59,7 +59,7 @@ def pcap_to_dataframe(tshark_path: str,
 def single_pcap_extract(
         tshark_path: str, 
         pcap_file: Union[str, Path], 
-        SNI_filter: Union[Set[str], List[str]]=None, 
+        SNI_filter: Set[str]=None, 
         display_filter: str=None,
         protocol: str='normal',
         override_prefs: dict=None,
@@ -103,58 +103,117 @@ def single_pcap_extract(
     dir_extractor = CsvDirExtractor(src=src)
     ts_extractor = CsvTsExtractor()
     len_extractor = CsvLenExtractor()
-    # Fetch the rows with SNI, filtered by the SNI_filter.
 
-    sni_rows = df[(df["tls.handshake.extensions_server_name"].notna()) & ~(df["tls.handshake.extensions_server_name"].isin(SNI_filter if SNI_filter else []))]
+    # Partition DataFrame into TCP and UDP groups
+    tcp_groups = df[df["tcp.stream"].notna()].groupby("tcp.stream")
+    udp_groups = df[df["udp.stream"].notna()].groupby("udp.stream")
 
-    for _, row in sni_rows.iterrows():
-        # Check if the row is a TCP packet.
-        if row["tcp.stream"] is not None:
-            stream_df = df[df["tcp.stream"] == row["tcp.stream"]]
-            stream = row["tcp.stream"]
-            transport = "tcp"
-        elif row["udp.stream"] is not None:
-            stream_df = df[df["udp.stream"] == row["udp.stream"]]
-            stream = row["udp.stream"]
-            transport = "udp"
-        else:
-            raise ValueError("No stream number found in the row.")
-        
-        features = np.array([
-            dir_extractor.extract(stream_df), 
-            ts_extractor.extract(stream_df), 
-            len_extractor.extract(stream_df)
-            ])
-        
-        # Append a new row to the result.
+    for stream, tcp_group in tcp_groups:
+        sni_rows = tcp_group[tcp_group["tls.handshake.extensions_server_name"].notna() & ~tcp_group["tls.handshake.extensions_server_name"].isin(SNI_filter or [])]
+        if sni_rows.empty:
+            continue
+        sni = sni_rows["tls.handshake.extensions_server_name"].iloc[0]  # Get the first (and should be only) SNI
+
         result.append({
             'host': host,
-            'id': int(id),
-            'sni': row["tls.handshake.extensions_server_name"],
-            'stream': int(stream),
-            'transport': transport,
+            'id': id,
+            'sni': sni,
+            'stream': stream,
+            'transport': 'tcp',
             'protocol': protocol,
-            'feature': features}
-            )
+            'feature': np.array([
+                        dir_extractor.extract(tcp_group), 
+                        ts_extractor.extract(tcp_group), 
+                        len_extractor.extract(tcp_group, protocol='tcp')
+                    ])}
+        )
+
+    for stream, udp_group in udp_groups:
+        sni_rows = udp_group[udp_group["tls.handshake.extensions_server_name"].notna() & ~udp_group["tls.handshake.extensions_server_name"].isin(SNI_filter or [])]
+        if sni_rows.empty:
+            continue
+        sni = sni_rows["tls.handshake.extensions_server_name"].iloc[0]  # Get the first (and should be only) SNI
         
+        result.append({
+            'host': host,
+            'id': id,
+            'sni': sni,
+            'stream': stream,
+            'transport': 'udp',
+            'protocol': protocol,
+            'feature': np.array([
+                dir_extractor.extract(udp_group), 
+                ts_extractor.extract(udp_group), 
+                len_extractor.extract(udp_group, protocol='udp')
+            ])}
+        )
+
     return result
+    
+    # sni_rows = df[df["tls.handshake.extensions_server_name"].notna() & ~df["tls.handshake.extensions_server_name"].isin(SNI_filter or [])]
+
+    # for _, row in sni_rows.iterrows():
+    #     # Check if the row is a TCP packet.
+    #     if row["tcp.stream"] is not None:
+    #         stream_df = df[df["tcp.stream"] == row["tcp.stream"]]
+    #         stream = row["tcp.stream"]
+    #         transport = "tcp"
+    #     elif row["udp.stream"] is not None:
+    #         stream_df = df[df["udp.stream"] == row["udp.stream"]]
+    #         stream = row["udp.stream"]
+    #         transport = "udp"
+    #     else:
+    #         raise ValueError("No stream number found in the row.")
+        
+    #     features = np.array([
+    #         dir_extractor.extract(stream_df), 
+    #         ts_extractor.extract(stream_df), 
+    #         len_extractor.extract(stream_df)
+    #         ])
+        
+    #     # Append a new row to the result.
+    #     result.append({
+    #         'host': host,
+    #         'id': id,
+    #         'sni': row["tls.handshake.extensions_server_name"],
+    #         'stream': stream,
+    #         'transport': transport,
+    #         'protocol': protocol,
+    #         'feature': features}
+    #         )
+        
+    # return result
 
 
 def multi_pcap_extract(
         tshark_path: str, 
         pcap_dir: Union[str, Path], 
-        SNI_filter: Union[Set[str], List[str]], 
+        SNI_filter: Union[Set[str], List[str]]=None, 
         display_filter: str='tcp',
         protocol: str='normal',
         override_prefs: dict=None,
-        src: List[str]=None) -> List[dict]:
+        src: List[str]=None,
+        db: pd.DataFrame=None) -> List[dict]:
     """
     Extract features from multiple .pcap files.
     """
+    if isinstance(pcap_dir, str):
+        pcap_dir = Path(pcap_dir)
+
     result = []
     for file in pcap_dir.iterdir():
         if file.is_file() and file.suffix in ['.pcapng', '.pcap']:
-            result.extend(single_pcap_extract(tshark_path, file, SNI_filter, display_filter, protocol, override_prefs, src))
+            if db is not None:
+                # Check if the host and id of the current file are in the db.
+                host, id = file.stem.split('_')
+                if ((db['host'] == host) & (db['id'] == id) & (db['protocol'] == protocol)).any():
+                    logger.info(f"Host: {host}, ID: {id}, Protocol: {protocol} has been processed, skip")
+                    continue
+            try:
+                result.extend(single_pcap_extract(tshark_path, file, SNI_filter, display_filter, protocol, override_prefs, src))
+            except Exception as e:
+                logger.error(f"Error extracting features from {file}: {e}, skip")
+                continue
     return result
 
 
@@ -229,6 +288,8 @@ class CsvLenExtractor(CsvExtractor):
     def extract(self, df: pd.DataFrame, protocol: str="tcp"):
         if protocol == "tcp":
             return df['tcp.len'].to_numpy(dtype=int) + df['tcp.hdr_len'].to_numpy(dtype=int)
+        elif protocol == "udp":
+            return df['udp.length'].to_numpy(dtype=int)
         else:
             raise NotImplementedError(f"Protocol {protocol} is not supported.")
 
@@ -262,9 +323,12 @@ class PcapDirExtractor(PcapExtractor):
             # When only_summaries == True, pkt.source should be used.
             src = pkt.source
         else:
-            if 'ip' not in pkt:
-                pass  # Add some warning here
-            src = pkt['ip'].src
+            if 'ip' in pkt:
+                src = pkt['ip'].src
+            elif 'ipv6' in pkt:
+                src = pkt['ipv6'].src
+            else:
+                raise NotImplementedError("Packet does not have IP or IPv6 layer")
 
         target.append(1 if src in self._src else -1) # 1 for egress, -1 for ingress
 
