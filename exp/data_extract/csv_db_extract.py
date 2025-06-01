@@ -59,7 +59,7 @@ def extract_csv_db_per_host(host: str, root: str, host_filter: set,
         except Exception as e:
             logger.error(f"Error processing Host: {host}, Protocol: {protocol}: {e}")
 
-    df = pd.DataFrame(columns=['host', 'id', 'sni', 'stream', 'transport', 'protocol', 'feature'], 
+    df = pd.DataFrame(columns=['host', 'id', 'sni', 'stream', 'transport', 'protocol', 'direction', 'timestamp', 'length'], 
                     data=result)
     
     with write_lock:
@@ -71,7 +71,7 @@ def main(input_root: str, output_root: str, host_list_file: str, host_filter_fil
     Path(database_file).parent.mkdir(parents=True, exist_ok=True)
     if not Path(database_file).exists():
         logger.info("CSV database does not exist, create a new one")
-        df = pd.DataFrame(columns=['host', 'id', 'sni', 'stream', 'transport', 'protocol', 'feature'])
+        df = pd.DataFrame(columns=['host', 'id', 'sni', 'stream', 'transport', 'protocol', 'direction', 'timestamp', 'length'])
         df.to_csv(database_file, index=False)
 
     host_list = read_host_list(host_list_file)
@@ -102,6 +102,6 @@ if __name__ == '__main__':
     parser.add_argument("-p", "--processes", type=int, help="Number of processes to use (default: CPU count)")
     args = parser.parse_args()
     
-    logger.info("Task csv_db_extract started")
+    logger.info(f"Task csv_db_extract started, n_processes: {args.processes}")
     main(args.input_root, args.output_root, args.host, args.filter, n_processes=args.processes)
     logger.info("Task csv_db_extract completed")

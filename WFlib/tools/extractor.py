@@ -121,12 +121,10 @@ def single_pcap_extract(
             'stream': stream,
             'transport': 'tcp',
             'protocol': protocol,
-            'feature': np.array([
-                        dir_extractor.extract(tcp_group), 
-                        ts_extractor.extract(tcp_group), 
-                        len_extractor.extract(tcp_group, protocol='tcp')
-                    ])}
-        )
+            'direction': dir_extractor.extract(tcp_group),
+            'timestamp': ts_extractor.extract(tcp_group),
+            'length': len_extractor.extract(tcp_group, protocol='tcp')
+        })
 
     for stream, udp_group in udp_groups:
         sni_rows = udp_group[udp_group["tls.handshake.extensions_server_name"].notna() & ~udp_group["tls.handshake.extensions_server_name"].isin(SNI_filter or [])]
@@ -141,12 +139,10 @@ def single_pcap_extract(
             'stream': stream,
             'transport': 'udp',
             'protocol': protocol,
-            'feature': np.array([
-                dir_extractor.extract(udp_group), 
-                ts_extractor.extract(udp_group), 
-                len_extractor.extract(udp_group, protocol='udp')
-            ])}
-        )
+            'direction': dir_extractor.extract(udp_group),
+            'timestamp': ts_extractor.extract(udp_group),
+            'length': len_extractor.extract(udp_group, protocol='udp')
+        })
 
     return result
     
