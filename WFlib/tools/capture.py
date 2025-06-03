@@ -11,7 +11,7 @@ sniff                    v------------------------------------------------------
 capture                  |--------------------------------------------------------------------------|
 """
 
-from selenium.common.exceptions import WebDriverException
+from selenium.common.exceptions import WebDriverException, TimeoutException
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.firefox.service import Service
@@ -111,10 +111,18 @@ def capture(url, iface, output_file, timeout=200, capture_filter=common_filter, 
             time.sleep(2)
             stop_event.set()
             return
-            
+        
+        driver.set_page_load_timeout(timeout)
+
         try:
             driver.get(url)
-            time.sleep(timeout)
+        except TimeoutException as e:
+            if log_output is not None:
+                with open(log_output, 'a+') as f:
+                    f.write(f"The file {output_file} raises the exception: {e}\n")
+            if ill_files is not None:
+                with open(ill_files, 'a+') as f:
+                    f.write(f"{output_file}\n")
         except Exception as e:
             if log_output is not None:
                 with open(log_output, 'a+') as f:
