@@ -21,7 +21,7 @@ def generate_byte_stream(segment_byte_map: dict, cutoff: int, abs_lower_frame_nu
 
         return byte_segment
 
-def generate_byte_segment(lines: list[Line]) -> List[np.ndarray]:
+def generate_byte_segment(lines: List[Line]) -> List[np.ndarray]:
     """
     Generate segment index for each line, then return the byte segment arrays.
     

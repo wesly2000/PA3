@@ -171,6 +171,9 @@ analysis
 exp/normal_capture
 exp/example_capture
 exp/vmess_capture
+exp/trojan_capture
+exp/vmess_capture_legacy
+exp/ss_capture
 
 *.npy
 *.json 
