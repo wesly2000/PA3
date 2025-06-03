@@ -1,5 +1,24 @@
-gitee.com
-github.com 
-telegram.org
-top.baidu.com
-www.runoob.com
+# gitee.com
+# github.com 
+# telegram.org
+# top.baidu.com
+# www.runoob.com
+ask.zol.com.cn
+www.dropbox.com
+www.elsevier.com
+www.feishu.cn
+www.fromgeek.com
+ask.zol.com.cn
+chrome.pictureknow.com
+cloud.tencent.com
+dl.acm.org
+duckduckgo.com
+mathoverflow.net
+pan.baidu.com
+www.36kr.com
+www.aliyun.com
+www.amazon.com
+www.apache.org
+www.baidu.com
+www.deepseek.com
+www.docker.com

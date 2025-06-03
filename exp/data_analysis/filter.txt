@@ -30,3 +30,4 @@ natfrp-api.globalslb.net
 storage.codegpt.co
 default.exp-tas.com  # VSCode user experience service
 mobile.events.data.microsoft.com
+b.6sc.co  # 6sense marketing service 

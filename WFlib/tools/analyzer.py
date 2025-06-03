@@ -8,6 +8,15 @@ import re
 from typing import List, Callable, Optional, Tuple
 
 AES_128_GCM_TAG_LEN = 16
+CHACHA20_POLY1305_TAG_LEN = 16
+
+PROTOCOL_REASSEMBLE_FIELD = {
+    "tls": "tls_segments",
+    "tcp": "tcp_segments",
+    "vmess": "vmess_fragments",
+    "shadowsocks": "shadowsocks_msg_fragments",
+    "trojan": "trojan_fragments"
+}
 
 def feature_attr(model, attr_method, X, y, num_classes):
     """
@@ -286,12 +295,73 @@ class VMessByteCounter(ByteCounter):
             cnt += sum(vmess_layer_lengths)
 
         return cnt
+    
 
+class ShadowsocksByteCounter(ByteCounter):
+    TYPE_SALT = '1'
+    TYPE_RELAY_HEADER = '2'
+    TYPE_STREAM_DATA = '3'
+    def __init__(self, name='shadowsocks'):
+        super().__init__(name)
+        self.salt_len = 32  # The length of the salt
+        # According to Clash Imple., Shadowsocks with AEAD contains a length field of size 2 for each relay header.
+        # Moreover, the size of length field in Stream Data layer coincide with the value, we abuse the notation.
+        self.length_len = 2  
+        self.port_len = 2  # The length of the port
+        self.domain_type_len = 1  # The length of the domain type
+        self.domain_length_len = 1  # The size of the domain length
+
+    def layer_count(self, layer, extra_data = None) -> int:
+        cnt = 0
+        if layer.layer_type == self.TYPE_SALT:
+            cnt += self.salt_len
+        elif layer.layer_type == self.TYPE_RELAY_HEADER:  
+            # In AEAD mode of Clash Imple., the Shadowsocks length and request are encrypted separately, each of which
+            # contains a 16-byte (AES-128-GCM, which is commonly used) authentication tag.
+            cnt += self.port_len + self.domain_type_len + self.domain_length_len + int(layer.dst_addr_domainname_len) + CHACHA20_POLY1305_TAG_LEN + self.length_len + CHACHA20_POLY1305_TAG_LEN
+        elif layer.layer_type == self.TYPE_STREAM_DATA:
+            cnt += self.length_len + CHACHA20_POLY1305_TAG_LEN + int(layer.payload_length) + CHACHA20_POLY1305_TAG_LEN
+        else:
+            raise ValueError(f"Unknown Shadowsocks layer type: {layer.layer_type}")
+
+        return cnt
+    
+    def packet_count(self, pkt) -> int:
+        cnt = 0
+        if "Shadowsocks" in pkt:  
+            ss_layers = filter(lambda layer: layer.layer_name == "shadowsocks", pkt.layers)  # One packet may contain multiple TLS layers
+            ss_layer_lengths = map(self.layer_count, ss_layers)
+            cnt += sum(ss_layer_lengths)
+
+        return cnt
+    
+class TrojanByteCounter(ByteCounter):
+    TYPE_TLS = '1'
+    TYPE_HTTP = '2'
+    def __init__(self, name='trojan'):
+        super().__init__(name)
+
+    def layer_count(self, layer, extra_data = None) -> int:
+        cnt = layer.data_length
+
+        return cnt
+    
+    def packet_count(self, pkt) -> int:
+        cnt = 0
+        if "Trojan" in pkt:  
+            trojan_layers = filter(lambda layer: layer.layer_name == "trojan", pkt.layers)  # One packet may contain multiple TLS layers
+            trojan_layer_lengths = map(self.layer_count, trojan_layers)
+            cnt += sum(trojan_layer_lengths)
+
+        return cnt
+    
 PROTOCOL_BYTE_COUNTER = {
     "tls": TLSByteCounter(),
     "tcp": TCPByteCounter(),
     "http2": HTTP2ByteCounter(),
     "vmess": VMessByteCounter(),
+    "shadowsocks": ShadowsocksByteCounter(),
+    "trojan": TrojanByteCounter(),
 }
 
 class CaptureCounter():
@@ -387,6 +457,124 @@ class Cell():
                     return True
                 else:
                     return False
+                
+class CellExtractor(object):
+    """
+    Select the reassemble info related field for each protocol in DATA layer.
+    """
+    def __init__(self):
+        self._name = "abstract" 
+
+    @property
+    def name(self):
+        return self._name
+    
+    def layer_extract(self, layer, frame_number: int, lower_protocol) -> Cell:
+        cell = Cell(upper_protocol=self.name, lower_protocol=lower_protocol, abs_frame_number=frame_number)
+        
+        if lower_protocol is not None and layer.layer_name == "DATA":
+            # Make tls_segments to more generic.
+            for segment_frame_number, segment_size in match_segment_number(
+                layer.get_field(
+                    PROTOCOL_REASSEMBLE_FIELD[lower_protocol]
+                    )
+                ):
+
+                cell.abs_segment_frame_number.append(segment_frame_number)
+                cell.segment_size.append(segment_size)
+
+        elif layer.layer_name == self.name:
+            counter = PROTOCOL_BYTE_COUNTER[self.name]
+            cell.abs_segment_frame_number.append(frame_number)
+            cell.segment_size.append(counter.layer_count(layer))
+
+        else:
+            raise ValueError(f"Protocol mismatch: only support {self.name} and DATA layer, but got {layer.layer_name}")
+        
+        cell.size = sum(cell.segment_size)
+        
+        return cell
+    
+    def extract(self, pkt, lower_protocol: str) -> List[Cell]:
+        """
+        Extract reassemble information from the given packet with the given protocol.
+
+        Params
+        ------
+        pkt: 
+            The packet to extract reassemble information from.
+        lower_protocol: str | None
+            The protocol to extract reassemble information from. If None, this function does not
+            extract reassemble information from the given packet. Please always set it to
+            not None value unless you are extracting the reassemble info for the lowest protocol
+            in a protocol stack, whose reassemble info is not needed or not implemented.
+        """
+        lower_protocol = lower_protocol.lower()
+        filtered_layers = seq_filter(layer_extractor(pkt, self.name, lower_protocol), lower_protocol)
+        cells = []
+
+        for layer in filtered_layers:
+            cell = self.layer_extract(layer, int(pkt.number), lower_protocol)
+            cells.append(cell)
+        
+        return cells
+    
+
+class HTTP2CellExtractor(CellExtractor):
+    def __init__(self):
+        self._name = "http2"
+
+    def extract(self, pkt, lower_protocol="tls") -> List[Cell]:
+        return super().extract(pkt, lower_protocol)
+    
+
+class TLSCellExtractor(CellExtractor):
+    def __init__(self):
+        self._name = "tls"
+
+    def extract(self, pkt, lower_protocol="tcp") -> List[Cell]:
+        return super().extract(pkt, lower_protocol)
+    
+
+class VMessCellExtractor(CellExtractor):
+    def __init__(self):
+        self._name = "vmess"
+
+    def extract(self, pkt, lower_protocol='tcp') -> List[Cell]:
+        return super().extract(pkt, lower_protocol)
+    
+
+class ShadowsocksCellExtractor(CellExtractor):
+    def __init__(self):
+        self._name = "shadowsocks"
+
+    def extract(self, pkt, lower_protocol='tcp') -> List[Cell]:
+        return super().extract(pkt, lower_protocol)
+    
+
+class TCPCellExtractor(CellExtractor):
+    def __init__(self):
+        self._name = "tcp"
+
+    def extract(self, pkt, lower_protocol='tcp') -> List[Cell]:
+        return super().extract(pkt, lower_protocol)
+    
+
+class TrojanCellExtractor(CellExtractor):
+    def __init__(self):
+        self._name = "trojan"
+
+    def extract(self, pkt, lower_protocol='tcp') -> List[Cell]:
+        return super().extract(pkt, lower_protocol)
+
+
+PROCOCOL_CELL_EXTRACTOR = {
+    "tcp": TCPCellExtractor(),  
+    "tls": TLSCellExtractor(),
+    "vmess": VMessCellExtractor(),
+    "http2": HTTP2CellExtractor(),
+    "shadowsocks": ShadowsocksCellExtractor(),
+}
                 
 class Packet():
     """
@@ -620,117 +808,7 @@ class Line():
                 break
 
         return span
-
-
-PROTOCOL_REASSEMBLE_FIELD = {
-    "tls": "tls_segments",
-    "tcp": "tcp_segments",
-    "vmess": "vmess_fragments",
-}
-
-class CellExtractor(object):
-    """
-    Select the reassemble info related field for each protocol in DATA layer.
-    """
-    def __init__(self):
-        self._name = "abstract" 
-
-    @property
-    def name(self):
-        return self._name
     
-    def layer_extract(self, layer, frame_number: int, lower_protocol) -> Cell:
-        cell = Cell(upper_protocol=self.name, lower_protocol=lower_protocol, abs_frame_number=frame_number)
-        
-        if lower_protocol is not None and layer.layer_name == "DATA":
-            # Make tls_segments to more generic.
-            for segment_frame_number, segment_size in match_segment_number(
-                layer.get_field(
-                    PROTOCOL_REASSEMBLE_FIELD[lower_protocol]
-                    )
-                ):
-
-                cell.abs_segment_frame_number.append(segment_frame_number)
-                cell.segment_size.append(segment_size)
-
-        elif layer.layer_name == self.name:
-            counter = PROTOCOL_BYTE_COUNTER[self.name]
-            cell.abs_segment_frame_number.append(frame_number)
-            cell.segment_size.append(counter.layer_count(layer))
-
-        else:
-            raise ValueError(f"Protocol mismatch: only support {self.name} and DATA layer, but got {layer.layer_name}")
-        
-        cell.size = sum(cell.segment_size)
-        
-        return cell
-    
-    def extract(self, pkt, lower_protocol: str) -> List[Cell]:
-        """
-        Extract reassemble information from the given packet with the given protocol.
-
-        Params
-        ------
-        pkt: 
-            The packet to extract reassemble information from.
-        lower_protocol: str | None
-            The protocol to extract reassemble information from. If None, this function does not
-            extract reassemble information from the given packet. Please always set it to
-            not None value unless you are extracting the reassemble info for the lowest protocol
-            in a protocol stack, whose reassemble info is not needed or not implemented.
-        """
-        lower_protocol = lower_protocol.lower()
-        filtered_layers = seq_filter(layer_extractor(pkt, self.name, lower_protocol), lower_protocol)
-        cells = []
-
-        for layer in filtered_layers:
-            cell = self.layer_extract(layer, int(pkt.number), lower_protocol)
-            cells.append(cell)
-        
-        return cells
-    
-
-class HTTP2CellExtractor(CellExtractor):
-    def __init__(self):
-        self._name = "http2"
-
-    def extract(self, pkt, lower_protocol="TLS") -> List[Cell]:
-        return super().extract(pkt, lower_protocol)
-    
-
-class TLSCellExtractor(CellExtractor):
-    def __init__(self):
-        self._name = "tls"
-
-    def extract(self, pkt, lower_protocol="TCP") -> List[Cell]:
-        return super().extract(pkt, lower_protocol)
-    
-
-class VMessCellExtractor(CellExtractor):
-    def __init__(self):
-        self._name = "vmess"
-
-    def extract(self, pkt, lower_protocol='tcp') -> List[Cell]:
-        return super().extract(pkt, lower_protocol)
-    
-
-class TCPCellExtractor(CellExtractor):
-    def __init__(self):
-        self._name = "tcp"
-
-    def extract(self, pkt, lower_protocol='tcp') -> List[Cell]:
-        return super().extract(pkt, lower_protocol)
-    
-
-PROCOCOL_CELL_EXTRACTOR = {
-    "tcp": TCPCellExtractor(),  
-    "tls": TLSCellExtractor(),
-    "vmess": VMessCellExtractor(),
-    "http2": HTTP2CellExtractor(),
-}
-
-DATA_LAYER_MARKER = {'tcp': 'tcp_segments', 'tls': 'tls_segments', 'vmess': 'vmess_fragments'}
-
 
 def layer_extractor(pkt, upper_protocol, lower_protocol):
     """
@@ -755,7 +833,7 @@ def layer_extractor(pkt, upper_protocol, lower_protocol):
     upper_protocol = upper_protocol.lower()
     lower_protocol = lower_protocol.lower()
 
-    supported_protocols = ['tcp', 'tls', 'http2', 'vmess']
+    supported_protocols = ['tcp', 'tls', 'http2', 'vmess', 'shadowsocks']
     if upper_protocol not in supported_protocols or lower_protocol not in supported_protocols:
         raise ValueError(f"Unsupported protocol: only the following protocols are supported: {supported_protocols}")
     # Assure the packet protocol stack contains both upper and lower protocols.
@@ -767,7 +845,7 @@ def layer_extractor(pkt, upper_protocol, lower_protocol):
     for layer in pkt.layers:
         # When upper_protocol == lower_protocol, no need to extract reassemble info
         if layer.layer_name == 'DATA' and upper_protocol != lower_protocol:
-            if DATA_LAYER_MARKER[lower_protocol] in layer.field_names:
+            if PROTOCOL_REASSEMBLE_FIELD[lower_protocol] in layer.field_names:
                 layers.append(layer)
         elif layer.layer_name == upper_protocol:
             layers.append(layer)
@@ -806,7 +884,8 @@ def seq_filter(seq, lower_protocol):
                     for _, segment_size in match_segment_number(
                         layer.get_field(PROTOCOL_REASSEMBLE_FIELD[lower_protocol])):
                         data_layer_size += segment_size
-
+                    # TODO: A (quite rare) is that a DATA layer covers multiple layers, but searching the exact Cells
+                    # that the DATA layer covers seems hard. We do not handle this case now :(
                     if layer_size == data_layer_size:
                         to_remove.add(j)
                         break

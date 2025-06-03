@@ -8,11 +8,11 @@ import os
 import pytest
 import pandas as pd
 
-from WFlib.utils.config import get_config
+from WFlib.utils.config import get_config, default_override_prefs
 from WFlib.tools.analyzer import *
 from WFlib.tools.visualize import *
 from exp.data_analysis.http2_stream_analysis import *
-
+from WFlib.tools.extractor import pcap_to_dataframe, single_pcap_extract, multi_pcap_extract
 import nest_asyncio 
 nest_asyncio.apply()
 
@@ -25,6 +25,7 @@ else:
         VMESS_ENABLED = False
     else:
         VMESS_ENABLED = config['vmess'].getboolean('enabled', fallback=False)
+        tshark_path = config['tshark'].get('tshark_path', fallback="tshark")
 
 
 skip_vmess = pytest.mark.skipif(
@@ -32,7 +33,7 @@ skip_vmess = pytest.mark.skipif(
     reason="VMess dissector not available, skip the test."
 )
 
-custom_parameters = ["-C", "Customized", "-2"]
+custom_parameters = ["-2"]
 
 @pytest.fixture
 def capture_gen(request):
@@ -56,8 +57,7 @@ def capture_gen(request):
     proxy_keylog_file = os.path.join(pcap_dir, "proxy_keylog.txt")
     keylog_file = os.path.join(pcap_dir, "keylog.txt")
 
-    override_prefs = {'tls.keylog_file': os.path.abspath(keylog_file),
-                      'vmess.keylog_file': os.path.abspath(proxy_keylog_file)}
+    override_prefs = default_override_prefs('vmess', os.path.abspath(keylog_file), os.path.abspath(proxy_keylog_file))
     
     cap = pyshark.FileCapture(
         input_file=pcap_file, 
@@ -99,11 +99,11 @@ def test_layer_extractor_1(capture_gen):
                     layers[2].layer_name == "http2" and \
                     layers[3].layer_name == "http2" and \
                     layers[4].layer_name == "http2" and \
-                    DATA_LAYER_MARKER['tls'] in layers[0].field_names  # Assert we are extracting the correct DATA layer.
+                    PROTOCOL_REASSEMBLE_FIELD['tls'] in layers[0].field_names  # Assert we are extracting the correct DATA layer.
             layers = layer_extractor(pkt, upper_protocol="tls", lower_protocol='vmess')
             assert len(layers) == 3 and \
                     layers[0].layer_name == "DATA" and \
-                    DATA_LAYER_MARKER['vmess'] in layers[0].field_names and \
+                    PROTOCOL_REASSEMBLE_FIELD['vmess'] in layers[0].field_names and \
                     layers[1].layer_name == "tls" and \
                     layers[2].layer_name == "tls"
         elif pkt.number == "15":
@@ -111,7 +111,7 @@ def test_layer_extractor_1(capture_gen):
             assert len(layers) == 2 and \
                     layers[0].layer_name == "DATA" and \
                     layers[1].layer_name == "vmess" and \
-                    DATA_LAYER_MARKER['tcp'] in layers[0].field_names  # Assert we are extracting the correct DATA layer.
+                    PROTOCOL_REASSEMBLE_FIELD['tcp'] in layers[0].field_names  # Assert we are extracting the correct DATA layer.
         elif pkt.number == "63":
             layers = layer_extractor(pkt, upper_protocol="http2", lower_protocol='tls') 
             assert len(layers) == 2 and \
@@ -353,3 +353,112 @@ def test_get_reassemble_info(capture_gen):
     assert line.byte_counter == http2_byte_counter
     # Check the continuity of the merged line.
     assert line.continunity_check()
+
+
+@skip_vmess
+def test_pcap_to_dataframe_1():
+    """
+    This test covers converting a pcap file to a dataframe.
+    """
+    proxy_keylog_file = "exp/test_dataset/realworld_dataset/vmess_capture/top.baidu.com/proxy_keylog.txt"
+    keylog_file = "exp/test_dataset/realworld_dataset/vmess_capture/top.baidu.com/keylog.txt"
+    pcap_file = "exp/test_dataset/realworld_dataset/vmess_capture/top.baidu.com/top.baidu.com_0.pcapng"
+
+    override_prefs = default_override_prefs('vmess', os.path.abspath(keylog_file), os.path.abspath(proxy_keylog_file))
+    df = pcap_to_dataframe(tshark_path, pcap_file, display_filter="tcp.stream eq 0", override_prefs=override_prefs)
+    assert df.shape[0] == 148 and \
+            df.shape[1] == 9 and \
+            df.iloc[5]['tls.handshake.extensions_server_name'] == 'fyb-2.cdn.bcebos.com'
+    
+@pytest.fixture
+def param_gen(request):
+    """
+    Used to generate the parameters for the pcap extraction test.
+    """
+    if 'index' in request.param:
+        index = request.param['index']
+    else:
+        index = None
+
+    host = request.param['host']
+
+    pcap_dir = f"exp/test_dataset/realworld_dataset/vmess_capture/{host}"
+    if index is None:
+        pcap_file =  Path(os.path.join(pcap_dir, f"{host}.pcapng"))
+    else:
+        pcap_file =  Path(os.path.join(pcap_dir, f"{host}_{index}.pcapng"))
+
+    proxy_keylog_file = os.path.join(pcap_dir, "proxy_keylog.txt")
+    keylog_file = os.path.join(pcap_dir, "keylog.txt")
+
+    override_prefs = default_override_prefs('vmess', os.path.abspath(keylog_file), os.path.abspath(proxy_keylog_file))
+
+    return pcap_file, override_prefs
+
+@skip_vmess
+@pytest.mark.parametrize("param_gen", [{'host': 'top.baidu.com', 'index': 0}], indirect=True)
+def test_single_pcap_extract_1(param_gen):
+    """
+    Test extracting features from a single .pcap file.
+    """
+    src = ['192.168.5.5']
+
+    pcap_file, override_prefs = param_gen
+    result = single_pcap_extract(tshark_path, pcap_file, override_prefs=override_prefs, src=src, protocol='vmess')
+    df = pd.DataFrame(columns=['host', 'id', 'sni', 'stream', 'transport', 'protocol', 'feature'], data=result)
+    assert df.shape[0] == 3 and \
+            df.iloc[0]['sni'] == 'fyb-2.cdn.bcebos.com' and \
+            df.iloc[0]['feature'].shape == (3, 148) and \
+            df.iloc[0]['stream'] == '0' and \
+            df.iloc[0]['transport'] == 'tcp' and \
+            df.iloc[0]['protocol'] == 'vmess' and \
+            df.iloc[0]['host'] == 'top.baidu.com' and \
+            df.iloc[0]['id'] == '0'
+    
+
+@skip_vmess
+@pytest.mark.parametrize("param_gen", [{'host': 'top.baidu.com', 'index': 0}], indirect=True)
+def test_multi_pcap_extract_1(param_gen):
+    """
+    Test extracting features from multiple .pcap files. Moreover, we test the effect of filter SNIs.
+    """
+    src = ['192.168.5.5']
+    pcap_dir = 'exp/test_dataset/realworld_dataset/vmess_capture/top.baidu.com'
+    SNIs = ['firefox.settings.services.mozilla.com']
+
+    pcap_dir = Path(pcap_dir)
+    _, override_prefs = param_gen
+
+    result = multi_pcap_extract(tshark_path, pcap_dir, src=src, protocol='vmess', override_prefs=override_prefs, SNI_filter=SNIs)
+
+    df = pd.DataFrame(columns=['host', 'id', 'sni', 'stream', 'transport', 'protocol', 'feature'], data=result)
+    length_set = set([148, 94])
+    assert df.shape[0] == 3 and \
+            set(df['feature'].apply(lambda x: x.shape[1])) == length_set and \
+            set(df['sni']) == set(["fyb-2.cdn.bcebos.com"])
+    
+@skip_vmess
+@pytest.mark.parametrize("param_gen", [{'host': 'top.baidu.com', 'index': 0}], indirect=True)
+def test_multi_pcap_extract_2(param_gen):
+    """
+    This test covers the case where the pcap files have already been processed.
+    """
+    src = ['192.168.5.5']
+    pcap_dir = 'exp/test_dataset/realworld_dataset/vmess_capture/top.baidu.com'
+    SNIs = ['firefox.settings.services.mozilla.com']
+
+    _, override_prefs = param_gen
+
+    db = pd.DataFrame(columns=['host', 'id', 'protocol'], 
+                      data=[('top.baidu.com', '0', 'vmess'),
+                            ('top.baidu.com', '1', 'normal'),
+                            ('top.baidu.com', '2', 'vmess'),
+                            ('www.baidu.com', '1', 'vmess')])
+    
+    result = multi_pcap_extract(tshark_path, pcap_dir, src=src, protocol='vmess', override_prefs=override_prefs, SNI_filter=SNIs, db=db)
+
+    df = pd.DataFrame(columns=['host', 'id', 'sni', 'stream', 'transport', 'protocol', 'feature'], data=result)
+    assert df.shape[0] == 1 and \
+            df.iloc[0]['sni'] == 'fyb-2.cdn.bcebos.com' and \
+            df.iloc[0]['feature'].shape == (3, 94) and \
+            df.iloc[0]['stream'] == '0'
