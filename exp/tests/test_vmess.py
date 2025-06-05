@@ -405,10 +405,10 @@ def test_single_pcap_extract_1(param_gen):
 
     pcap_file, override_prefs = param_gen
     result = single_pcap_extract(tshark_path, pcap_file, override_prefs=override_prefs, src=src, protocol='vmess')
-    df = pd.DataFrame(columns=['host', 'id', 'sni', 'stream', 'transport', 'protocol', 'feature'], data=result)
+    df = pd.DataFrame(columns=['host', 'id', 'sni', 'stream', 'transport', 'protocol', 'direction', 'timestamp', 'length'], data=result)
     assert df.shape[0] == 3 and \
             df.iloc[0]['sni'] == 'fyb-2.cdn.bcebos.com' and \
-            df.iloc[0]['feature'].shape == (3, 148) and \
+            df.iloc[0]['direction'].shape == (148, ) and \
             df.iloc[0]['stream'] == '0' and \
             df.iloc[0]['transport'] == 'tcp' and \
             df.iloc[0]['protocol'] == 'vmess' and \
@@ -431,10 +431,10 @@ def test_multi_pcap_extract_1(param_gen):
 
     result = multi_pcap_extract(tshark_path, pcap_dir, src=src, protocol='vmess', override_prefs=override_prefs, SNI_filter=SNIs)
 
-    df = pd.DataFrame(columns=['host', 'id', 'sni', 'stream', 'transport', 'protocol', 'feature'], data=result)
+    df = pd.DataFrame(columns=['host', 'id', 'sni', 'stream', 'transport', 'protocol', 'direction', 'timestamp', 'length'], data=result)
     length_set = set([148, 94])
     assert df.shape[0] == 3 and \
-            set(df['feature'].apply(lambda x: x.shape[1])) == length_set and \
+            set(df['direction'].apply(lambda x: x.shape[0])) == length_set and \
             set(df['sni']) == set(["fyb-2.cdn.bcebos.com"])
     
 @skip_vmess
@@ -450,15 +450,15 @@ def test_multi_pcap_extract_2(param_gen):
     _, override_prefs = param_gen
 
     db = pd.DataFrame(columns=['host', 'id', 'protocol'], 
-                      data=[('top.baidu.com', '0', 'vmess'),
-                            ('top.baidu.com', '1', 'normal'),
-                            ('top.baidu.com', '2', 'vmess'),
-                            ('www.baidu.com', '1', 'vmess')])
+                      data=[('top.baidu.com', 0, 'vmess'),
+                            ('top.baidu.com', 1, 'normal'),
+                            ('top.baidu.com', 2, 'vmess'),
+                            ('www.baidu.com', 1, 'vmess')])
     
     result = multi_pcap_extract(tshark_path, pcap_dir, src=src, protocol='vmess', override_prefs=override_prefs, SNI_filter=SNIs, db=db)
 
-    df = pd.DataFrame(columns=['host', 'id', 'sni', 'stream', 'transport', 'protocol', 'feature'], data=result)
+    df = pd.DataFrame(columns=['host', 'id', 'sni', 'stream', 'transport', 'protocol', 'direction', 'timestamp', 'length'], data=result)
     assert df.shape[0] == 1 and \
             df.iloc[0]['sni'] == 'fyb-2.cdn.bcebos.com' and \
-            df.iloc[0]['feature'].shape == (3, 94) and \
+            df.iloc[0]['timestamp'].shape == (94, ) and \
             df.iloc[0]['stream'] == '0'
