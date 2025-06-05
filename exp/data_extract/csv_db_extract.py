@@ -44,7 +44,7 @@ def extract_csv_db_per_host_per_protocol(root: str, protocol: str, host: str, ho
 
 
 def extract_csv_db_per_host(host: str, root: str, host_filter: set, 
-                         display_filter: str, db: pd.DataFrame, database_file: str, 
+                         display_filter: str, db: pd.DataFrame, database_file: str, array_dir: str,
                          write_lock) -> None:
     """
     Process a single host-protocol combination and write results to the database file.
@@ -59,7 +59,11 @@ def extract_csv_db_per_host(host: str, root: str, host_filter: set,
         except Exception as e:
             logger.error(f"Error processing Host: {host}, Protocol: {protocol}: {e}")
 
-    df = pd.DataFrame(columns=['host', 'id', 'sni', 'stream', 'transport', 'protocol', 'direction', 'timestamp', 'length'], 
+    for i in range(len(result)):
+        array_name = array_path(host, result[i]['id'], result[i]['transport'], result[i]['stream'], result[i]['protocol'])
+        np.savez_compressed(f"{array_dir}/{array_name}", direction=result[i]['direction'], timestamp=result[i]['timestamp'], length=result[i]['length'])
+
+    df = pd.DataFrame(columns=['host', 'id', 'sni', 'stream', 'transport', 'protocol'], 
                     data=result)
     
     with write_lock:
@@ -68,10 +72,12 @@ def extract_csv_db_per_host(host: str, root: str, host_filter: set,
 def main(input_root: str, output_root: str, host_list_file: str, host_filter_file: str, 
          display_filter: str = None, n_processes: int = None):
     database_file = f"{output_root}/csv_db_extract/database.csv"
+    array_dir = f"{output_root}/csv_db_extract/arrays"
     Path(database_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(array_dir).mkdir(parents=True, exist_ok=True)
     if not Path(database_file).exists():
         logger.info("CSV database does not exist, create a new one")
-        df = pd.DataFrame(columns=['host', 'id', 'sni', 'stream', 'transport', 'protocol', 'direction', 'timestamp', 'length'])
+        df = pd.DataFrame(columns=['host', 'id', 'sni', 'stream', 'transport', 'protocol', 'path'])
         df.to_csv(database_file, index=False)
 
     host_list = read_host_list(host_list_file)
@@ -87,7 +93,7 @@ def main(input_root: str, output_root: str, host_list_file: str, host_filter_fil
     logger.info(f"Using {n_processes} processes")
     
     # Create tasks for each host-protocol combination
-    tasks = [(host, input_root, host_filter, display_filter, db, database_file, write_lock) for host in host_list]
+    tasks = [(host, input_root, host_filter, display_filter, db, database_file, array_dir, write_lock) for host in host_list]
     
     # Process tasks in parallel
     with mp.Pool(n_processes) as pool:

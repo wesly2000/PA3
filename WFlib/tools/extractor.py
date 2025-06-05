@@ -145,40 +145,6 @@ def single_pcap_extract(
         })
 
     return result
-    
-    # sni_rows = df[df["tls.handshake.extensions_server_name"].notna() & ~df["tls.handshake.extensions_server_name"].isin(SNI_filter or [])]
-
-    # for _, row in sni_rows.iterrows():
-    #     # Check if the row is a TCP packet.
-    #     if row["tcp.stream"] is not None:
-    #         stream_df = df[df["tcp.stream"] == row["tcp.stream"]]
-    #         stream = row["tcp.stream"]
-    #         transport = "tcp"
-    #     elif row["udp.stream"] is not None:
-    #         stream_df = df[df["udp.stream"] == row["udp.stream"]]
-    #         stream = row["udp.stream"]
-    #         transport = "udp"
-    #     else:
-    #         raise ValueError("No stream number found in the row.")
-        
-    #     features = np.array([
-    #         dir_extractor.extract(stream_df), 
-    #         ts_extractor.extract(stream_df), 
-    #         len_extractor.extract(stream_df)
-    #         ])
-        
-    #     # Append a new row to the result.
-    #     result.append({
-    #         'host': host,
-    #         'id': id,
-    #         'sni': row["tls.handshake.extensions_server_name"],
-    #         'stream': stream,
-    #         'transport': transport,
-    #         'protocol': protocol,
-    #         'feature': features}
-    #         )
-        
-    # return result
 
 
 def multi_pcap_extract(
@@ -211,6 +177,10 @@ def multi_pcap_extract(
                 logger.error(f"Error extracting features from {file}: {e}, skip")
                 continue
     return result
+
+
+def array_path(host: str, id: int, transport: str, stream: int, protocol: str) -> str:
+    return f"{host}_{id}_{transport}_{stream}_{protocol}.npz"
 
 
 class Extractor(object):
