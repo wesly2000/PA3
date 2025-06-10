@@ -2,6 +2,8 @@ from WFlib.tools.analyzer import Line
 from WFlib.utils.statistics import IQR_bound
 from typing import List
 import numpy as np
+import torch
+from torch import nn
 
 def generate_byte_stream(segment_byte_map: dict, cutoff: int, abs_lower_frame_numbers: List[int]) -> np.ndarray:
         """
@@ -49,3 +51,24 @@ def generate_byte_segment(lines: list[Line]) -> List[np.ndarray]:
         except Exception as e:
             print(f"Error in Line {i}: {e}")
     return result
+
+def get_activations(model: nn.Module, input_data: torch.Tensor, layer_names: List[str], device: str) -> List[np.ndarray]:
+
+    activation = dict()
+    X, y = input_data[0].to(device), input_data[1].to(device)
+    def get_activation(name):
+        def hook(layer: nn.Module, input, output):
+            if name not in activation:
+                activation[name] = {'X': [], 'y': []}
+            activation[name]['X'].append(output.detach().cpu().numpy())
+            activation[name]['y'].append(y.detach().cpu().numpy())
+
+        return hook
+    
+    for layer_name in layer_names:
+        getattr(model, layer_name).register_forward_hook(get_activation(layer_name))
+    
+    
+    model(X)
+
+    return activation
