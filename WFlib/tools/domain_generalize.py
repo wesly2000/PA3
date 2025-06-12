@@ -105,6 +105,8 @@ class MetaReg():
             meta_test_loss.backward()
             optimizer_reg.step()
 
+        for i in range(len(self.task_models)):
+            self.task_models[i].train()
 
         # TRAIN STEP 1, regular training (line 2-7 in MetaReg algo)
         for i, train_batch in enumerate(zip(*train_data)):
@@ -125,7 +127,11 @@ class MetaReg():
             meta_train_step_3(meta_train_sample_step, models, random_domains, optimizer_reg)
 
 
-    def _train_epoch(self, train_data: DataLoader) -> None:
+    def _train_epoch(self, train_data: DataLoader, epoch: int) -> None:
+        self.final_model.train()
+        sum_loss = 0
+        sum_count = 0
+
         def train_step(train_batch: DataLoader):
             self.final_model.train()
             X, y = train_batch[0].to(self.device), train_batch[1].to(self.device)
@@ -140,20 +146,26 @@ class MetaReg():
             # perform gradient descent
             loss_final.backward()
             self.final_optimizer.step()
+            loss = loss_final.data.cpu().numpy() * X.shape[0]
+            count = X.shape[0]
+
+            return loss, count
 
         for train_batch in train_data:
-            train_step(train_batch)
+            loss, count = train_step(train_batch)
+            sum_loss += loss
+            sum_count += count
 
-    def _validate_epoch(self, val_data: DataLoader, eval_metrics: List[str], save_metric: str,epoch: int, out_file: str, num_tabs: int=1) -> None:
-        self.final_model.eval()
+        train_loss = round(sum_loss / sum_count, 3)
+        print(f"epoch {epoch}: train_loss = {train_loss}")
+
+    def _validate_epoch(self, val_data: DataLoader, eval_metrics: List[str], num_tabs: int=1) -> None:
         with torch.no_grad():
             self.final_model.eval()
-            sum_loss = 0
-            sum_count = 0
             valid_pred = []
             valid_true = []
 
-            for index, cur_data in enumerate(val_data):
+            for _, cur_data in enumerate(val_data):
                 cur_X, cur_y = cur_data[0].to(self.device), cur_data[1].to(self.device)
                 outs = self.final_model(cur_X)
                 
@@ -178,13 +190,7 @@ class MetaReg():
             valid_true = np.concatenate(valid_true)
 
         valid_result = measurement(valid_true, valid_pred, eval_metrics, num_tabs=num_tabs)
-        print(f"{epoch}: {valid_result}")
-        
-        if valid_result[save_metric] > metric_best_value:
-            metric_best_value = valid_result[save_metric]
-            best_epoch = epoch
-            torch.save(model.state_dict(), out_file)
-        print(f"best epoch {best_epoch}: {save_metric}={metric_best_value}")
+        return valid_result
                 
 
     def train(self, meta_train_data: List[DataLoader], meta_val_data: List[DataLoader], train_data: DataLoader, val_data: DataLoader) -> None:
@@ -194,20 +200,22 @@ class MetaReg():
             template = 'Step {} of {} of Meta Learning completed'
             print(template.format(epoch+1, self.epochs_metatrain)) 
 
-        for epoch in range(self.epochs):
-            self._train_epoch(train_data)
-            print(template.format(epoch+1, self.epochs_metatrain)) 
-        #     # validate epoch on validation set
-        #     # TODO: implement validation
-        #     loss_train, accuracy_train, loss_test, accuracy_test = validate_epoch(train_data, val_data, self.final_model, self.loss_function)
+        eval_metrics = ["Accuracy", "Precision", "Recall", "F1-score"]
+        save_metric = "F1-score"
+        metric_best_value = 0
+        best_epoch = 0
+        out_file = f"./checkpoints/best_model_{save_metric}.pth"
 
-        #     # print the metrics
-        #     template = 'Epoch {}, Loss: {}, Accuracy: {}, Test Loss: {}, Test Accuracy: {}'
-        #     print(template.format(epoch,
-        #                             np.array2string(loss_train, precision=2, floatmode='fixed'),
-        #                             np.array2string(accuracy_train*100, precision=2, floatmode='fixed'),
-        #                             np.array2string(loss_test, precision=2, floatmode='fixed'),
-        #                             np.array2string(accuracy_test*100, precision=2, floatmode='fixed')))
+        for epoch in range(self.epochs):
+            self._train_epoch(train_data, epoch)
+            # Validation phrase
+            valid_result = self._validate_epoch(val_data, eval_metrics)
+            if valid_result[save_metric] > metric_best_value:
+                metric_best_value = valid_result[save_metric]
+                best_epoch = epoch
+                torch.save(self.final_model.state_dict(), out_file)
+            print(f"best epoch {best_epoch}: {save_metric}={metric_best_value}")
+
 
     def test(self, test_data: DataLoader) -> None:
         with torch.no_grad():
