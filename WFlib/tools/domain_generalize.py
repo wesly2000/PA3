@@ -81,17 +81,8 @@ class MetaReg():
                 optimizer = optim.SGD(self.task_models[random_domains[0]].parameters(), lr=self.lr, momentum=.9)
                 meta_train_loss = self.loss_function(self.task_models[random_domains[0]](X), y) + self.regularizer(torch.abs(torch.flatten(self.task_models[random_domains[0]].linear1.weight)))
 
-                # meta_train_loss = loss_functions[random_domains[0]]  # random meta train loss
-                # meta_train_model = models[random_domains[0]]  # random meta train model
-                # optimizer = optimizers[random_domains[0]]  # choose the right optimizer
-                optimizer.zero_grad()  # zero the parameter gradients
                 meta_train_loss.backward()
                 optimizer.step()
-                # get gradients of regularizer (probably won't work instantly)
-                # output = 
-                # optimizer.zero_grad()  # zero the parameter gradients
-                # meta_train_loss.backward()
-                # optimizer.step()
 
         def meta_train_step_3(train_batch: List[DataLoader], models: List[nn.Module], random_domains: np.ndarray, optimizer_reg: optim.Optimizer):
             # get gradients and apply SGD
