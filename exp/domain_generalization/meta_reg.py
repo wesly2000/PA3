@@ -47,7 +47,7 @@ def main(datasets: List[str], feature: str, model: str, device: str, num_tabs: i
     feature_model_final = DF(num_classes=256).to(device)
     model_final = TaskModel(feature_model_final, hidden_dim=256, num_classes=80).to(device)
 
-    meta_reg = MetaReg(task_models, regularizer, model_final)
+    meta_reg = MetaReg(task_models, regularizer, model_final, device=device)
     meta_reg.train(meta_train_iter, meta_val_iter, train_iter, val_iter)
 
 
