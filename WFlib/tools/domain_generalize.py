@@ -69,27 +69,22 @@ class MetaReg():
 
         def meta_train_step_2(train_batch: List[DataLoader], models: List[nn.Module], random_domains: np.ndarray):
             # Train F and T_i with as the normal training process
-            optimizers = []
-            loss_functions = []
+            X, y = train_batch[random_domains[0]]
+            X = X.to(self.device)
+            y = y.to(self.device)
 
-            with torch.autograd.detect_anomaly():
-                X, y = train_batch[random_domains[0]]
-                X = X.to(self.device)
-                y = y.to(self.device)
+            # Use the model parameter as the initial parameter to remove the gradient trace of previous steps
+            optimizer = optim.SGD(self.task_models[random_domains[0]].parameters(), lr=self.lr, momentum=.9)
+            meta_train_loss = self.loss_function(self.task_models[random_domains[0]](X), y) + self.regularizer(torch.abs(torch.flatten(self.task_models[random_domains[0]].linear1.weight)))
 
-                # Use the model parameter as the initial parameter to remove the gradient trace of previous steps
-                optimizer = optim.SGD(self.task_models[random_domains[0]].parameters(), lr=self.lr, momentum=.9)
-                meta_train_loss = self.loss_function(self.task_models[random_domains[0]](X), y) + self.regularizer(torch.abs(torch.flatten(self.task_models[random_domains[0]].linear1.weight)))
-
-                meta_train_loss.backward()
-                optimizer.step()
+            meta_train_loss.backward()
+            optimizer.step()
 
         def meta_train_step_3(train_batch: List[DataLoader], models: List[nn.Module], random_domains: np.ndarray, optimizer_reg: optim.Optimizer):
             # get gradients and apply SGD
             meta_test_model = models[random_domains[1]]
             inputs = train_batch[random_domains[1]]
-            meta_test_loss = self.loss_function(meta_test_model(inputs[0]).to(self.device), torch.tensor(torch.squeeze(inputs[1]), 
-                                            dtype=torch.long).to(self.device))
+            meta_test_loss = self.loss_function(meta_test_model(inputs[0].to(self.device)), inputs[1].to(self.device))
             # zero the parameter gradients
             optimizer_reg.zero_grad()
             # perform gradient descent
@@ -126,21 +121,14 @@ class MetaReg():
         def train_step(train_batch: DataLoader):
             self.final_model.train()
             X, y = train_batch[0].to(self.device), train_batch[1].to(self.device)
-
-            loss_final_classification = self.loss_function(self.final_model(X), y)
-            # get regularization penalty loss                              
-            loss_final_regularizer = self.regularizer(torch.abs(torch.flatten(self.final_model.linear1.weight)))
-            # add both losses
-            loss_final = loss_final_classification + loss_final_regularizer
-            # zero the parameter gradients
             self.final_optimizer.zero_grad()
-            # perform gradient descent
+            loss_final = self.loss_function(self.final_model(X), y) + self.regularizer(torch.abs(torch.flatten(self.final_model.linear1.weight)))
             loss_final.backward()
             self.final_optimizer.step()
             loss = loss_final.data.cpu().numpy() * X.shape[0]
             count = X.shape[0]
 
-            return loss, count
+            return loss.item(), count  # Why loss is an array instead of a scalar?
 
         for train_batch in train_data:
             loss, count = train_step(train_batch)
@@ -243,8 +231,7 @@ class TaskModel(nn.Module):
         x = self.feature_model(input)
         x = self.relu(x)
         # x = self.dropout(x)
-        # x = self.linear1(x)
-        x = torch.nn.functional.linear(x, self.linear1.weight.clone(), self.linear1.bias)
+        x = self.linear1(x)
         return x
 
     def forward(self, input):
