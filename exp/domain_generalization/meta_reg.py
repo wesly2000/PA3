@@ -37,15 +37,20 @@ def main(datasets: List[str], feature: str, model: str, device: str, num_tabs: i
     meta_train_iter = [data_processor.load_iter(meta_train_X[i], meta_train_y[i], batch_size, True, num_workers) for i in range(len(datasets))]
     meta_val_iter = [data_processor.load_iter(meta_valid_X[i], meta_valid_y[i], batch_size, False, num_workers) for i in range(len(datasets))]
 
-    feature_model = DF(num_classes=256).to(device)
-    task_model_1 = TaskModel(feature_model=feature_model, hidden_dim=256, num_classes=80).to(device)
-    task_model_2 = TaskModel(feature_model=feature_model, hidden_dim=256, num_classes=80).to(device)
+    FEATURE_MODEL_INPUT = 5000
+    FEATURE_MODEL_OUTPUT = 80
+
+    feature_model = FeatureModel(hidden_dim=FEATURE_MODEL_INPUT, num_classes=FEATURE_MODEL_OUTPUT).to(device)
+    HIDDEN_DIM = feature_model.output_dim()
+
+    task_model_1 = TaskModel(feature_model=feature_model, hidden_dim=HIDDEN_DIM, num_classes=FEATURE_MODEL_OUTPUT).to(device)
+    task_model_2 = TaskModel(feature_model=feature_model, hidden_dim=HIDDEN_DIM, num_classes=FEATURE_MODEL_OUTPUT).to(device)
 
     task_models = [task_model_1, task_model_2]
 
-    regularizer = Regularizer(hidden_dim=256, num_classes=80).to(device)
-    feature_model_final = DF(num_classes=256).to(device)
-    model_final = TaskModel(feature_model_final, hidden_dim=256, num_classes=80).to(device)
+    regularizer = Regularizer(hidden_dim=task_model_1.trainable_param().shape[0], num_classes=FEATURE_MODEL_OUTPUT).to(device)
+    feature_model_final = FeatureModel(hidden_dim=FEATURE_MODEL_INPUT, num_classes=FEATURE_MODEL_OUTPUT).to(device)
+    model_final = TaskModel(feature_model_final, hidden_dim=HIDDEN_DIM, num_classes=FEATURE_MODEL_OUTPUT).to(device)
 
     meta_reg = MetaReg(task_models, regularizer, model_final, device=device)
     meta_reg.train(meta_train_iter, meta_val_iter, train_iter, val_iter)

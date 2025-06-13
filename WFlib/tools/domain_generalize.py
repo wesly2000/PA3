@@ -5,8 +5,10 @@ import numpy as np
 import torch
 import random
 import copy
+from math import ceil
 from WFlib.utils.statistics import sample
 from WFlib.tools.evaluator import measurement
+from WFlib.models.DF import ConvBlock
 
 
 class MetaReg():
@@ -75,7 +77,7 @@ class MetaReg():
 
             # Use the model parameter as the initial parameter to remove the gradient trace of previous steps
             optimizer = optim.SGD(self.task_models[random_domains[0]].parameters(), lr=self.lr, momentum=.9)
-            meta_train_loss = self.loss_function(self.task_models[random_domains[0]](X), y) + self.regularizer(torch.abs(torch.flatten(self.task_models[random_domains[0]].linear1.weight)))
+            meta_train_loss = self.loss_function(self.task_models[random_domains[0]](X), y) + self.regularizer(torch.abs(self.task_models[random_domains[0]].trainable_param()))
             optimizer.zero_grad()
             meta_train_loss.backward()
             optimizer.step()
@@ -123,7 +125,7 @@ class MetaReg():
             X, y = train_batch[0].to(self.device), train_batch[1].to(self.device)
             self.final_optimizer.zero_grad()
             # Regularization loss is negative
-            loss_final = self.loss_function(self.final_model(X), y) + self.regularizer(torch.abs(torch.flatten(self.final_model.linear1.weight)))
+            loss_final = self.loss_function(self.final_model(X), y) + self.regularizer(torch.abs(self.final_model.trainable_param()))
             loss_final.backward()
             self.final_optimizer.step()
             loss = loss_final.data.cpu().numpy() * X.shape[0]
@@ -202,27 +204,75 @@ class TaskModel(nn.Module):
     def __init__(self, feature_model: nn.Module, hidden_dim: int, num_classes: int):
         super(TaskModel, self).__init__()
         self.num_classes = num_classes
-        self.linear1 = nn.Linear(hidden_dim, num_classes)
         self.feature_model = feature_model
-        # self.dropout = nn.Dropout(0.5)
-        self.relu = nn.ReLU(True)
+
+        self.classifier = nn.Sequential(
+            nn.Flatten(),  # Flatten the tensor to a vector
+            nn.Linear(hidden_dim, 512, bias=False),  # Fully connected layer
+            nn.BatchNorm1d(512),  # Batch normalization layer
+            nn.ReLU(inplace=True),  # ReLU activation function
+            nn.Dropout(p=0.7),  # Dropout layer for regularization
+            nn.Linear(512, 512, bias=False),  # Fully connected layer
+            nn.BatchNorm1d(512),  # Batch normalization layer
+            nn.ReLU(inplace=True),  # ReLU activation function
+            nn.Dropout(p=0.5),  # Dropout layer for regularization
+            nn.Linear(512, num_classes)  # Output layer
+        )
+
+    def trainable_param(self):
+        return torch.cat([p.flatten() for p in self.classifier.parameters() if p.requires_grad])
 
     def logits(self, input):
         x = self.feature_model(input)
-        x = self.relu(x)
-        # x = self.dropout(x)
-        x = self.linear1(x)
+        x = self.classifier(x)
         return x
 
     def forward(self, input):
         x = self.logits(input)
         return x
     
+
+class FeatureModel(nn.Module):
+    def __init__(self, hidden_dim, num_classes):
+        super(FeatureModel, self).__init__()
+
+        def length_after_extraction(input_length: int):
+            output_length = input_length
+            for _ in filter_num:
+                output_length = (output_length - pool_size) // pool_stride_size + 1
+            return output_length
+        
+        # Configuration parameters for the convolutional blocks
+        filter_num = [32, 64, 128, 256]  # Number of filters for each block
+        kernel_size = 8  # Kernel size for convolutional layers
+        conv_stride_size = 1  # Stride size for convolutional layers
+        pool_stride_size = 4  # Stride size for max pooling layers
+        pool_size = 8  # Kernel size for max pooling layers
+        self._length_after_extraction = length_after_extraction(hidden_dim)
+        self._output_dim = self._length_after_extraction * filter_num[-1]
+        
+        # Define the feature extraction part of the network using a sequential container with ConvBlock instances
+        self.feature_extraction = nn.Sequential(
+            ConvBlock(1, filter_num[0], kernel_size, conv_stride_size, pool_size, pool_stride_size, 0.1, nn.ELU),  # Block 1
+            ConvBlock(filter_num[0], filter_num[1], kernel_size, conv_stride_size, pool_size, pool_stride_size, 0.1, nn.ReLU),  # Block 2
+            ConvBlock(filter_num[1], filter_num[2], kernel_size, conv_stride_size, pool_size, pool_stride_size, 0.1, nn.ReLU),  # Block 3
+            ConvBlock(filter_num[2], filter_num[3], kernel_size, conv_stride_size, pool_size, pool_stride_size, 0.1, nn.ReLU)  # Block 4
+        )
+
+    def output_dim(self):
+        return self._output_dim
+
+    def forward(self, x):
+        # Pass the input through the feature extraction part
+        x = self.feature_extraction(x)
+        return x
+
+    
 class Regularizer(nn.Module):
    def __init__(self, hidden_dim, num_classes):
       super(Regularizer, self).__init__()
       self.num_classes = num_classes
-      self.linear1 = nn.Linear(hidden_dim * num_classes, 1, bias=False)
+      self.linear1 = nn.Linear(hidden_dim, 1, bias=False)
 
    def logits(self, input):
       x = self.linear1(input)
