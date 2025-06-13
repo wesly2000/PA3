@@ -486,4 +486,5 @@ class JsonFormatter(Formatter):
         return self._raw_buf[name]
     
 class CSVFormatter(Formatter):
-    pass
+    def __init__(self, length=0, only_summaries=True, keep_packets=True, display_filter=None, num_worker=4):
+        super().__init__(length, only_summaries, keep_packets, display_filter)

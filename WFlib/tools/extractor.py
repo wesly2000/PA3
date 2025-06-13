@@ -220,6 +220,13 @@ class CsvExtractor(Extractor):
     """
 
 
+class NpzExtractor(Extractor):
+    """
+    Extractors that extract features from .npz files. Since .npz files using key to index arrays within, the caller is responsible
+    to pass the correct key.
+    """
+
+
 class CsvDirExtractor(CsvExtractor):
     """
     The class that extracts direction feature from DataFrame.
@@ -356,3 +363,48 @@ class PcapDeltaExtractor(PcapExtractor):
     """
     def __init__(self, name="delta"):
         super().__init__(name=name)
+
+
+class NpzHSDBSExtractor(NpzExtractor):
+    """
+    The class that extracts Header Stripped Directional Burst Size (HSDBS) feature from .npz files.
+    """
+    def __init__(self, name="hsdbs", threshold:int=32):
+        super().__init__(name=name)
+        self.threshold = threshold
+
+    def extract(self, npz_file: Union[str, Path]):
+        arrays = np.load(npz_file)
+        direction_arr, length_arr, timestamp_arr = arrays['direction'], arrays['length'], arrays['timestamp']
+        # A burst is created as follows:
+        # + a burst size is the accumulated length of consecutive packets with the same direction;
+        # + the size is directional, multiplied by the direction;
+        # + the packet size being calculated must be larger than some given threshold;
+        # + a burst timestamp is the timestamp of the first packet within (whether or not the packet is considered in burst size);
+        # + a burst is defined as the (size, timestamp)
+        bursts = []
+
+        for direction, start, end in self._get_burst_meta_info(direction_arr):
+            packet_lengths = length_arr[start:end]
+            burst_size = np.sum(packet_lengths[packet_lengths > self.threshold])
+            bursts.append((timestamp_arr[start], direction * burst_size))
+
+
+
+
+    def _get_burst_meta_info(self, arr):
+        # Find where the values change
+        change_points = np.where(np.diff(arr) != 0)[0] + 1
+        
+        # Add start and end points
+        change_points = np.concatenate(([0], change_points, [len(arr)]))
+        
+        # Get blocks and their indices
+        directions, starts, ends = [], [], []
+        
+        for i in range(len(change_points) - 1):
+            starts.append(change_points[i])
+            ends.append(change_points[i + 1])
+            directions.append(arr[0])
+        
+        return directions, starts, ends
