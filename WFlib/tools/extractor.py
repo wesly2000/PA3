@@ -1,5 +1,6 @@
 from typing import Union, List, Set
 import numpy as np
+from numpy.lib.npyio import NpzFile
 import pandas as pd
 import subprocess
 import logging
@@ -224,6 +225,11 @@ class NpzExtractor(Extractor):
     """
     Extractors that extract features from .npz files. Since .npz files using key to index arrays within, the caller is responsible
     to pass the correct key.
+
+    In the database-based data storing system, a .pcap is split to multiple arrays representation, each of which is a stream. 
+
+    Therefore, for extracting the feature of an entire capture, the caller is responsible to pass a group of .npz file paths which 
+    the caller considers enough to represent the capture.
     """
 
 
@@ -373,15 +379,14 @@ class NpzHSDBSExtractor(NpzExtractor):
         super().__init__(name=name)
         self.threshold = threshold
 
-    def extract(self, npz_file: Union[str, Path]):
-        arrays = np.load(npz_file)
-        direction_arr, length_arr, timestamp_arr = arrays['direction'], arrays['length'], arrays['timestamp']
+    def single_stream_extract(self, npz_file: NpzFile) -> List[tuple]:
+        direction_arr, length_arr, timestamp_arr = npz_file['direction'], npz_file['length'], npz_file['timestamp']
         # A burst is created as follows:
         # + a burst size is the accumulated length of consecutive packets with the same direction;
         # + the size is directional, multiplied by the direction;
         # + the packet size being calculated must be larger than some given threshold;
         # + a burst timestamp is the timestamp of the first packet within (whether or not the packet is considered in burst size);
-        # + a burst is defined as the (size, timestamp)
+        # + a burst is defined as the (timestamp, size)
         bursts = []
 
         for direction, start, end in self._get_burst_meta_info(direction_arr):
@@ -389,7 +394,18 @@ class NpzHSDBSExtractor(NpzExtractor):
             burst_size = np.sum(packet_lengths[packet_lengths > self.threshold])
             bursts.append((timestamp_arr[start], direction * burst_size))
 
+        return bursts
+    
 
+    def extract(self, npz_file_list: List[NpzFile]):
+        bursts = []
+        for npz_file in npz_file_list:
+            bursts += self.single_stream_extract(npz_file)
+
+        bursts.sort(key=lambda x: x[0])  # Sort according to timestamp information        
+        bursts = np.array([size for _, size in bursts])
+        
+        return bursts
 
 
     def _get_burst_meta_info(self, arr):
