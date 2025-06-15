@@ -21,7 +21,7 @@ if not config_path.exists():
     VMESS_ENABLED = False
 else:
     config = get_config(config_path)
-    if 'vmess' not in config:
+    if config is None or 'vmess' not in config:
         VMESS_ENABLED = False
     else:
         VMESS_ENABLED = config['vmess'].getboolean('enabled', fallback=False)
@@ -424,7 +424,7 @@ def test_multi_pcap_extract_1(param_gen):
     """
     src = ['192.168.5.5']
     pcap_dir = 'exp/test_dataset/realworld_dataset/vmess_capture/top.baidu.com'
-    SNIs = ['firefox.settings.services.mozilla.com']
+    SNIs = {'firefox.settings.services.mozilla.com'}
 
     pcap_dir = Path(pcap_dir)
     _, override_prefs = param_gen
@@ -445,7 +445,7 @@ def test_multi_pcap_extract_2(param_gen):
     """
     src = ['192.168.5.5']
     pcap_dir = 'exp/test_dataset/realworld_dataset/vmess_capture/top.baidu.com'
-    SNIs = ['firefox.settings.services.mozilla.com']
+    SNIs = {'firefox.settings.services.mozilla.com'}
 
     _, override_prefs = param_gen
 

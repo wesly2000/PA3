@@ -3,8 +3,9 @@ import pyshark
 import json
 from pathlib import Path
 import warnings
+import pandas as pd
 from WFlib.tools.capture import SNI_exclude_filter
-from WFlib.tools.extractor import Extractor
+from WFlib.tools.extractor import Extractor, array_path
 import asyncio
 import nest_asyncio
 nest_asyncio.apply()
@@ -486,5 +487,21 @@ class JsonFormatter(Formatter):
         return self._raw_buf[name]
     
 class CSVFormatter(Formatter):
-    def __init__(self, length=0, only_summaries=True, keep_packets=True, display_filter=None, num_worker=4):
-        super().__init__(length, only_summaries, keep_packets, display_filter)
+    """
+    Convert a csv database (along with its linked array files) into a .npz dataset.
+    """
+    def __init__(self, root_dir: str, length=0):
+        super().__init__(length)
+        self.root_dir = root_dir
+
+    def load(self, db_file: str):
+        self.db = pd.read_csv(db_file)[['host', 'id', 'stream', 'transport', 'protocol']]
+    
+    def transform(self, host : str, label : int, *extractors : Extractor):
+        capture_features = []
+        db = self.db[self.db['host'] == host]
+        for pcap_id, group in db.groupby('id'):
+            paths = group.apply(lambda row: f'{self.root_dir}/{array_path(row["host"], row["id"], row["transport"], row["stream"], row["protocol"])}')
+            for p in paths:
+                for extractor in extractors:
+                    capture_

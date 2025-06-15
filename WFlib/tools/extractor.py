@@ -1,4 +1,4 @@
-from typing import Union, List, Set
+from typing import Union, List, Set, Optional
 import numpy as np
 from numpy.lib.npyio import NpzFile
 import pandas as pd
@@ -151,12 +151,12 @@ def single_pcap_extract(
 def multi_pcap_extract(
         tshark_path: str, 
         pcap_dir: Union[str, Path], 
-        SNI_filter: Union[Set[str], List[str]]=None, 
+        SNI_filter: Union[Set[str], List[str]]=[], 
         display_filter: str='tcp',
         protocol: str='normal',
-        override_prefs: dict=None,
-        src: List[str]=None,
-        db: pd.DataFrame=None) -> List[dict]:
+        override_prefs: dict={},
+        src: List[str]=[],
+        db: Optional[pd.DataFrame]=None) -> List[dict]:
     """
     Extract features from multiple .pcap files.
     """

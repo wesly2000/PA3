@@ -3,7 +3,7 @@ Extract features from a .csv file, and store the features into a database.
 """
 
 import pandas as pd
-from typing import Set, List, Union
+from typing import Set, List, Union, Optional
 from pathlib import Path
 import os
 import argparse
@@ -23,12 +23,15 @@ if not config_path.exists():
     tshark_path = "tshark"
 else:
     config = get_config(config_path)
-    tshark_path = config['tshark'].get('tshark_path', fallback="tshark")
+    if not config:
+        tshark_path = "tshark"
+    else:
+        tshark_path = config['tshark'].get('tshark_path', fallback="tshark")
 
-src = ["58.206.207.126", "192.168.5.5", "10.4.0.3", "192.168.5.7"]
+src = ["58.206.207.126", "192.168.5.5", "10.4.0.3", "192.168.5.7", "2001:da8:283:c004:8177:495b:d038:d48a"]
 PROTOCOLS = ['normal', 'vmess']
 
-def extract_csv_db_per_host_per_protocol(root: str, protocol: str, host: str, host_filter: Set[str], display_filter: str='tcp', db: pd.DataFrame=None):
+def extract_csv_db_per_host_per_protocol(root: str, protocol: str, host: str, host_filter: Set[str], display_filter: str='tcp', db: Optional[pd.DataFrame]=None):
     pcap_dir = f"{root}/{protocol}_capture/{host}"
     proxy_keylog_file = f"{pcap_dir}/proxy_keylog.txt"
 
@@ -70,14 +73,14 @@ def extract_csv_db_per_host(host: str, root: str, host_filter: set,
         df.to_csv(database_file, mode='a', index=False, header=False)
 
 def main(input_root: str, output_root: str, host_list_file: str, host_filter_file: str, 
-         display_filter: str = None, n_processes: int = None):
+         display_filter: Optional[str] = None, n_processes: Optional[int] = None):
     database_file = f"{output_root}/csv_db_extract/database.csv"
     array_dir = f"{output_root}/csv_db_extract/arrays"
     Path(database_file).parent.mkdir(parents=True, exist_ok=True)
     Path(array_dir).mkdir(parents=True, exist_ok=True)
     if not Path(database_file).exists():
         logger.info("CSV database does not exist, create a new one")
-        df = pd.DataFrame(columns=['host', 'id', 'sni', 'stream', 'transport', 'protocol', 'path'])
+        df = pd.DataFrame(columns=['host', 'id', 'sni', 'stream', 'transport', 'protocol'])
         df.to_csv(database_file, index=False)
 
     host_list = read_host_list(host_list_file)
