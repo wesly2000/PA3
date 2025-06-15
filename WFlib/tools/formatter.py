@@ -2,7 +2,7 @@ import numpy as np
 import pyshark
 import json
 from pathlib import Path
-from typing import Union
+from typing import Union, List
 import warnings
 import pandas as pd
 from WFlib.tools.capture import SNI_exclude_filter
@@ -491,14 +491,11 @@ class CsvFormatter(Formatter):
     """
     Convert a csv database (along with its linked array files) into a .npz dataset.
     """
-    def __init__(self, base_dir: str, db_file: str, length=1000):
+    def __init__(self, length=1000):
         super().__init__(length)
-        self.base_dir = base_dir
-        self.db = pd.read_csv(db_file)[['host', 'id', 'stream', 'transport', 'protocol']]
 
-    def load(self, host: str, pcap_id: Union[str, int]):
-        db = self.db[(self.db['host'] == host) & (self.db['id'] == int(pcap_id))]
-        paths = db.apply(lambda row: f'{self.base_dir}/{array_path(row["host"], row["id"], row["transport"], row["stream"], row["protocol"])}')
+
+    def load(self, paths: List[Union[str, Path]]):
         self._raw_buf = [np.load(path) for path in paths]
     
 
@@ -548,14 +545,18 @@ class CsvFormatter(Formatter):
             The extractors for feature extraction.
         """
         label = 0  # Processing a hostname will increase the label by 1
+        db = pd.read_csv(db_file)[['host', 'id', 'stream', 'transport', 'protocol']]
 
         # Fetch all the hosts from the database and sort them alphabetically
-        hosts = sorted(self.db['host'].unique())
+        hosts = sorted(db['host'].unique())
 
         # Iterate over all hosts in the database
         for host in hosts:
-            for pcap_id in self.db[self.db['host'] == host]['id'].unique():
-                self.load(host, pcap_id)
+            for pcap_id in db[db['host'] == host]['id'].unique():
+                host_db = db[(db['host'] == host) & (db['id'] == int(pcap_id))]
+                paths = host_db.apply(lambda row: f'{base_dir}/{array_path(row["host"], row["id"], row["transport"], row["stream"], row["protocol"])}')
+
+                self.load(paths)
                 self.transform(host, label, *extractors)
                 label += 1
 

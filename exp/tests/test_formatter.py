@@ -1,10 +1,11 @@
-from WFlib.tools.extractor import PcapDirExtractor
+from WFlib.tools.extractor import PcapDirExtractor, NpzHSDBSExtractor
 from WFlib.tools.formatter import *
+from exp.tests.fixture import npz_buffers
 
 import io
 import json
 import tempfile
-import tracemalloc
+# import tracemalloc
 import os 
 import nest_asyncio
 nest_asyncio.apply()
@@ -406,3 +407,36 @@ def test_DistriPcapFormatter_1():
     assert loaded_data['direction'].shape == (5, 10)
 
     loaded_data.close()
+
+
+def test_CsvFormatter_1(npz_buffers):
+    formatter = CsvFormatter(length=10)
+
+    extractor = NpzHSDBSExtractor()
+
+    label = 0
+    hosts = ["www.baidu.com", "www.zhihu.com", "www.google.com"]
+    for npz_buffer in npz_buffers:
+        formatter.load([npz_buffer])
+        formatter.transform(hosts[label], label, extractor)
+        label += 1
+
+    # Create an in-memory bytes buffer
+    buffer = io.BytesIO()
+    formatter.dump(buffer)
+
+    buffer.seek(0)  # Move to the start of the buffer
+    loaded_data = np.load(buffer)
+
+    target = {
+        "hosts" : np.array(hosts), 
+        "labels": np.array([0, 1, 2]), 
+        "hsdbs": np.array([
+            [100, 0, 100, 0, 100, -100, 0, -100, 0, 0],
+            [-100, 0, -100, 0, -100, 0, -100, 0, 0, 0],
+            [200, -100, 100, 0, 100, 0, 0, 0, 0, 0]
+        ])
+    }
+
+    for k, v in loaded_data.items():
+        assert np.all(target[k] == v)

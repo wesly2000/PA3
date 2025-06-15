@@ -9,7 +9,7 @@ from WFlib.tools.formatter import PcapFormatter
 from WFlib.utils.config import get_config
 from exp.tests.test_formatter import google_file, apple_file, tiktok_file, yandex_file
 
-from exp.tests.fixture import npz_files
+from exp.tests.fixture import npz_buffers
 
 config_path = Path.cwd() / 'config.ini'
 if not config_path.exists():
@@ -264,23 +264,25 @@ def test_pcap_to_dataframe_3():
     assert result[0] == 1260
     
 
-def test_NpzHSDBSExtractor_1(npz_files):
+def test_NpzHSDBSExtractor_1(npz_buffers):
     """
     Test reading a .npz file and extract the hsdbs feature.
     """
     extractor = NpzHSDBSExtractor()
     result = []
+    npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
     extractor.extract(result, npz_files)
 
     target = np.array([200, -100, 100, 0, 100, 0, 100, -100, -100, 0, 0, -100, 0, -100, 0, -100, 0, -100, 0, 100, 0, 100, 0])
     assert np.all(result == target)
 
-def test_NpzHSDBSExtractor_2(npz_files):
+def test_NpzHSDBSExtractor_2(npz_buffers):
     """
     Test reading a .npz file and extract the hsdbs feature, this test covers the case that the ignore_control_packets option is set to True.
     """
     extractor = NpzHSDBSExtractor(ignore_control_packets=True)
     result = []
+    npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
     extractor.extract(result, npz_files)
 
     target = np.array([200, 300, -400, -200, -100, 200])
