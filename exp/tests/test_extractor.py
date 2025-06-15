@@ -269,19 +269,19 @@ def npz_files():
     # Create 3 temporary .npz files
     stream_1 = {
         "direction": np.array([1, -1, 1, -1, 1, -1, -1, 1, -1, 1]),
-        "length": np.array([100, 20, 100, 32, 100, 20, 100, 20, 100, 20]),
+        "length": np.array([132, 20, 132, 32, 132, 20, 132, 20, 132, 20]),
         "timestamp": np.array([3, 4, 5, 6, 7, 8, 11, 12, 13, 14])
     }
 
     stream_2 = {
         "direction": np.array([-1, 1, -1, 1, -1, 1, -1, 1]),
-        "length": np.array([100, 20, 100, 32, 100, 20, 100, 20]),
+        "length": np.array([132, 20, 132, 32, 132, 20, 132, 20]),
         "timestamp": np.array([9, 10, 15, 16, 17, 18, 19, 20])
     }
 
     stream_3 = {
         "direction": np.array([1, 1, -1, -1, 1, 1, -1, 1, -1]),
-        "length": np.array([100, 100, 31, 100, 20, 100, 20, 100, 20]),
+        "length": np.array([132, 132, 31, 132, 20, 132, 20, 132, 20]),
         "timestamp": np.array([0, 1, 2, 21, 22, 23, 24, 25, 26])
     }
 

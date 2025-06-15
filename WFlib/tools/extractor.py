@@ -406,9 +406,9 @@ class NpzHSDBSExtractor(NpzExtractor):
         for direction, start, end in zip(*self._get_burst_meta_info(direction_arr)):
             packet_lengths = length_arr[start:end]
             if self.ignore_control_packets:
-                burst_size = np.sum(packet_lengths)
+                burst_size = np.sum(packet_lengths - self.threshold)
             else:
-                burst_size = np.sum(packet_lengths[packet_lengths > self.threshold])
+                burst_size = np.sum(packet_lengths[packet_lengths > self.threshold] - self.threshold)
 
             bursts.append((timestamp_arr[start], direction * burst_size))
 
