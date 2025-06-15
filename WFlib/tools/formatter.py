@@ -5,7 +5,7 @@ from pathlib import Path
 import warnings
 import pandas as pd
 from WFlib.tools.capture import SNI_exclude_filter
-from WFlib.tools.extractor import Extractor, array_path
+from WFlib.tools.extractor import Extractor, array_path, NpzExtractor
 import asyncio
 import nest_asyncio
 nest_asyncio.apply()
@@ -490,18 +490,73 @@ class CSVFormatter(Formatter):
     """
     Convert a csv database (along with its linked array files) into a .npz dataset.
     """
-    def __init__(self, root_dir: str, length=0):
+    def __init__(self, length=1000):
         super().__init__(length)
-        self.root_dir = root_dir
+        
 
-    def load(self, db_file: str):
+    def load(self, base_dir: str, db_file: str):
+        self.base_dir = base_dir
         self.db = pd.read_csv(db_file)[['host', 'id', 'stream', 'transport', 'protocol']]
     
-    def transform(self, host : str, label : int, *extractors : Extractor):
-        capture_features = []
+
+    def transform(self, host : str, label : int, *extractors : NpzExtractor):
+        if host not in self._buf['hosts']:
+            self._buf['hosts'].append(host)
+
+        self._buf['labels'].append(label)
+        tmp_buf = dict()
+
+        for extractor in extractors:
+            tmp_buf[extractor.name] = []
+            # Initialize a new list for the given feature name
+            if extractor.name not in self._buf:
+                self._buf[extractor.name] = []
+
         db = self.db[self.db['host'] == host]
         for pcap_id, group in db.groupby('id'):
-            paths = group.apply(lambda row: f'{self.root_dir}/{array_path(row["host"], row["id"], row["transport"], row["stream"], row["protocol"])}')
-            for p in paths:
-                for extractor in extractors:
-                    capture_
+            paths = group.apply(lambda row: f'{self.base_dir}/{array_path(row["host"], row["id"], row["transport"], row["stream"], row["protocol"])}')
+            npz_files = [np.load(path) for path in paths]
+            for extractor in extractors:
+                extractor.extract(tmp_buf[extractor.name], npz_files)
+
+        # Dump features into ndarray, and append to self._buf[name]
+        for extractor in extractors: 
+            if self._length <= len(tmp_buf[extractor.name]): # Truncate
+                self._buf[extractor.name].append(np.array(tmp_buf[extractor.name][:self._length]))
+            else:
+                padding = 0
+                padding_len = self._length - len(tmp_buf[extractor.name])
+                self._buf[extractor.name].append(np.array(tmp_buf[extractor.name] + [padding] * padding_len))
+
+
+    def batch_extract(self, base_dir, db_file, output_file, *extractors: NpzExtractor):
+        """
+        Extract all the given features from all the files in the given base directory.
+
+        Params
+        ------
+        base_dir : str
+            The base directory to hold all the .npz files, the directory structure should be
+            the same as that created by csv_db_extract.
+
+        db_file : str
+            The csv file to store the database.
+
+        output_file : str
+            The file to store all the features extracted.
+
+        extractors : Extractor
+            The extractors for feature extraction.
+        """
+        self.load(base_dir, db_file)
+        label = 0  # Processing a hostname will increase the label by 1
+
+        # Fetch all the hosts from the database and sort them alphabetically
+        hosts = sorted(self.db['host'].unique())
+
+        # Iterate over all hosts in the database
+        for host in hosts:
+            self.transform(host, label, *extractors)
+            label += 1
+
+        self.dump(output_file)
