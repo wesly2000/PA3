@@ -2,6 +2,7 @@ import numpy as np
 import pyshark
 import json
 from pathlib import Path
+from typing import Union
 import warnings
 import pandas as pd
 from WFlib.tools.capture import SNI_exclude_filter
@@ -486,17 +487,19 @@ class JsonFormatter(Formatter):
         """
         return self._raw_buf[name]
     
-class CSVFormatter(Formatter):
+class CsvFormatter(Formatter):
     """
     Convert a csv database (along with its linked array files) into a .npz dataset.
     """
-    def __init__(self, length=1000):
+    def __init__(self, base_dir: str, db_file: str, length=1000):
         super().__init__(length)
-        
-
-    def load(self, base_dir: str, db_file: str):
         self.base_dir = base_dir
         self.db = pd.read_csv(db_file)[['host', 'id', 'stream', 'transport', 'protocol']]
+
+    def load(self, host: str, pcap_id: Union[str, int]):
+        db = self.db[(self.db['host'] == host) & (self.db['id'] == int(pcap_id))]
+        paths = db.apply(lambda row: f'{self.base_dir}/{array_path(row["host"], row["id"], row["transport"], row["stream"], row["protocol"])}')
+        self._raw_buf = [np.load(path) for path in paths]
     
 
     def transform(self, host : str, label : int, *extractors : NpzExtractor):
@@ -512,12 +515,8 @@ class CSVFormatter(Formatter):
             if extractor.name not in self._buf:
                 self._buf[extractor.name] = []
 
-        db = self.db[self.db['host'] == host]
-        for pcap_id, group in db.groupby('id'):
-            paths = group.apply(lambda row: f'{self.base_dir}/{array_path(row["host"], row["id"], row["transport"], row["stream"], row["protocol"])}')
-            npz_files = [np.load(path) for path in paths]
-            for extractor in extractors:
-                extractor.extract(tmp_buf[extractor.name], npz_files)
+        for extractor in extractors:
+            extractor.extract(tmp_buf[extractor.name], self._raw_buf)
 
         # Dump features into ndarray, and append to self._buf[name]
         for extractor in extractors: 
@@ -548,7 +547,6 @@ class CSVFormatter(Formatter):
         extractors : Extractor
             The extractors for feature extraction.
         """
-        self.load(base_dir, db_file)
         label = 0  # Processing a hostname will increase the label by 1
 
         # Fetch all the hosts from the database and sort them alphabetically
@@ -556,7 +554,9 @@ class CSVFormatter(Formatter):
 
         # Iterate over all hosts in the database
         for host in hosts:
-            self.transform(host, label, *extractors)
-            label += 1
+            for pcap_id in self.db[self.db['host'] == host]['id'].unique():
+                self.load(host, pcap_id)
+                self.transform(host, label, *extractors)
+                label += 1
 
         self.dump(output_file)
