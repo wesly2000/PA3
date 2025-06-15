@@ -311,3 +311,13 @@ def test_NpzHSDBSExtractor_1(npz_files):
     target = np.array([200, -100, 100, 0, 100, 0, 100, -100, -100, 0, 0, -100, 0, -100, 0, -100, 0, -100, 0, 100, 0, 100, 0])
     assert np.all(result == target)
 
+def test_NpzHSDBSExtractor_2(npz_files):
+    """
+    Test reading a .npz file and extract the hsdbs feature, this test covers the case that the ignore_control_packets option is set to True.
+    """
+    extractor = NpzHSDBSExtractor(ignore_control_packets=True)
+    result = []
+    extractor.extract(result, npz_files)
+
+    target = np.array([200, 300, -400, -200, -100, 200])
+    assert np.all(result == target)
