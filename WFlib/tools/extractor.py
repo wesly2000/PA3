@@ -377,14 +377,15 @@ class NpzHSDBSExtractor(NpzExtractor):
     """
     The class that extracts Header Stripped Directional Burst Size (HSDBS) feature from .npz files.
     """
-    def __init__(self, name="hsdbs", threshold:int=32):
+    def __init__(self, name="hsdbs", threshold:int=32, ignore_control_packets: bool=False):
         super().__init__(name=name)
         self.threshold = threshold
+        self.ignore_control_packets = ignore_control_packets
 
-    def single_stream_extract(self, npz_file: NpzFile, ignore_control_packets: bool=False) -> List[tuple]:
+    def single_stream_extract(self, npz_file: NpzFile) -> List[tuple]:
         direction_arr, length_arr, timestamp_arr = npz_file['direction'], npz_file['length'], npz_file['timestamp']
 
-        if ignore_control_packets:
+        if self.ignore_control_packets:
             # The ignore_control_packets option is used to filter out control TCP packets, e.g., SYN, ACK, etc., before creating bursts. The feature helps to maintain the burst application layer semantics.
             direction_arr = direction_arr[length_arr > self.threshold]
             timestamp_arr = timestamp_arr[length_arr > self.threshold]
@@ -402,9 +403,9 @@ class NpzHSDBSExtractor(NpzExtractor):
         # + a burst is defined as the (timestamp, size)
         bursts = []
 
-        for direction, start, end in self._get_burst_meta_info(direction_arr):
+        for direction, start, end in zip(*self._get_burst_meta_info(direction_arr)):
             packet_lengths = length_arr[start:end]
-            if ignore_control_packets:
+            if self.ignore_control_packets:
                 burst_size = np.sum(packet_lengths)
             else:
                 burst_size = np.sum(packet_lengths[packet_lengths > self.threshold])
@@ -436,6 +437,6 @@ class NpzHSDBSExtractor(NpzExtractor):
         for i in range(len(change_points) - 1):
             starts.append(change_points[i])
             ends.append(change_points[i + 1])
-            directions.append(arr[0])
+            directions.append(arr[change_points[i]])
         
         return directions, starts, ends
