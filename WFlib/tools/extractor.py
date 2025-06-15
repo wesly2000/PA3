@@ -231,6 +231,8 @@ class NpzExtractor(Extractor):
     Therefore, for extracting the feature of an entire capture, the caller is responsible to pass a group of .npz file paths which 
     the caller considers enough to represent the capture.
     """
+    def extract(self, target: list, npz_file_list: List[NpzFile]):
+        raise NotImplementedError
 
 
 class CsvDirExtractor(CsvExtractor):
@@ -379,8 +381,19 @@ class NpzHSDBSExtractor(NpzExtractor):
         super().__init__(name=name)
         self.threshold = threshold
 
-    def single_stream_extract(self, npz_file: NpzFile) -> List[tuple]:
+    def single_stream_extract(self, npz_file: NpzFile, ignore_control_packets: bool=False) -> List[tuple]:
         direction_arr, length_arr, timestamp_arr = npz_file['direction'], npz_file['length'], npz_file['timestamp']
+
+        if ignore_control_packets:
+            # The ignore_control_packets option is used to filter out control TCP packets, e.g., SYN, ACK, etc., before creating bursts. The feature helps to maintain the burst application layer semantics.
+            direction_arr = direction_arr[length_arr > self.threshold]
+            timestamp_arr = timestamp_arr[length_arr > self.threshold]
+            length_arr = length_arr[length_arr > self.threshold]
+
+            if len(direction_arr) == 0:
+                return []
+            
+
         # A burst is created as follows:
         # + a burst size is the accumulated length of consecutive packets with the same direction;
         # + the size is directional, multiplied by the direction;
@@ -391,21 +404,23 @@ class NpzHSDBSExtractor(NpzExtractor):
 
         for direction, start, end in self._get_burst_meta_info(direction_arr):
             packet_lengths = length_arr[start:end]
-            burst_size = np.sum(packet_lengths[packet_lengths > self.threshold])
+            if ignore_control_packets:
+                burst_size = np.sum(packet_lengths)
+            else:
+                burst_size = np.sum(packet_lengths[packet_lengths > self.threshold])
+
             bursts.append((timestamp_arr[start], direction * burst_size))
 
         return bursts
     
 
-    def extract(self, npz_file_list: List[NpzFile]):
+    def extract(self, target: list, npz_file_list: List[NpzFile]):
         bursts = []
         for npz_file in npz_file_list:
             bursts += self.single_stream_extract(npz_file)
 
         bursts.sort(key=lambda x: x[0])  # Sort according to timestamp information        
-        bursts = np.array([size for _, size in bursts])
-        
-        return bursts
+        target += [size for _, size in bursts]
 
 
     def _get_burst_meta_info(self, arr):
