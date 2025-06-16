@@ -422,6 +422,7 @@ class NpzHSDBSExtractor(NpzExtractor):
         self.criterion = criterion
 
     def single_stream_extract(self, npz_file: NpzFile) -> List[tuple]:
+        # TODO: Add bins for length feature
         direction_arr, length_arr, timestamp_arr = npz_file['direction'], npz_file['length'], npz_file['timestamp']
 
         if self.ignore_control_packets:

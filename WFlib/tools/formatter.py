@@ -525,7 +525,7 @@ class CsvFormatter(Formatter):
                 self._buf[extractor.name].append(np.array(tmp_buf[extractor.name] + [padding] * padding_len))
 
 
-    def batch_extract(self, base_dir, db_file, output_file, *extractors: NpzExtractor):
+    def batch_extract(self, base_dir, db_file, protocol, output_file, *extractors: NpzExtractor):
         """
         Extract all the given features from all the files in the given base directory.
 
@@ -538,6 +538,9 @@ class CsvFormatter(Formatter):
         db_file : str
             The csv file to store the database.
 
+        protocol : str
+            The protocol considered in the extraction.    
+
         output_file : str
             The file to store all the features extracted.
 
@@ -545,16 +548,17 @@ class CsvFormatter(Formatter):
             The extractors for feature extraction.
         """
         label = 0  # Processing a hostname will increase the label by 1
-        db = pd.read_csv(db_file)[['host', 'id', 'stream', 'transport', 'protocol']]
+        db = pd.read_csv(db_file).query(f"protocol == '{protocol}'")[['host', 'id', 'stream', 'transport']]
 
         # Fetch all the hosts from the database and sort them alphabetically
         hosts = sorted(db['host'].unique())
 
         # Iterate over all hosts in the database
         for host in hosts:
+            logger.info(f"Processing host: {host}, protocol: {protocol}")
             for pcap_id in db[db['host'] == host]['id'].unique():
                 host_db = db[(db['host'] == host) & (db['id'] == int(pcap_id))]
-                paths = host_db.apply(lambda row: f'{base_dir}/{array_path(row["host"], row["id"], row["transport"], row["stream"], row["protocol"])}')
+                paths = host_db.apply(lambda row: f'{base_dir}/{array_path(row["host"], row["id"], row["transport"], row["stream"], protocol)}')
 
                 self.load(paths)
                 self.transform(host, label, *extractors)
