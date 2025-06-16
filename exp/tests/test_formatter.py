@@ -440,3 +440,33 @@ def test_CsvFormatter_1(npz_buffers):
 
     for k, v in loaded_data.items():
         assert np.all(target[k] == v)
+
+
+def test_CsvFormatter_2(npz_buffers):
+    formatter = CsvFormatter(length=5)
+
+    extractor = NpzHSDBSExtractor(ignore_control_packets=True)
+
+    label = 0
+    hosts = ["www.baidu.com"]
+
+    formatter.load([npz_buffer for npz_buffer in npz_buffers])
+    formatter.transform(hosts[label], label, extractor)
+
+    # Create an in-memory bytes buffer
+    buffer = io.BytesIO()
+    formatter.dump(buffer)
+
+    buffer.seek(0)  # Move to the start of the buffer
+    loaded_data = np.load(buffer)
+
+    target = {
+        "hosts" : np.array(hosts), 
+        "labels": np.array([0]), 
+        "hsdbs": np.array([
+            [200, 300, -400, -200, -100]
+        ])
+    }
+
+    for k, v in loaded_data.items():
+        assert np.all(target[k] == v)

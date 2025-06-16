@@ -1,4 +1,4 @@
-from typing import Union, List, Set, Optional
+from typing import Union, List, Set, Optional, Iterable
 import numpy as np
 from numpy.lib.npyio import NpzFile
 import pandas as pd
@@ -372,15 +372,54 @@ class PcapDeltaExtractor(PcapExtractor):
     def __init__(self, name="delta"):
         super().__init__(name=name)
 
+class Criterion():
+    """
+    The class that provides the criterion for selecting the top-k streams. All the criteria should inherit this class,
+    which must implement the select method.
+
+    Attributes
+    ----------
+    k : int
+        The number of streams to select. If k <= 0, all the streams will be selected.
+    """
+    def __init__(self, k:int=0):
+        self.k = k
+
+    def select(self, features: Iterable) -> Iterable:
+        raise NotImplementedError
+    
+
+class HSDBSCriterion(Criterion):
+    """
+    The criterion that selects the top-k streams by Header Stripped Directional Burst Size (HSDBS) feature.
+    """
+    def select(self, features: List[List[tuple]]) -> List[List[tuple]]:
+        if self.k <= 0:
+            return features
+        
+        feature_sizes = [(i, sum(abs(size) for _, size in feature)) for i, feature in enumerate(features)]
+        top_k_indices = [i for i, _ in sorted(feature_sizes, key=lambda x: x[1], reverse=True)[:self.k]]
+        return [features[i] for i in top_k_indices]
+
 
 class NpzHSDBSExtractor(NpzExtractor):
     """
     The class that extracts Header Stripped Directional Burst Size (HSDBS) feature from .npz files.
+
+    Attributes
+    ----------
+    threshold : int
+        The threshold for the burst size.
+    ignore_control_packets : bool
+        Whether to ignore control packets, e.g., SYN, ACK, etc.
+    criterion : str
+        The criterion to select the top-k streams.
     """
-    def __init__(self, name="hsdbs", threshold:int=32, ignore_control_packets: bool=False):
+    def __init__(self, name="hsdbs", threshold:int=32, ignore_control_packets: bool=False, criterion: Optional[Criterion]=None):
         super().__init__(name=name)
         self.threshold = threshold
         self.ignore_control_packets = ignore_control_packets
+        self.criterion = criterion
 
     def single_stream_extract(self, npz_file: NpzFile) -> List[tuple]:
         direction_arr, length_arr, timestamp_arr = npz_file['direction'], npz_file['length'], npz_file['timestamp']
@@ -416,9 +455,16 @@ class NpzHSDBSExtractor(NpzExtractor):
     
 
     def extract(self, target: list, npz_file_list: List[NpzFile]):
-        bursts = []
+        stream_bursts = []
         for npz_file in npz_file_list:
-            bursts += self.single_stream_extract(npz_file)
+            stream_bursts.append(self.single_stream_extract(npz_file))
+        
+        if self.criterion:
+            stream_bursts = self.criterion.select(stream_bursts)
+
+        bursts = []
+        for stream_burst in stream_bursts:
+            bursts.extend(stream_burst)
 
         bursts.sort(key=lambda x: x[0])  # Sort according to timestamp information        
         target += [size for _, size in bursts]

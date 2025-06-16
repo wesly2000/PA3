@@ -287,3 +287,39 @@ def test_NpzHSDBSExtractor_2(npz_buffers):
 
     target = np.array([200, 300, -400, -200, -100, 200])
     assert np.all(result == target)
+
+def test_NpzHSDBSExtractor_3(npz_buffers):
+    """
+    Test reading a .npz file and extract the hsdbs feature, this test covers the case that the criterion option is set to HSDBSCriterion selecting the top-k streams.
+    """
+    # Test selecting the top-2 streams from 3 streams
+    extractor = NpzHSDBSExtractor(criterion=HSDBSCriterion(k=2), ignore_control_packets=True)
+    result = []
+    npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
+    extractor.extract(result, npz_files)
+
+    target = np.array([200, 300, -200, -100, 200])
+    assert np.all(result == target)
+
+    for npz_buffer in npz_buffers:
+        npz_buffer.seek(0)
+
+    # When k <= 0, all the streams should be selected
+    extractor = NpzHSDBSExtractor(criterion=HSDBSCriterion(k=0), ignore_control_packets=True)
+    result = []
+    npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
+    extractor.extract(result, npz_files)
+
+    target = np.array([200, 300, -400, -200, -100, 200])
+    assert np.all(result == target)
+
+    for npz_buffer in npz_buffers:
+        npz_buffer.seek(0)
+    # When k is larger than the number of streams, all the streams should be selected
+    extractor = NpzHSDBSExtractor(criterion=HSDBSCriterion(k=5), ignore_control_packets=True)
+    result = []
+    npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
+    extractor.extract(result, npz_files)
+
+    target = np.array([200, 300, -400, -200, -100, 200])
+    assert np.all(result == target)
