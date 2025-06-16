@@ -558,7 +558,7 @@ class CsvFormatter(Formatter):
             logger.info(f"Processing host: {host}, protocol: {protocol}")
             for pcap_id in db[db['host'] == host]['id'].unique():
                 host_db = db[(db['host'] == host) & (db['id'] == int(pcap_id))]
-                paths = host_db.apply(lambda row: f'{base_dir}/{array_path(row["host"], row["id"], row["transport"], row["stream"], protocol)}')
+                paths = host_db.apply(lambda row: f'{base_dir}/{array_path(row["host"], row["id"], row["transport"], row["stream"], protocol)}', axis=1)
 
                 self.load(paths)
                 self.transform(host, label, *extractors)
