@@ -562,6 +562,6 @@ class CsvFormatter(Formatter):
 
                 self.load(paths)
                 self.transform(host, label, *extractors)
-                label += 1
+            label += 1
 
         self.dump(output_file)
