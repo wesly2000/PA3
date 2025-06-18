@@ -268,7 +268,7 @@ def test_NpzHSDBSExtractor_1(npz_buffers):
     """
     Test reading a .npz file and extract the hsdbs feature.
     """
-    extractor = NpzHSDBSExtractor()
+    extractor = NpzHSDBSExtractor(threshold=32)
     result = []
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
     extractor.extract(result, npz_files)
@@ -280,7 +280,7 @@ def test_NpzHSDBSExtractor_2(npz_buffers):
     """
     Test reading a .npz file and extract the hsdbs feature, this test covers the case that the ignore_control_packets option is set to True.
     """
-    extractor = NpzHSDBSExtractor(ignore_control_packets=True)
+    extractor = NpzHSDBSExtractor(ignore_control_packets=True, threshold=32)
     result = []
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
     extractor.extract(result, npz_files)
@@ -293,7 +293,7 @@ def test_NpzHSDBSExtractor_3(npz_buffers):
     Test reading a .npz file and extract the hsdbs feature, this test covers the case that the criterion option is set to HSDBSCriterion selecting the top-k streams.
     """
     # Test selecting the top-2 streams from 3 streams
-    extractor = NpzHSDBSExtractor(criterion=HSDBSCriterion(k=2), ignore_control_packets=True)
+    extractor = NpzHSDBSExtractor(criterion=HSDBSCriterion(k=2), ignore_control_packets=True, threshold=32)
     result = []
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
     extractor.extract(result, npz_files)
@@ -305,7 +305,7 @@ def test_NpzHSDBSExtractor_3(npz_buffers):
         npz_buffer.seek(0)
 
     # When k <= 0, all the streams should be selected
-    extractor = NpzHSDBSExtractor(criterion=HSDBSCriterion(k=0), ignore_control_packets=True)
+    extractor = NpzHSDBSExtractor(criterion=HSDBSCriterion(k=0), ignore_control_packets=True, threshold=32)
     result = []
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
     extractor.extract(result, npz_files)
@@ -316,7 +316,7 @@ def test_NpzHSDBSExtractor_3(npz_buffers):
     for npz_buffer in npz_buffers:
         npz_buffer.seek(0)
     # When k is larger than the number of streams, all the streams should be selected
-    extractor = NpzHSDBSExtractor(criterion=HSDBSCriterion(k=5), ignore_control_packets=True)
+    extractor = NpzHSDBSExtractor(criterion=HSDBSCriterion(k=5), ignore_control_packets=True, threshold=32)
     result = []
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
     extractor.extract(result, npz_files)

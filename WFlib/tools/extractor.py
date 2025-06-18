@@ -415,14 +415,13 @@ class NpzHSDBSExtractor(NpzExtractor):
     criterion : str
         The criterion to select the top-k streams.
     """
-    def __init__(self, name="hsdbs", threshold:int=32, ignore_control_packets: bool=False, criterion: Optional[Criterion]=None):
+    def __init__(self, name="hsdbs", threshold:int=40, ignore_control_packets: bool=False, criterion: Optional[Criterion]=None):
         super().__init__(name=name)
         self.threshold = threshold
         self.ignore_control_packets = ignore_control_packets
         self.criterion = criterion
 
     def single_stream_extract(self, npz_file: NpzFile) -> List[tuple]:
-        # TODO: Add bins for length feature
         direction_arr, length_arr, timestamp_arr = npz_file['direction'], npz_file['length'], npz_file['timestamp']
 
         if self.ignore_control_packets:
@@ -433,7 +432,6 @@ class NpzHSDBSExtractor(NpzExtractor):
 
             if len(direction_arr) == 0:
                 return []
-            
 
         # A burst is created as follows:
         # + a burst size is the accumulated length of consecutive packets with the same direction;

@@ -412,7 +412,7 @@ def test_DistriPcapFormatter_1():
 def test_CsvFormatter_1(npz_buffers):
     formatter = CsvFormatter(length=10)
 
-    extractor = NpzHSDBSExtractor()
+    extractor = NpzHSDBSExtractor(threshold=32)
 
     label = 0
     hosts = ["www.baidu.com", "www.zhihu.com", "www.google.com"]
@@ -445,7 +445,7 @@ def test_CsvFormatter_1(npz_buffers):
 def test_CsvFormatter_2(npz_buffers):
     formatter = CsvFormatter(length=5)
 
-    extractor = NpzHSDBSExtractor(ignore_control_packets=True)
+    extractor = NpzHSDBSExtractor(ignore_control_packets=True, threshold=32)
 
     label = 0
     hosts = ["www.baidu.com"]
