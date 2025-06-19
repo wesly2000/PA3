@@ -347,3 +347,16 @@ def test_NpzDirExtractor_2(npz_buffers):
     target = np.array([1, 1, -1, 1, -1, 1, 1, -1, -1, 1, -1, 1, -1, 1, -1, -1, 1, -1, 1, 1, 1, -1, 1, -1])
 
     assert np.all(result == target)
+
+
+def test_NpzDirExtractor_3(npz_buffers):
+    """
+    Test reading a .npz file and extract the direction feature, this test covers the case that the criterion option is set to HSDBSCriterion selecting the top-k streams.
+    """
+    extractor = NpzDirExtractor(criterion=HSDBSCriterion(k=1), stripper=VmessStripper())
+    result = []
+    npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
+    extractor.extract(result, npz_files)
+    target = np.array([1, -1, 1, 1, -1, -1, 1, -1, 1])
+
+    assert np.all(result == target)
