@@ -485,3 +485,62 @@ class NpzHSDBSExtractor(NpzExtractor):
             directions.append(arr[change_points[i]])
         
         return directions, starts, ends
+    
+
+class Stripper():
+    """
+    The class that strips some elements from the original features.
+    """
+    def __init__(self, exclude_indices: List[int]):
+        self.exclude_indices = exclude_indices
+
+    def strip(self, feature: np.ndarray) -> np.ndarray:
+        raise NotImplementedError
+    
+class VmessStripper(Stripper):
+    """
+    The class that strips the VMess feature from the original features.
+    """
+    def __init__(self):
+        super().__init__(exclude_indices=[3])
+        
+    def strip(self, feature: np.ndarray) -> np.ndarray:
+        return np.delete(feature, self.exclude_indices)
+
+class NpzDirExtractor(NpzExtractor):
+    """
+    The class that extracts direction feature from .npz files.
+    """
+    def __init__(self, name="direction", stripper: Optional[Stripper]=None, criterion: Optional[Criterion]=None):
+        super().__init__(name=name)
+        self.stripper = stripper
+        self.criterion = criterion
+
+
+    def single_stream_extract(self, npz_file: NpzFile) -> List[tuple]:
+        direction_arr = npz_file['direction']
+        timestamp_arr = npz_file['timestamp']
+        length_arr = npz_file['length']
+
+        if self.stripper:
+            direction_arr = self.stripper.strip(direction_arr)
+            timestamp_arr = self.stripper.strip(timestamp_arr)
+            length_arr = self.stripper.strip(length_arr)
+
+        return [(timestamp, direction * length) for timestamp, direction, length in zip(timestamp_arr, direction_arr, length_arr)]  
+
+    def extract(self, target: list, npz_file_list: List[NpzFile]):
+        streams = []
+        for npz_file in npz_file_list:
+            streams.append(self.single_stream_extract(npz_file))
+
+        if self.criterion:
+            streams = self.criterion.select(streams)
+
+        dir_lengths = []
+        for stream in streams:
+            dir_lengths.extend(stream)
+
+        dir_lengths.sort(key=lambda x: x[0])
+        # Use the sign function of the lengths to get the direction
+        target += [np.sign(size) for _, size in dir_lengths]
