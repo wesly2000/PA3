@@ -2,7 +2,7 @@ import numpy as np
 import pyshark
 import json
 from pathlib import Path
-from typing import Union, List
+from typing import Union, List, Optional
 import warnings
 import pandas as pd
 from WFlib.tools.capture import SNI_exclude_filter
@@ -525,7 +525,7 @@ class CsvFormatter(Formatter):
                 self._buf[extractor.name].append(np.array(tmp_buf[extractor.name] + [padding] * padding_len))
 
 
-    def batch_extract(self, base_dir, db_file, protocol, output_file, *extractors: NpzExtractor):
+    def batch_extract(self, base_dir, db_file, protocol, output_file, SNIs=Optional[Union[list, set]], *extractors: NpzExtractor):
         """
         Extract all the given features from all the files in the given base directory.
 
@@ -546,9 +546,15 @@ class CsvFormatter(Formatter):
 
         extractors : Extractor
             The extractors for feature extraction.
+
+        SNIs : list | set
+            The SNIs to exclude from the extraction.
         """
         label = 0  # Processing a hostname will increase the label by 1
-        db = pd.read_csv(db_file).query(f"protocol == '{protocol}'")[['host', 'id', 'stream', 'transport']]
+        db = pd.read_csv(db_file).query(f"protocol == '{protocol}'")[['host', 'id', 'stream', 'transport', 'sni']]
+        if SNIs is not None:
+            db = db[~db['sni'].isin(SNIs)]
+            db = db[['host', 'id', 'stream', 'transport']]
 
         # Fetch all the hosts from the database and sort them alphabetically
         hosts = sorted(db['host'].unique())
