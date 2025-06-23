@@ -1,4 +1,4 @@
-from typing import Union, List, Set, Optional, Iterable
+from typing import Union, List, Set, Optional, Iterable, Tuple
 import numpy as np
 from numpy.lib.npyio import NpzFile
 import pandas as pd
@@ -393,6 +393,9 @@ class HSDBSCriterion(Criterion):
     """
     The criterion that selects the top-k streams by Header Stripped Directional Burst Size (HSDBS) feature.
     """
+    def __init__(self, k:int=0):
+        self.k = k
+
     def select(self, features: List[List[tuple]]) -> List[List[tuple]]:
         if self.k <= 0:
             return features
@@ -400,6 +403,29 @@ class HSDBSCriterion(Criterion):
         feature_sizes = [(i, sum(abs(size) for _, size in feature)) for i, feature in enumerate(features)]
         top_k_indices = [i for i, _ in sorted(feature_sizes, key=lambda x: x[1], reverse=True)[:self.k]]
         return [features[i] for i in top_k_indices]
+    
+
+class BSExcludeCriterion(Criterion):
+    """
+    The criterion that excludes the streams with burst size falls in the given range.
+    """
+    def __init__(self, lower_bounds: np.ndarray, upper_bounds: np.ndarray):
+        self.lower_bounds = lower_bounds
+        self.upper_bounds = upper_bounds
+
+    def select(self, features: List[List[tuple]]) -> List[List[tuple]]:
+        
+        # Original list comprehension version:
+        # return [feature for feature in features if not (self.lower_bounds <= sum(abs(size) for _, size in feature) & (sum(abs(size) for _, size in feature) <= self.upper_bounds)).any()]
+        
+        # Expanded for-loop version for debugging
+        result = []
+        for feature in features:
+            total_size = sum(abs(size) for _, size in feature)
+            in_range = (self.lower_bounds <= total_size) & (total_size <= self.upper_bounds)
+            if not in_range.any():
+                result.append(feature)
+        return result
 
 
 class NpzHSDBSExtractor(NpzExtractor):
