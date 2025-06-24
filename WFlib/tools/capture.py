@@ -282,7 +282,7 @@ def batch_capture(base_dir, host_list, iface,
         stdout = open(proxy_log, 'a+') if proxy_log is not None else subprocess.DEVNULL
 
         clash_process = subprocess.Popen(
-            ['/home/lxyu/clash/bin/clash-linux-amd64-debug', '-key-vmess', keylog],
+            ['/home/lxyu/clash/bin/clash-linux-amd64-debug', '-key-trojan', keylog],
             stdout=stdout,
             stderr=subprocess.STDOUT 
         )
