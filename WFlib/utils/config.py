@@ -1,5 +1,5 @@
 from pathlib import Path
-
+from typing import Optional
 from configparser import ConfigParser
 
 SUPPORTED_BASE = ['tcp', 'tls']
@@ -14,7 +14,7 @@ def get_config(config_path: Path):
         return None
 
 
-def default_override_prefs(protocol: str = 'normal', keylog_file: str = None, proxy_keylog_file: str = None) -> dict:
+def default_override_prefs(protocol: str = 'normal', keylog_file: Optional[str] = None, proxy_keylog_file: Optional[str] = None) -> dict:
     DEFAULT_OVERRIDE_PREFS = {
                                 'tcp.desegment_tcp_streams': 'TRUE',
                                 'tcp.reassemble_out_of_order': 'TRUE',

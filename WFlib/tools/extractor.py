@@ -1,5 +1,6 @@
-from typing import Union, List, Set
+from typing import Union, List, Set, Optional, Iterable, Tuple
 import numpy as np
+from numpy.lib.npyio import NpzFile
 import pandas as pd
 import subprocess
 import logging
@@ -145,51 +146,17 @@ def single_pcap_extract(
         })
 
     return result
-    
-    # sni_rows = df[df["tls.handshake.extensions_server_name"].notna() & ~df["tls.handshake.extensions_server_name"].isin(SNI_filter or [])]
-
-    # for _, row in sni_rows.iterrows():
-    #     # Check if the row is a TCP packet.
-    #     if row["tcp.stream"] is not None:
-    #         stream_df = df[df["tcp.stream"] == row["tcp.stream"]]
-    #         stream = row["tcp.stream"]
-    #         transport = "tcp"
-    #     elif row["udp.stream"] is not None:
-    #         stream_df = df[df["udp.stream"] == row["udp.stream"]]
-    #         stream = row["udp.stream"]
-    #         transport = "udp"
-    #     else:
-    #         raise ValueError("No stream number found in the row.")
-        
-    #     features = np.array([
-    #         dir_extractor.extract(stream_df), 
-    #         ts_extractor.extract(stream_df), 
-    #         len_extractor.extract(stream_df)
-    #         ])
-        
-    #     # Append a new row to the result.
-    #     result.append({
-    #         'host': host,
-    #         'id': id,
-    #         'sni': row["tls.handshake.extensions_server_name"],
-    #         'stream': stream,
-    #         'transport': transport,
-    #         'protocol': protocol,
-    #         'feature': features}
-    #         )
-        
-    # return result
 
 
 def multi_pcap_extract(
         tshark_path: str, 
         pcap_dir: Union[str, Path], 
-        SNI_filter: Union[Set[str], List[str]]=None, 
+        SNI_filter: Union[Set[str], List[str]]=[], 
         display_filter: str='tcp',
         protocol: str='normal',
-        override_prefs: dict=None,
-        src: List[str]=None,
-        db: pd.DataFrame=None) -> List[dict]:
+        override_prefs: dict={},
+        src: List[str]=[],
+        db: Optional[pd.DataFrame]=None) -> List[dict]:
     """
     Extract features from multiple .pcap files.
     """
@@ -211,6 +178,10 @@ def multi_pcap_extract(
                 logger.error(f"Error extracting features from {file}: {e}, skip")
                 continue
     return result
+
+
+def array_path(host: str, id: int, transport: str, stream: int, protocol: str) -> str:
+    return f"{host}_{id}_{transport}_{stream}_{protocol}.npz"
 
 
 class Extractor(object):
@@ -248,6 +219,20 @@ class CsvExtractor(Extractor):
     For example, the source IP address in TShark is exported with name ip.src, so the input .csv with IP source
     address MUST maintain a column named ip.src.
     """
+
+
+class NpzExtractor(Extractor):
+    """
+    Extractors that extract features from .npz files. Since .npz files using key to index arrays within, the caller is responsible
+    to pass the correct key.
+
+    In the database-based data storing system, a .pcap is split to multiple arrays representation, each of which is a stream. 
+
+    Therefore, for extracting the feature of an entire capture, the caller is responsible to pass a group of .npz file paths which 
+    the caller considers enough to represent the capture.
+    """
+    def extract(self, target: list, npz_file_list: List[NpzFile]):
+        raise NotImplementedError
 
 
 class CsvDirExtractor(CsvExtractor):
@@ -386,3 +371,202 @@ class PcapDeltaExtractor(PcapExtractor):
     """
     def __init__(self, name="delta"):
         super().__init__(name=name)
+
+class Criterion():
+    """
+    The class that provides the criterion for selecting the top-k streams. All the criteria should inherit this class,
+    which must implement the select method.
+
+    Attributes
+    ----------
+    k : int
+        The number of streams to select. If k <= 0, all the streams will be selected.
+    """
+    def __init__(self, k:int=0):
+        self.k = k
+
+    def select(self, features: Iterable) -> Iterable:
+        raise NotImplementedError
+    
+
+class HSDBSCriterion(Criterion):
+    """
+    The criterion that selects the top-k streams by Header Stripped Directional Burst Size (HSDBS) feature.
+    """
+    def __init__(self, k:int=0):
+        self.k = k
+
+    def select(self, features: List[List[tuple]]) -> List[List[tuple]]:
+        if self.k <= 0:
+            return features
+        
+        feature_sizes = [(i, sum(abs(size) for _, size in feature)) for i, feature in enumerate(features)]
+        top_k_indices = [i for i, _ in sorted(feature_sizes, key=lambda x: x[1], reverse=True)[:self.k]]
+        return [features[i] for i in top_k_indices]
+    
+
+class BSExcludeCriterion(Criterion):
+    """
+    The criterion that excludes the streams with burst size falls in the given range.
+    """
+    def __init__(self, lower_bounds: np.ndarray, upper_bounds: np.ndarray):
+        self.lower_bounds = lower_bounds
+        self.upper_bounds = upper_bounds
+
+    def select(self, features: List[List[tuple]]) -> List[List[tuple]]:
+        
+        # Original list comprehension version:
+        # return [feature for feature in features if not (self.lower_bounds <= sum(abs(size) for _, size in feature) & (sum(abs(size) for _, size in feature) <= self.upper_bounds)).any()]
+        
+        # Expanded for-loop version for debugging
+        result = []
+        for feature in features:
+            total_size = sum(abs(size) for _, size in feature)
+            in_range = (self.lower_bounds <= total_size) & (total_size <= self.upper_bounds)
+            if not in_range.any():
+                result.append(feature)
+        return result
+
+
+class NpzHSDBSExtractor(NpzExtractor):
+    """
+    The class that extracts Header Stripped Directional Burst Size (HSDBS) feature from .npz files.
+
+    Attributes
+    ----------
+    threshold : int
+        The threshold for the burst size.
+    ignore_control_packets : bool
+        Whether to ignore control packets, e.g., SYN, ACK, etc.
+    criterion : str
+        The criterion to select the top-k streams.
+    """
+    def __init__(self, name="hsdbs", threshold:int=40, ignore_control_packets: bool=False, criterion: Optional[Criterion]=None):
+        super().__init__(name=name)
+        self.threshold = threshold
+        self.ignore_control_packets = ignore_control_packets
+        self.criterion = criterion
+
+    def single_stream_extract(self, npz_file: NpzFile) -> List[tuple]:
+        direction_arr, length_arr, timestamp_arr = npz_file['direction'], npz_file['length'], npz_file['timestamp']
+
+        if self.ignore_control_packets:
+            # The ignore_control_packets option is used to filter out control TCP packets, e.g., SYN, ACK, etc., before creating bursts. The feature helps to maintain the burst application layer semantics.
+            direction_arr = direction_arr[length_arr > self.threshold]
+            timestamp_arr = timestamp_arr[length_arr > self.threshold]
+            length_arr = length_arr[length_arr > self.threshold]
+
+            if len(direction_arr) == 0:
+                return []
+
+        # A burst is created as follows:
+        # + a burst size is the accumulated length of consecutive packets with the same direction;
+        # + the size is directional, multiplied by the direction;
+        # + the packet size being calculated must be larger than some given threshold;
+        # + a burst timestamp is the timestamp of the first packet within (whether or not the packet is considered in burst size);
+        # + a burst is defined as the (timestamp, size)
+        bursts = []
+
+        for direction, start, end in zip(*self._get_burst_meta_info(direction_arr)):
+            packet_lengths = length_arr[start:end]
+            if self.ignore_control_packets:
+                burst_size = np.sum(packet_lengths - self.threshold)
+            else:
+                burst_size = np.sum(packet_lengths[packet_lengths > self.threshold] - self.threshold)
+
+            bursts.append((timestamp_arr[start], direction * burst_size))
+
+        return bursts
+    
+
+    def extract(self, target: list, npz_file_list: List[NpzFile]):
+        stream_bursts = []
+        for npz_file in npz_file_list:
+            stream_bursts.append(self.single_stream_extract(npz_file))
+        
+        if self.criterion:
+            stream_bursts = self.criterion.select(stream_bursts)
+
+        bursts = []
+        for stream_burst in stream_bursts:
+            bursts.extend(stream_burst)
+
+        bursts.sort(key=lambda x: x[0])  # Sort according to timestamp information        
+        target += [size for _, size in bursts]
+
+
+    def _get_burst_meta_info(self, arr):
+        # Find where the values change
+        change_points = np.where(np.diff(arr) != 0)[0] + 1
+        
+        # Add start and end points
+        change_points = np.concatenate(([0], change_points, [len(arr)]))
+        
+        # Get blocks and their indices
+        directions, starts, ends = [], [], []
+        
+        for i in range(len(change_points) - 1):
+            starts.append(change_points[i])
+            ends.append(change_points[i + 1])
+            directions.append(arr[change_points[i]])
+        
+        return directions, starts, ends
+    
+
+class Stripper():
+    """
+    The class that strips some elements from the original features.
+    """
+    def __init__(self, exclude_indices: List[int]):
+        self.exclude_indices = exclude_indices
+
+    def strip(self, feature: np.ndarray) -> np.ndarray:
+        raise NotImplementedError
+    
+class VmessStripper(Stripper):
+    """
+    The class that strips the VMess feature from the original features.
+    """
+    def __init__(self):
+        super().__init__(exclude_indices=[3])
+        
+    def strip(self, feature: np.ndarray) -> np.ndarray:
+        return np.delete(feature, self.exclude_indices)
+
+class NpzDirExtractor(NpzExtractor):
+    """
+    The class that extracts direction feature from .npz files.
+    """
+    def __init__(self, name="direction", stripper: Optional[Stripper]=None, criterion: Optional[Criterion]=None):
+        super().__init__(name=name)
+        self.stripper = stripper
+        self.criterion = criterion
+
+
+    def single_stream_extract(self, npz_file: NpzFile) -> List[tuple]:
+        direction_arr = npz_file['direction']
+        timestamp_arr = npz_file['timestamp']
+        length_arr = npz_file['length']
+
+        if self.stripper:
+            direction_arr = self.stripper.strip(direction_arr)
+            timestamp_arr = self.stripper.strip(timestamp_arr)
+            length_arr = self.stripper.strip(length_arr)
+
+        return [(timestamp, direction * length) for timestamp, direction, length in zip(timestamp_arr, direction_arr, length_arr)]  
+
+    def extract(self, target: list, npz_file_list: List[NpzFile]):
+        streams = []
+        for npz_file in npz_file_list:
+            streams.append(self.single_stream_extract(npz_file))
+
+        if self.criterion:
+            streams = self.criterion.select(streams)
+
+        dir_lengths = []
+        for stream in streams:
+            dir_lengths.extend(stream)
+
+        dir_lengths.sort(key=lambda x: x[0])
+        # Use the sign function of the lengths to get the direction
+        target += [np.sign(size) for _, size in dir_lengths]
