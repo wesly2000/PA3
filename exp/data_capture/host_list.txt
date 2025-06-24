@@ -1,39 +1,80 @@
+# ai.zjnav.com
+# archive.org
+# ask.zol.com.cn
+# chrome.pictureknow.com
+# cloud.tencent.com
+# cn.bing.com
+# dl.acm.org
+# docs.scriptcat.org
+# duckduckgo.com
+# extensiondock.com
+# gitee.com
+# github.com
+# greasyfork.org
+# mathoverflow.net
+# m.sm.cn
+# music.youtube.com
+# ocw.mit.edu
+# openai.com
+# pan.baidu.com
+# play.google.com
+# quark.sm.cn
+# so.douyin.com
+# sports.163.com
+# sports.sohu.com
+# stackexchange.com
+# stackoverflow.com
+# store.steampowered.com
+# s.weibo.com
+# telegram.org
+# top.baidu.com
+# wuqiankx.top
+# www.10jqka.com.cn
+# www.114best.com
+# www.36kr.com
+# www.academia.edu
+# www.aliyun.com
+# www.amazon.com
+# www.apache.org
+# www.apple.com
+# www.baidu.com
+# www.chahaoba.com
+# www.cnblogs.com
+# www.cnn.com
+# www.deepseek.com
+# www.docker.com
+# www.dogyun.com
+# www.dropbox.com
+# www.elsevier.com
+# www.feishu.cn
+# www.fromgeek.com
 www.google.com
-www.wikipedia.org
-openai.com
-www.wireshark.org
-www.youtube.com
-play.google.com
-www.quora.com
-github.com
-gitee.com
-telegram.org
-zeek.org
-www.semanticscholar.org
-www.amazon.com
-www.netflix.com
-www.office.com
-duckduckgo.com
-www.torproject.org
-www.cnn.com
-www.apple.com
-www.dropbox.com
-stackexchange.com
-stackoverflow.com
-mathoverflow.net
-www.wikihow.com
-store.steampowered.com
-www.mozilla.org
-archive.org
-www.academia.edu
-www.oracle.com
-www.elsevier.com
-www.ieee.org
-dl.acm.org
-ocw.mit.edu
-www.overleaf.com
-music.youtube.com
-greasyfork.org
-www.v2ex.com
-www.docker.com
-www.apache.org
+# www.huaweicloud.com
+# www.ieee.org
+# www.jdcloud.com
+# www.mozilla.org
+# www.netflix.com
+# www.niaoyun.com
+# www.office.com
+# www.officeplus.cn
+# www.oracle.com
+# www.overleaf.com
+# www.quora.com
+# www.runoob.com
+# www.semanticscholar.org
+# www.sina.com.cn
+# www.sogou.com
+# www.tiktok.com
+# www.torproject.org
+# www.tukuppt.com
+# www.v2ex.com
+# www.wikihow.com
+# www.wikipedia.org
+# www.wireshark.org
+# www.xiaohongshu.com
+# www.xunlei.com
+# www.yicai.com
+# www.youtube.com
+# www.youxiaohou.com
+# yandex.com
+# zeek.org
