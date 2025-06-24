@@ -409,9 +409,10 @@ class BSExcludeCriterion(Criterion):
     """
     The criterion that excludes the streams with burst size falls in the given range.
     """
-    def __init__(self, lower_bounds: np.ndarray, upper_bounds: np.ndarray):
+    def __init__(self, lower_bounds: np.ndarray, upper_bounds: np.ndarray, threshold: int = 40):
         self.lower_bounds = lower_bounds
         self.upper_bounds = upper_bounds
+        self.threshold = threshold
 
     def select(self, features: List[List[tuple]]) -> List[List[tuple]]:
         
@@ -421,7 +422,7 @@ class BSExcludeCriterion(Criterion):
         # Expanded for-loop version for debugging
         result = []
         for feature in features:
-            total_size = sum(abs(size) for _, size in feature)
+            total_size = sum(abs(size) - self.threshold for _, size in feature if abs(size) > self.threshold)
             in_range = (self.lower_bounds <= total_size) & (total_size <= self.upper_bounds)
             if not in_range.any():
                 result.append(feature)
