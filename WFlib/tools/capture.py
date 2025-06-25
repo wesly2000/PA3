@@ -32,10 +32,22 @@ import logging
 import shutil
 import asyncio
 
+from WFlib.utils.config import get_config
+
 logger = logging.getLogger('selenium')
 logger.setLevel(logging.WARN)
 
 gecko_path = shutil.which('geckodriver')
+
+config_path = Path.cwd() / 'config.ini'
+if not config_path.exists():
+    firefox_path = ""
+else:
+    config = get_config(config_path)
+    if config is None or 'firefox' not in config:
+        firefox_path = ""
+    else:
+        firefox_path = config['firefox'].get('firefox_path', fallback="")
 
 """
 This filter is a Capture Filter to filter the annoying traffic which, with high probability, is NOT related with the
@@ -85,6 +97,7 @@ def capture(url, iface, output_file, timeout=200, capture_filter=common_filter, 
         options.set_preference("browser.cache.memory.enable", False)
         options.set_preference("browser.cache.offline.enable", False)
         options.set_preference("network.http.use-cache", False)
+        options.binary_location = firefox_path
 
         # Configure proxy options for Firefox
         if proxy_log is not None:
