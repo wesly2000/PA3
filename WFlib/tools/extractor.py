@@ -205,6 +205,23 @@ class Extractor(object):
         raise NotImplementedError
 
 
+class Criterion():
+    """
+    The class that provides the criterion for selecting the top-k streams. All the criteria should inherit this class,
+    which must implement the select method.
+
+    Attributes
+    ----------
+    k : int
+        The number of streams to select. If k <= 0, all the streams will be selected.
+    """
+    def __init__(self, k:int=0):
+        self.k = k
+
+    def select(self, features: Iterable) -> Iterable:
+        raise NotImplementedError
+    
+
 class PcapExtractor(Extractor):
     """
     Extractors that directly extract features from .pcap files through PyShark packet iteration.
@@ -231,6 +248,15 @@ class NpzExtractor(Extractor):
     Therefore, for extracting the feature of an entire capture, the caller is responsible to pass a group of .npz file paths which 
     the caller considers enough to represent the capture.
     """
+    def __init__(self, name: str, criteria: Optional[Union[List[Criterion], Criterion]]=None):
+        super().__init__(name=name)
+        if criteria is None:
+            self.criteria = []
+        elif isinstance(criteria, list):
+            self.criteria = criteria
+        else:
+            self.criteria = [criteria]
+
     def extract(self, target: list, npz_file_list: List[NpzFile]):
         raise NotImplementedError
 
@@ -371,22 +397,6 @@ class PcapDeltaExtractor(PcapExtractor):
     """
     def __init__(self, name="delta"):
         super().__init__(name=name)
-
-class Criterion():
-    """
-    The class that provides the criterion for selecting the top-k streams. All the criteria should inherit this class,
-    which must implement the select method.
-
-    Attributes
-    ----------
-    k : int
-        The number of streams to select. If k <= 0, all the streams will be selected.
-    """
-    def __init__(self, k:int=0):
-        self.k = k
-
-    def select(self, features: Iterable) -> Iterable:
-        raise NotImplementedError
     
 
 class HSDBSCriterion(Criterion):
@@ -442,11 +452,10 @@ class NpzHSDBSExtractor(NpzExtractor):
     criterion : str
         The criterion to select the top-k streams.
     """
-    def __init__(self, name="hsdbs", threshold:int=40, ignore_control_packets: bool=False, criterion: Optional[Criterion]=None):
-        super().__init__(name=name)
+    def __init__(self, name="hsdbs", threshold:int=40, ignore_control_packets: bool=False, criteria: Optional[Union[List[Criterion], Criterion]]=None):
+        super().__init__(name=name, criteria=criteria)
         self.threshold = threshold
         self.ignore_control_packets = ignore_control_packets
-        self.criterion = criterion
 
     def single_stream_extract(self, npz_file: NpzFile) -> List[tuple]:
         direction_arr, length_arr, timestamp_arr = npz_file['direction'], npz_file['length'], npz_file['timestamp']
@@ -485,8 +494,8 @@ class NpzHSDBSExtractor(NpzExtractor):
         for npz_file in npz_file_list:
             stream_bursts.append(self.single_stream_extract(npz_file))
         
-        if self.criterion:
-            stream_bursts = self.criterion.select(stream_bursts)
+        for criterion in self.criteria:
+            stream_bursts = criterion.select(stream_bursts)
 
         bursts = []
         for stream_burst in stream_bursts:
@@ -538,10 +547,9 @@ class NpzDirExtractor(NpzExtractor):
     """
     The class that extracts direction feature from .npz files.
     """
-    def __init__(self, name="direction", stripper: Optional[Stripper]=None, criterion: Optional[Criterion]=None):
-        super().__init__(name=name)
+    def __init__(self, name="direction", stripper: Optional[Stripper]=None, criteria: Optional[Union[List[Criterion], Criterion]]=None):
+        super().__init__(name=name, criteria=criteria)
         self.stripper = stripper
-        self.criterion = criterion
 
 
     def single_stream_extract(self, npz_file: NpzFile) -> List[tuple]:
@@ -561,8 +569,8 @@ class NpzDirExtractor(NpzExtractor):
         for npz_file in npz_file_list:
             streams.append(self.single_stream_extract(npz_file))
 
-        if self.criterion:
-            streams = self.criterion.select(streams)
+        for criterion in self.criteria:
+            streams = criterion.select(streams)
 
         dir_lengths = []
         for stream in streams:

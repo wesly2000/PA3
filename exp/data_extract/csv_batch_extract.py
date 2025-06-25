@@ -26,19 +26,19 @@ if __name__ == '__main__':
 
     if args.bs_filter:
         if args.protocol == 'vmess':
-            # lower_bounds = np.array([2240000, 6500, 12000, 72000, 84000])   # threshold 0
-            # upper_bounds = np.array([2272000, 7500, 12500, 74000, 86000])  
+            lower_bounds = np.array([2240000, 6500, 12000, 72000, 84000])   # threshold 0
+            upper_bounds = np.array([2272000, 7500, 12500, 74000, 86000])  
             # lower_bounds = np.array([66000, 79000, 2169000, 5400, 10200])     # threshold 40
             # upper_bounds = np.array([68000, 81000, 2178000, 6000, 10800])
-            lower_bounds = np.array([2120000, 5500, 9500,  64000, 76800])     # threshold 60
-            upper_bounds = np.array([2146000, 6000, 10000, 66400, 79200])
+            # lower_bounds = np.array([2120000, 5500, 9500,  64000, 76800])     # threshold 60
+            # upper_bounds = np.array([2146000, 6000, 10000, 66400, 79200])
         elif args.protocol == 'shadowsocks':
-            # lower_bounds = np.array([2280000, 7500, 12500, 84000, 105000])  # threshold 0
-            # upper_bounds = np.array([2336000, 8000, 13000, 90000, 108000])
+            lower_bounds = np.array([2280000, 7500, 12500, 84000, 105000])  # threshold 0
+            upper_bounds = np.array([2336000, 8000, 13000, 90000, 108000])
             # lower_bounds = np.array([80000, 97000, 2205000, 6000, 10200])   # threshold 40
             # upper_bounds = np.array([81000, 99000, 2214000, 6600, 10800])
-            lower_bounds = np.array([2180000, 5600, 10000, 76000, 94000])     # threshold 60
-            upper_bounds = np.array([2280000, 6400, 10400, 80000, 96000])
+            # lower_bounds = np.array([2180000, 5600, 10000, 76000, 94000])     # threshold 60
+            # upper_bounds = np.array([2280000, 6400, 10400, 80000, 96000])
         elif args.protocol == 'normal':
             normal_filter_file = "exp/data_extract/tmp_filter.txt"
         else:
@@ -46,9 +46,9 @@ if __name__ == '__main__':
 
     formatter = CsvFormatter(length=args.length)
     # criterion = HSDBSCriterion(k = args.k)
-    criterion = BSExcludeCriterion(lower_bounds=lower_bounds, upper_bounds=upper_bounds, threshold=60) if args.bs_filter and args.protocol != 'normal' else None
+    criteria = BSExcludeCriterion(lower_bounds=lower_bounds, upper_bounds=upper_bounds, threshold=0) if args.bs_filter and args.protocol != 'normal' else None
     # extractor = NpzHSDBSExtractor(ignore_control_packets=True, criterion=criterion)
-    extractor = NpzDirExtractor(criterion=criterion)
+    extractor = NpzDirExtractor(criteria=criteria)
     if args.filter_file:
         SNI_filter = read_host_list(args.filter_file)
     elif normal_filter_file:
