@@ -293,10 +293,10 @@ def test_NpzHSDBSExtractor_3(npz_buffers):
     Test reading a .npz file and extract the hsdbs feature, this test covers the case that the criterion option is set to HSDBSCriterion selecting the top-k streams.
     """
     # Test selecting the top-2 streams from 3 streams
-    extractor = NpzHSDBSExtractor(ignore_control_packets=True, threshold=32)
+    extractor = NpzHSDBSExtractor(criterion=HSDBSCriterion(k=2), ignore_control_packets=True, threshold=32)
     result = []
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
-    extractor.extract(result, npz_files, HSDBSCriterion(k=2))
+    extractor.extract(result, npz_files)
 
     target = np.array([200, 300, -200, -100, 200])
     assert np.all(result == target)
@@ -305,10 +305,10 @@ def test_NpzHSDBSExtractor_3(npz_buffers):
         npz_buffer.seek(0)
 
     # When k <= 0, all the streams should be selected
-    extractor = NpzHSDBSExtractor(ignore_control_packets=True, threshold=32)
+    extractor = NpzHSDBSExtractor(criterion=HSDBSCriterion(k=0), ignore_control_packets=True, threshold=32)
     result = []
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
-    extractor.extract(result, npz_files, HSDBSCriterion(k=0))
+    extractor.extract(result, npz_files)
 
     target = np.array([200, 300, -400, -200, -100, 200])
     assert np.all(result == target)
@@ -316,10 +316,10 @@ def test_NpzHSDBSExtractor_3(npz_buffers):
     for npz_buffer in npz_buffers:
         npz_buffer.seek(0)
     # When k is larger than the number of streams, all the streams should be selected
-    extractor = NpzHSDBSExtractor(ignore_control_packets=True, threshold=32)
+    extractor = NpzHSDBSExtractor(criterion=HSDBSCriterion(k=5), ignore_control_packets=True, threshold=32)
     result = []
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
-    extractor.extract(result, npz_files, HSDBSCriterion(k=5))
+    extractor.extract(result, npz_files)
 
     target = np.array([200, 300, -400, -200, -100, 200])
     assert np.all(result == target)
@@ -329,10 +329,12 @@ def test_NpzHSDBSExtractor_4(npz_buffers):
     """
     Test reading a .npz file and extract the hsdbs feature, this test covers the case that the criterion option is set to BSExcludeCriterion.
     """
-    extractor = NpzHSDBSExtractor(ignore_control_packets=True, threshold=32)
+    extractor = NpzHSDBSExtractor(
+        criterion=BSExcludeCriterion(lower_bounds=np.array([350]), upper_bounds=np.array([450]), threshold=0), 
+        ignore_control_packets=True, threshold=32)
     result = []
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
-    extractor.extract(result, npz_files, BSExcludeCriterion(lower_bounds=np.array([350]), upper_bounds=np.array([450]), threshold=0))
+    extractor.extract(result, npz_files)
 
     total_size = np.sum(abs(size) for size in result)
     target = 1000
@@ -344,10 +346,10 @@ def test_NpzHSDBSExtractor_5(npz_buffers):
     """
     Test reading a .npz file and extract the hsdbs feature, this test covers the case that the criterion option is set to BSExcludeCriterion.
     """
-    extractor = NpzHSDBSExtractor(ignore_control_packets=True, threshold=32)
+    extractor = NpzHSDBSExtractor(criterion=BSExcludeCriterion(lower_bounds=np.array([350, 460]), upper_bounds=np.array([450, 550])), ignore_control_packets=True, threshold=32)
     result = []
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
-    extractor.extract(result, npz_files, BSExcludeCriterion(lower_bounds=np.array([350, 460]), upper_bounds=np.array([450, 550])))
+    extractor.extract(result, npz_files)
 
     assert len(result) == 0
 
@@ -381,10 +383,10 @@ def test_NpzDirExtractor_3(npz_buffers):
     """
     Test reading a .npz file and extract the direction feature, this test covers the case that the criterion option is set to HSDBSCriterion selecting the top-k streams.
     """
-    extractor = NpzDirExtractor(stripper=VmessStripper())
+    extractor = NpzDirExtractor(criterion=HSDBSCriterion(k=1), stripper=VmessStripper())
     result = []
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
-    extractor.extract(result, npz_files, HSDBSCriterion(k=1))
+    extractor.extract(result, npz_files)
     target = np.array([1, -1, 1, 1, -1, -1, 1, -1, 1])
 
     assert np.all(result == target)
@@ -394,9 +396,9 @@ def test_NpzDirExtractor_4(npz_buffers):
     """
     Test reading a .npz file and extract the hsdbs feature, this test covers the case that the criterion option is set to BSExcludeCriterion.
     """
-    extractor = NpzDirExtractor(stripper=VmessStripper())
+    extractor = NpzDirExtractor(criterion=BSExcludeCriterion(lower_bounds=np.array([350, 460]), upper_bounds=np.array([450, 550]), threshold=32))
     result = []
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
-    extractor.extract(result, npz_files, BSExcludeCriterion(lower_bounds=np.array([350, 460]), upper_bounds=np.array([450, 550]), threshold=32))
+    extractor.extract(result, npz_files)
 
     assert len(result) == 0

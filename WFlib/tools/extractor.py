@@ -184,12 +184,6 @@ def array_path(host: str, id: int, transport: str, stream: int, protocol: str) -
     return f"{host}_{id}_{transport}_{stream}_{protocol}.npz"
 
 
-class Splitter():
-    """
-    The class that split a list or array into multiple parts.
-    """
-
-
 class Extractor(object):
     """
     The class provides methods for the actual feature extraction work. This is some abstract class, and the
@@ -433,17 +427,6 @@ class BSExcludeCriterion(Criterion):
             if not in_range.any():
                 result.append(feature)
         return result
-    
-
-class LengthExcludeCriterion(Criterion):
-    """
-    The criterion that excludes the streams with length smaller than the given threshold.
-    """
-    def __init__(self, threshold: int):
-        self.threshold = threshold
-    
-    def select(self, features: List[List[tuple]]) -> List[List[tuple]]:
-        return [feature for feature in features if len(feature) > self.threshold]
 
 
 class NpzHSDBSExtractor(NpzExtractor):
@@ -459,10 +442,11 @@ class NpzHSDBSExtractor(NpzExtractor):
     criterion : str
         The criterion to select the top-k streams.
     """
-    def __init__(self, name="hsdbs", threshold:int=40, ignore_control_packets: bool=False):
+    def __init__(self, name="hsdbs", threshold:int=40, ignore_control_packets: bool=False, criterion: Optional[Criterion]=None):
         super().__init__(name=name)
         self.threshold = threshold
         self.ignore_control_packets = ignore_control_packets
+        self.criterion = criterion
 
     def single_stream_extract(self, npz_file: NpzFile) -> List[tuple]:
         direction_arr, length_arr, timestamp_arr = npz_file['direction'], npz_file['length'], npz_file['timestamp']
@@ -496,13 +480,13 @@ class NpzHSDBSExtractor(NpzExtractor):
         return bursts
     
 
-    def extract(self, target: list, npz_file_list: List[NpzFile], *criteria: Criterion):
+    def extract(self, target: list, npz_file_list: List[NpzFile]):
         stream_bursts = []
         for npz_file in npz_file_list:
             stream_bursts.append(self.single_stream_extract(npz_file))
         
-        for criterion in criteria:
-            stream_bursts = criterion.select(stream_bursts)
+        if self.criterion:
+            stream_bursts = self.criterion.select(stream_bursts)
 
         bursts = []
         for stream_burst in stream_bursts:
@@ -554,9 +538,10 @@ class NpzDirExtractor(NpzExtractor):
     """
     The class that extracts direction feature from .npz files.
     """
-    def __init__(self, name="direction", stripper: Optional[Stripper]=None):
+    def __init__(self, name="direction", stripper: Optional[Stripper]=None, criterion: Optional[Criterion]=None):
         super().__init__(name=name)
         self.stripper = stripper
+        self.criterion = criterion
 
 
     def single_stream_extract(self, npz_file: NpzFile) -> List[tuple]:
@@ -571,13 +556,13 @@ class NpzDirExtractor(NpzExtractor):
 
         return [(timestamp, direction * length) for timestamp, direction, length in zip(timestamp_arr, direction_arr, length_arr)]  
 
-    def extract(self, target: list, npz_file_list: List[NpzFile], *criteria: Criterion):
+    def extract(self, target: list, npz_file_list: List[NpzFile]):
         streams = []
         for npz_file in npz_file_list:
             streams.append(self.single_stream_extract(npz_file))
 
-        for criterion in criteria:
-            streams = criterion.select(streams)
+        if self.criterion:
+            streams = self.criterion.select(streams)
 
         dir_lengths = []
         for stream in streams:
