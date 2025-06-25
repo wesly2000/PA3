@@ -238,7 +238,8 @@ def batch_capture(base_dir, host_list, iface,
                   timeout=200, 
                   ill_files=None,
                   log_output=None,
-                  proxy_log=None):
+                  proxy_log=None,
+                  proxy=None):
     """
     Capture the traffic of a list of hosts. The capturing and storing process is illustrated as follows.
     Suppose the host_list = [www.baidu.com, www.zhihu.com, www.google.com], and the base_dir is set to
@@ -290,12 +291,22 @@ def batch_capture(base_dir, host_list, iface,
     use_proxy : boolean
         Whether to capture proxied traffic.
     """
-    def launch_proxy(keylog, proxy_log):
+    def launch_proxy(keylog, proxy_log, proxy):
         # TODO: Currently, only Clash is supported. More proxy clients would be supported in the future.
         stdout = open(proxy_log, 'a+') if proxy_log is not None else subprocess.DEVNULL
 
+        if proxy == "vmess":
+            cmd = ['/home/lxyu/clash/bin/clash-linux-amd64-debug', '-key-vmess', keylog]
+        elif proxy == "trojan":
+            cmd = ['/home/lxyu/clash/bin/clash-linux-amd64-debug', '-key-trojan', keylog]
+        elif proxy == "shadowsocks":
+            # TODO: Write SS passwd directly in Clash
+            cmd = ['/home/lxyu/clash/bin/clash-linux-amd64-debug']
+        else:
+            raise NotImplementedError
+
         clash_process = subprocess.Popen(
-            ['/home/lxyu/clash/bin/clash-linux-amd64-debug', '-key-trojan', keylog],
+            cmd,
             stdout=stdout,
             stderr=subprocess.STDOUT 
         )
@@ -339,7 +350,7 @@ def batch_capture(base_dir, host_list, iface,
             # Launch Clash asynchronously
             if proxy_log is not None:
                 keylog = f"{base_dir}/{host}/proxy_keylog.txt"
-                monitor_process = multiprocessing.Process(target=launch_proxy, kwargs={"keylog": keylog, "proxy_log": proxy_log})
+                monitor_process = multiprocessing.Process(target=launch_proxy, kwargs={"keylog": keylog, "proxy_log": proxy_log, "proxy": proxy})
                 monitor_process.start()
 
                 time.sleep(1)  # maybe waiting for proxy client to launch?
