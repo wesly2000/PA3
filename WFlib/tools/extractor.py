@@ -415,6 +415,17 @@ class HSDBSCriterion(Criterion):
         return [features[i] for i in top_k_indices]
     
 
+class LengthExcludeCriterion(Criterion):
+    """
+    The criterion that excludes the streams with the number of frames smaller than the given threshold.
+    """
+    def __init__(self, threshold: int = 32):
+        self.threshold = threshold
+    
+    def select(self, features: List[List[tuple]]) -> List[List[tuple]]:
+        return [feature for feature in features if len(feature) > self.threshold]
+    
+
 class BSExcludeCriterion(Criterion):
     """
     The criterion that excludes the streams with burst size falls in the given range.

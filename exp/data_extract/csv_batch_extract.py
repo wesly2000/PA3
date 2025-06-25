@@ -5,7 +5,7 @@ This file is used to extract the csv files from the database and related array s
 import argparse
 import numpy as np
 from WFlib.tools.formatter import CsvFormatter
-from WFlib.tools.extractor import NpzHSDBSExtractor, HSDBSCriterion, NpzDirExtractor, VmessStripper, BSExcludeCriterion
+from WFlib.tools.extractor import NpzHSDBSExtractor, HSDBSCriterion, NpzDirExtractor, VmessStripper, BSExcludeCriterion, LengthExcludeCriterion
 from WFlib.tools.capture import read_host_list
 
 import logging
@@ -32,6 +32,7 @@ if __name__ == '__main__':
             # upper_bounds = np.array([68000, 81000, 2178000, 6000, 10800])
             # lower_bounds = np.array([2120000, 5500, 9500,  64000, 76800])     # threshold 60
             # upper_bounds = np.array([2146000, 6000, 10000, 66400, 79200])
+            criteria = BSExcludeCriterion(lower_bounds=lower_bounds, upper_bounds=upper_bounds, threshold=0)
         elif args.protocol == 'shadowsocks':
             lower_bounds = np.array([2280000, 7500, 12500, 84000, 105000])  # threshold 0
             upper_bounds = np.array([2336000, 8000, 13000, 90000, 108000])
@@ -39,14 +40,15 @@ if __name__ == '__main__':
             # upper_bounds = np.array([81000, 99000, 2214000, 6600, 10800])
             # lower_bounds = np.array([2180000, 5600, 10000, 76000, 94000])     # threshold 60
             # upper_bounds = np.array([2280000, 6400, 10400, 80000, 96000])
+            criteria = BSExcludeCriterion(lower_bounds=lower_bounds, upper_bounds=upper_bounds, threshold=0)
         elif args.protocol == 'normal':
             normal_filter_file = "exp/data_extract/tmp_filter.txt"
+            criteria = LengthExcludeCriterion(threshold=32)
         else:
             raise ValueError(f"Invalid protocol: {args.protocol}")
 
     formatter = CsvFormatter(length=args.length)
     # criterion = HSDBSCriterion(k = args.k)
-    criteria = BSExcludeCriterion(lower_bounds=lower_bounds, upper_bounds=upper_bounds, threshold=0) if args.bs_filter and args.protocol != 'normal' else None
     # extractor = NpzHSDBSExtractor(ignore_control_packets=True, criterion=criterion)
     extractor = NpzDirExtractor(criteria=criteria)
     if args.filter_file:

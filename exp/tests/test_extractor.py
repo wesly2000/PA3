@@ -402,3 +402,15 @@ def test_NpzDirExtractor_4(npz_buffers):
     extractor.extract(result, npz_files)
 
     assert len(result) == 0
+
+
+def test_NpzDirExtractor_5(npz_buffers):
+    """
+    Test reading a .npz file and extract the hsdbs feature, this test covers the case that the criterion option is set to BSExcludeCriterion.
+    """
+    extractor = NpzDirExtractor(criteria=LengthExcludeCriterion(threshold=9))
+    result = []
+    npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
+    extractor.extract(result, npz_files)
+
+    assert result == [1, -1, 1, -1, 1, -1, -1, 1, -1, 1]
