@@ -6,6 +6,7 @@ import subprocess
 import logging
 import io
 from pathlib import Path
+import math
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ SPLIT_PROB = [0.2, 0.2, 0.2, 0.2, 0.2]
 
 
 def split_weight_generator(split_prob: List[float]=SPLIT_PROB, weights: List[Optional[List[float]]]=WEIGHT_LIST) -> List[float]:
-    assert sum(split_prob) == 1, "The sum of split_prob must be 1"
+    assert math.isclose(sum(split_prob), 1, rel_tol=1e-5), "The sum of split_prob must be 1"
     accumulated_prob = np.cumsum(split_prob)
     weight_selection_range = np.concatenate(([0], accumulated_prob))
 
@@ -271,7 +272,7 @@ class Splitter():
     def __init__(self, prologue_len:int, epilogue_len:int, weight: Iterable[float], noise_level:float=0.05, noise_mode:str='uniform'):
         self.prologue_len = prologue_len
         self.epilogue_len = epilogue_len
-        assert sum(weight) == 1, "The sum of weight must be 1"
+        assert math.isclose(sum(weight), 1, rel_tol=1e-5), "The sum of weight must be 1"
         self.weight = weight
         self.accumulated_weight = np.cumsum(weight)
         self.noise_level = noise_level

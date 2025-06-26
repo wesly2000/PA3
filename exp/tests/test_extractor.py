@@ -463,6 +463,13 @@ def test_NpzDirExtractor_6(npz_buffers):
     extractor.extract(result, npz_files)
     assert len(result) == 100 and np.all(np.array(result) == 1)
 
+    split_prob = [1]
+    weights = [[0.4, 0.2, 0.2, 0.2]]
+    extractor = NpzDirExtractor(split_weight=split_weight_generator(split_prob, weights), split_threshold=10)
+    result = []
+    extractor.extract(result, npz_files)
+    assert len(result) == 160 and np.all(np.array(result) == 1)
+
 
 def test_Splitter_1():
     """
