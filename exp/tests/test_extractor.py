@@ -418,15 +418,37 @@ def test_NpzDirExtractor_5(npz_buffers):
 
 def test_Splitter_1():
     """
-    Test the Splitter class.
+    Test the Splitter class noisy_weight_indices.
     """
     splitter = Splitter(prologue_len=10, epilogue_len=10, weight=[0.2, 0.3, 0.5])
     result = np.array([splitter.noisy_weight_indices(100) for _ in range(100)])
 
-    assert result.shape == (100, 3) and np.all(result[:, i-1] < result[:, i] for i in range(1, 100)) and np.all(0 < result[:, i] <= 100 for i in range(100))   
+    assert result.shape == (100, 4) and np.all(result[:, i-1] < result[:, i] for i in range(1, 100)) and np.all(0 < result[:, i] <= 100 for i in range(100))   
     
     # We use Chebyshev's inequality to test the average value of the result's first element
     sigma = np.sqrt(1/12)
     mu = 20
     k = 10
-    assert np.abs(np.sum(result[:, 0]) / 100 - mu) < k * sigma
+    assert np.abs(np.sum(result[:, 1]) / 100 - mu) < k * sigma
+
+
+def test_Splitter_2():
+    """
+    Test the Splitter class split method.
+    """
+    prologue_len=10
+    epilogue_len=10
+    splitter = Splitter(prologue_len=prologue_len, epilogue_len=epilogue_len, weight=[0.2, 0.3, 0.5])
+    
+    prologue = [i for i in range(prologue_len)]
+    epilogue = [i for i in range(90, 90 + epilogue_len)]
+    stream = [(10 * i, i) for i in range(100)]
+
+    sizes = []
+    for split in splitter.split(stream):
+        split_sizes = [s for _, s in split]
+        sizes.extend(split_sizes[prologue_len:-epilogue_len])
+        assert split_sizes[:prologue_len] == prologue and split_sizes[-epilogue_len:] == epilogue
+    
+    assert len(sizes) == 100 - prologue_len - epilogue_len
+    assert set(sizes) == set(range(10, 90))

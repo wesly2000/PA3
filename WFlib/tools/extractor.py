@@ -257,11 +257,11 @@ class Splitter():
         noise = np.random.uniform(-self.noise_level, self.noise_level, len(ideal_splits))
         noisy_splits = ideal_splits + noise * length   
         noisy_indices = np.round(noisy_splits).astype(int)         
-        noisy_indices = np.clip(noisy_indices, 1, length)
+        noisy_indices = np.clip(noisy_indices, 0, length)
         noisy_indices = np.sort(noisy_indices)
         # If there are multiple indices with the same value, we need to re-generate the noise.
 
-        noisy_indices = np.concatenate((noisy_indices, [length]))
+        noisy_indices = np.concatenate(([0],noisy_indices, [length]))
         noisy_indices = np.unique(noisy_indices)
         if len(noisy_indices) < len(self.weight):
             logger.warning(f"Duplicate indices reduced partitions to {len(noisy_indices)-1}; adjusting")
@@ -270,8 +270,28 @@ class Splitter():
         
         return noisy_indices
 
-    def split(self, stream: Iterable) -> List[Iterable]:
-        pass
+    def split(self, stream: Iterable) -> Iterable:
+        # Only fetch the content part of the stream
+        timestamps, sizes = [], []
+        for t, s in stream:
+            timestamps.append(t)
+            sizes.append(s)
+
+        prologue, epilogue = sizes[:self.prologue_len], sizes[-self.epilogue_len:]
+        content = sizes[self.prologue_len : -self.epilogue_len]
+        noisy_indices = self.noisy_weight_indices(len(content))
+        split_contents = [content[noisy_indices[i] : noisy_indices[i+1]] for i in range(len(noisy_indices) - 1)]
+
+        
+        for c in split_contents:
+            new_sizes = prologue + c + epilogue
+            # Randomly sample len(new_sizes) elements from timestamps
+            new_timestamps = np.random.choice(timestamps, size=len(new_sizes), replace=False)
+            new_timestamps.sort()
+            # Zip the new_timestamps and new_sizes
+            new_stream = list(zip(new_timestamps, new_sizes))
+            yield new_stream
+
     
 
 class PcapExtractor(Extractor):
