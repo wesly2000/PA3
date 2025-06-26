@@ -414,3 +414,19 @@ def test_NpzDirExtractor_5(npz_buffers):
     extractor.extract(result, npz_files)
 
     assert result == [1, -1, 1, -1, 1, -1, -1, 1, -1, 1]
+
+
+def test_Splitter_1():
+    """
+    Test the Splitter class.
+    """
+    splitter = Splitter(prologue_len=10, epilogue_len=10, weight=[0.2, 0.3, 0.5])
+    result = np.array([splitter.noisy_weight_indices(100) for _ in range(100)])
+
+    assert result.shape == (100, 3) and np.all(result[:, i-1] < result[:, i] for i in range(1, 100)) and np.all(0 < result[:, i] <= 100 for i in range(100))   
+    
+    # We use Chebyshev's inequality to test the average value of the result's first element
+    sigma = np.sqrt(1/12)
+    mu = 20
+    k = 10
+    assert np.abs(np.sum(result[:, 0]) / 100 - mu) < k * sigma

@@ -222,6 +222,58 @@ class Criterion():
         raise NotImplementedError
     
 
+class Splitter():
+    """
+    The class that splits the stream into multiple streams. Each stream is considered as [Prologue] [Content] [Epilogue].
+    The split is only applied to the content part.
+
+    Attributes
+    ----------
+    prologue_len : int
+        The length of the prologue.
+    epilogue_len : int
+        The length of the epilogue.
+    weight : Iterable[float]
+        The partition weight for the content, the sum of weight MUST be 1.
+    noise_level : float
+        We add noise to the given weight to create a more realistic split.
+    noise_mode : str
+        The mode of the noise.
+    """
+    def __init__(self, prologue_len:int, epilogue_len:int, weight: Iterable[float], noise_level:float=0.05, noise_mode:str='uniform'):
+        self.prologue_len = prologue_len
+        self.epilogue_len = epilogue_len
+        assert sum(weight) == 1, "The sum of weight must be 1"
+        self.weight = weight
+        self.accumulated_weight = np.cumsum(weight)
+        self.noise_level = noise_level
+        self.noise_mode = noise_mode
+
+    def noisy_weight_indices(self, length):
+        """
+        Create noisy weights and generate index for each weight given the length of the stream to split.
+        """
+        ideal_splits = np.array([length * weight for weight in self.accumulated_weight[:-1]])
+        noise = np.random.uniform(-self.noise_level, self.noise_level, len(ideal_splits))
+        noisy_splits = ideal_splits + noise * length   
+        noisy_indices = np.round(noisy_splits).astype(int)         
+        noisy_indices = np.clip(noisy_indices, 1, length)
+        noisy_indices = np.sort(noisy_indices)
+        # If there are multiple indices with the same value, we need to re-generate the noise.
+
+        noisy_indices = np.concatenate((noisy_indices, [length]))
+        noisy_indices = np.unique(noisy_indices)
+        if len(noisy_indices) < len(self.weight):
+            logger.warning(f"Duplicate indices reduced partitions to {len(noisy_indices)-1}; adjusting")
+            return self.noisy_weight_indices(length)
+        # Remove duplicates to avoid empty partitions
+        
+        return noisy_indices
+
+    def split(self, stream: Iterable) -> List[Iterable]:
+        pass
+    
+
 class PcapExtractor(Extractor):
     """
     Extractors that directly extract features from .pcap files through PyShark packet iteration.
