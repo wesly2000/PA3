@@ -1,4 +1,4 @@
-from typing import Union, List, Set, Optional, Iterable, Tuple
+from typing import Union, List, Set, Optional, Iterable, Tuple, Callable
 import numpy as np
 from numpy.lib.npyio import NpzFile
 import pandas as pd
@@ -13,6 +13,34 @@ logger = logging.getLogger(__name__)
 COMMENT: Shall we name a class capitalizing all letters of an abbrev., e.g., extension name of a file?
          Currently, only the first letter is capitalized, please follow the convention.
 '''
+
+WEIGHT_1_PART = None
+WEIGHT_2_PART = [0.6, 0.4]
+WEIGHT_3_PART = [0.5, 0.3, 0.2]
+WEIGHT_4_PART = [0.4, 0.2, 0.2, 0.2]
+WEIGHT_5_PART = [0.5, 0.2, 0.1, 0.1, 0.1]
+WEIGHT_6_PART = [0.5, 0.1, 0.1, 0.1, 0.1, 0.1]
+
+WEIGHT_LIST = [WEIGHT_1_PART, WEIGHT_2_PART, WEIGHT_3_PART, WEIGHT_4_PART, WEIGHT_5_PART, WEIGHT_6_PART]
+
+SPLIT_PROB = [0.2, 0.2, 0.2, 0.2, 0.2]
+
+
+def split_weight_generator(split_prob: List[float]=SPLIT_PROB, weights: List[Optional[List[float]]]=WEIGHT_LIST) -> List[float]:
+    assert sum(split_prob) == 1, "The sum of split_prob must be 1"
+    accumulated_prob = np.cumsum(split_prob)
+    weight_selection_range = np.concatenate(([0], accumulated_prob))
+
+    def split_weight():
+        # Generate a random number between 0 and 1
+        random_number = np.random.rand()
+        # Find the index of the weight_selection_range that the random_number falls into
+        index = np.searchsorted(weight_selection_range, random_number) - 1
+
+        return weights[index]
+
+    return split_weight
+
 
 FIELDS = ["tcp.stream", "udp.stream","ip.src", "ip.dst", "frame.time_relative", "tcp.len", "tcp.hdr_len", "udp.length", "tls.handshake.extensions_server_name"]
 
@@ -630,10 +658,14 @@ class NpzDirExtractor(NpzExtractor):
     """
     The class that extracts direction feature from .npz files.
     """
-    def __init__(self, name="direction", stripper: Optional[Stripper]=None, criteria: Optional[Union[List[Criterion], Criterion]]=None):
+    def __init__(self, name="direction", stripper: Optional[Stripper]=None, criteria: Optional[Union[List[Criterion], Criterion]]=None, split_weight: Optional[Callable]=None, split_threshold: int=100, prologue_len: int=10, epilogue_len: int=10):
+        # COMMENT: shall we add split_weight in Splitter class? Then extractor only need to add split_threshold and a splitter.
         super().__init__(name=name, criteria=criteria)
         self.stripper = stripper
-
+        self.split_weight = split_weight
+        self.split_threshold = split_threshold
+        self.prologue_len = prologue_len
+        self.epilogue_len = epilogue_len
 
     def single_stream_extract(self, npz_file: NpzFile) -> List[tuple]:
         direction_arr = npz_file['direction']
@@ -654,6 +686,21 @@ class NpzDirExtractor(NpzExtractor):
 
         for criterion in self.criteria:
             streams = criterion.select(streams)
+
+        # For each stream that longer than split_threshold, generate split it into multiple streams
+        if self.split_weight:
+            split_streams = []
+            for stream in streams:
+                if len(stream) > self.split_threshold:
+                    split_weight = self.split_weight()
+                    if split_weight is not None:
+                        split_stream = Splitter(prologue_len=self.prologue_len, epilogue_len=self.epilogue_len, weight=split_weight).split(stream)
+                        split_streams.extend(split_stream)
+                    else:
+                        split_streams.append(stream)
+                else:
+                    split_streams.append(stream)
+            streams = split_streams
 
         dir_lengths = []
         for stream in streams:

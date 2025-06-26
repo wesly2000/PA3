@@ -3,6 +3,7 @@ import io
 import numpy as np
 import pandas as pd
 import pytest
+from tempfile import TemporaryFile
 
 from WFlib.tools.extractor import *
 from WFlib.tools.formatter import PcapFormatter
@@ -414,6 +415,53 @@ def test_NpzDirExtractor_5(npz_buffers):
     extractor.extract(result, npz_files)
 
     assert result == [1, -1, 1, -1, 1, -1, -1, 1, -1, 1]
+
+
+def test_NpzDirExtractor_6(npz_buffers):
+    """
+    Test reading a .npz file and extract the hsdbs feature, this test covers the case that the criterion option is set to BSExcludeCriterion.
+    """
+
+    stream = {
+        "direction": np.array([1 for _ in range(100)]),
+        "length": np.array([i * 10 + 1 for i in range(100)]),  # Length of 0 is not allowed
+        "timestamp": np.array([i * .1 for i in range(100)])
+    }
+
+    tmp_file = TemporaryFile()
+    np.savez(tmp_file, **stream)
+    tmp_file.seek(0)
+    npz_files = [np.load(tmp_file)]
+
+    split_prob = [1.0]
+    weights = [[0.5, 0.5]]
+    extractor = NpzDirExtractor(split_weight=split_weight_generator(split_prob, weights), split_threshold=10)
+    result = []
+    extractor.extract(result, npz_files)
+
+    assert len(result) == 120 and np.all(np.array(result) == 1)
+
+    split_prob = [.5, .5]
+    weights = [[0.5, 0.5], [0.3, 0.7]]
+    extractor = NpzDirExtractor(split_weight=split_weight_generator(split_prob, weights), split_threshold=10)
+    result = []
+    extractor.extract(result, npz_files)
+    assert len(result) == 120 and np.all(np.array(result) == 1)
+
+    split_prob = [1, 0, 0]
+    weights = [None, [0.5, 0.5], [0.3, 0.7]]
+    extractor = NpzDirExtractor(split_weight=split_weight_generator(split_prob, weights), split_threshold=10)
+    result = []
+    extractor.extract(result, npz_files)
+    assert len(result) == 100 and np.all(np.array(result) == 1)
+
+    # The stream is shorter than split_threshold, so it should not be split
+    split_prob = [.5, .5]
+    weights = [[0.5, 0.5], [0.3, 0.7]]
+    extractor = NpzDirExtractor(split_weight=split_weight_generator(split_prob, weights), split_threshold=100)
+    result = []
+    extractor.extract(result, npz_files)
+    assert len(result) == 100 and np.all(np.array(result) == 1)
 
 
 def test_Splitter_1():
