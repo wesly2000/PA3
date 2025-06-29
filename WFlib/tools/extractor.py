@@ -281,12 +281,14 @@ class WeightSplitter(Splitter):
     noise_mode : str
         The mode of the noise.
     """
-    def __init__(self, prologue_len:int, epilogue_len:int, weight: Iterable[float], noise_level:float=0.05, noise_mode:str='uniform'):
+    def __init__(self, prologue_len:int, epilogue_len:int, weight: Optional[List[float]], weight_generator: Callable=make_split_weight_generator, noise_level:float=0.05, noise_mode:str='uniform'):
         self.prologue_len = prologue_len
         self.epilogue_len = epilogue_len
-        assert math.isclose(sum(weight), 1, rel_tol=1e-5), "The sum of weight must be 1"
-        self.weight = weight
-        self.accumulated_weight = np.cumsum(weight)
+        if weight is not None:
+            assert math.isclose(sum(weight), 1, rel_tol=1e-5), "The sum of weight must be 1"
+            self.weight = weight
+
+        self.weight_generator = weight_generator
         self.noise_level = noise_level
         self.noise_mode = noise_mode
 
@@ -294,7 +296,12 @@ class WeightSplitter(Splitter):
         """
         Create noisy weights and generate index for each weight given the length of the stream to split.
         """
-        ideal_splits = np.array([length * weight for weight in self.accumulated_weight[:-1]])
+        if self.weight is not None:
+            accumulated_weight = np.cumsum(self.weight)
+        else:
+            accumulated_weight = np.cumsum(self.weight_generator())
+
+        ideal_splits = np.array([length * weight for weight in accumulated_weight[:-1]])
         noise = np.random.uniform(-self.noise_level, self.noise_level, len(ideal_splits))
         noisy_splits = ideal_splits + noise * length   
         noisy_indices = np.round(noisy_splits).astype(int)         
