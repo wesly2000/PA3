@@ -16,15 +16,15 @@ COMMENT: Shall we name a class capitalizing all letters of an abbrev., e.g., ext
 '''
 
 WEIGHT_1_PART = None
-WEIGHT_2_PART = [0.6, 0.4]
-WEIGHT_3_PART = [0.5, 0.3, 0.2]
-WEIGHT_4_PART = [0.4, 0.2, 0.2, 0.2]
-WEIGHT_5_PART = [0.5, 0.2, 0.1, 0.1, 0.1]
-WEIGHT_6_PART = [0.5, 0.1, 0.1, 0.1, 0.1, 0.1]
+WEIGHT_2_PART = [1 / 2] * 2
+WEIGHT_3_PART = [1 / 3] * 3
+WEIGHT_4_PART = [1 / 4] * 4
+WEIGHT_5_PART = [1 / 5] * 5
+WEIGHT_6_PART = [1 / 6] * 6
 
 WEIGHT_LIST = [WEIGHT_1_PART, WEIGHT_2_PART, WEIGHT_3_PART, WEIGHT_4_PART, WEIGHT_5_PART, WEIGHT_6_PART]
 
-SPLIT_PROB = [0.2, 0.2, 0.2, 0.2, 0.2]
+SPLIT_PROB = [0.53, 0.23, 0.13, 0.07, 0.03, 0.01]
 
 
 def split_weight_generator(split_prob: List[float]=SPLIT_PROB, weights: List[Optional[List[float]]]=WEIGHT_LIST) -> List[float]:
@@ -251,7 +251,7 @@ class Criterion():
         raise NotImplementedError
     
 
-class Splitter():
+class WeightSplitter():
     """
     The class that splits the stream into multiple streams. Each stream is considered as [Prologue] [Content] [Epilogue].
     The split is only applied to the content part.
@@ -516,6 +516,22 @@ class HSDBSCriterion(Criterion):
         return [features[i] for i in top_k_indices]
     
 
+class LengthCriterion(Criterion):
+    """
+    The criterion that selects the top-k streams by stream length feature.
+    """
+    def __init__(self, k:int=0):
+        self.k = k
+
+    def select(self, features: List[List[tuple]]) -> List[List[tuple]]:
+        if self.k <= 0:
+            return features
+        
+        feature_lengths = [(i, len(feature)) for i, feature in enumerate(features)]
+        top_k_indices = [i for i, _ in sorted(feature_lengths, key=lambda x: x[1], reverse=True)[:self.k]]
+        return [features[i] for i in top_k_indices]
+    
+
 class LengthExcludeCriterion(Criterion):
     """
     The criterion that excludes the streams with the number of frames smaller than the given threshold.
@@ -695,7 +711,7 @@ class NpzDirExtractor(NpzExtractor):
                 if len(stream) > self.split_threshold:
                     split_weight = self.split_weight()
                     if split_weight is not None:
-                        split_stream = Splitter(prologue_len=self.prologue_len, epilogue_len=self.epilogue_len, weight=split_weight).split(stream)
+                        split_stream = WeightSplitter(prologue_len=self.prologue_len, epilogue_len=self.epilogue_len, weight=split_weight).split(stream)
                         split_streams.extend(split_stream)
                     else:
                         split_streams.append(stream)

@@ -475,7 +475,7 @@ def test_Splitter_1():
     """
     Test the Splitter class noisy_weight_indices.
     """
-    splitter = Splitter(prologue_len=10, epilogue_len=10, weight=[0.2, 0.3, 0.5])
+    splitter = WeightSplitter(prologue_len=10, epilogue_len=10, weight=[0.2, 0.3, 0.5])
     result = np.array([splitter.noisy_weight_indices(100) for _ in range(100)])
 
     assert result.shape == (100, 4) and np.all(result[:, i-1] < result[:, i] for i in range(1, 100)) and np.all(0 < result[:, i] <= 100 for i in range(100))   
@@ -493,7 +493,7 @@ def test_Splitter_2():
     """
     prologue_len=10
     epilogue_len=10
-    splitter = Splitter(prologue_len=prologue_len, epilogue_len=epilogue_len, weight=[0.2, 0.3, 0.5])
+    splitter = WeightSplitter(prologue_len=prologue_len, epilogue_len=epilogue_len, weight=[0.2, 0.3, 0.5])
     
     prologue = [i for i in range(prologue_len)]
     epilogue = [i for i in range(90, 90 + epilogue_len)]
