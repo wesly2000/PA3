@@ -15,7 +15,7 @@ COMMENT: Shall we name a class capitalizing all letters of an abbrev., e.g., ext
          Currently, only the first letter is capitalized, please follow the convention.
 '''
 
-WEIGHT_1_PART = [1]
+WEIGHT_1_PART = [1.0]
 WEIGHT_2_PART = [1 / 2] * 2
 WEIGHT_3_PART = [1 / 3] * 3
 WEIGHT_4_PART = [1 / 4] * 4
@@ -255,8 +255,9 @@ class Splitter():
     """
     The class that splits the stream into another stream/streams.
     """
-    def __init__(self):
-        pass 
+    def __init__(self, prologue_len:int=13, epilogue_len:int=7):
+        self.prologue_len = prologue_len
+        self.epilogue_len = epilogue_len
 
     def split(self, stream: Iterable) -> Iterable:
         raise NotImplementedError
@@ -281,12 +282,13 @@ class WeightSplitter(Splitter):
     noise_mode : str
         The mode of the noise.
     """
-    def __init__(self, prologue_len:int, epilogue_len:int, weight: Optional[List[float]], weight_generator: Callable=make_split_weight_generator, noise_level:float=0.05, noise_mode:str='uniform'):
-        self.prologue_len = prologue_len
-        self.epilogue_len = epilogue_len
+    def __init__(self, prologue_len:int=13, epilogue_len:int=7, weight: Optional[List[float]]=None, weight_generator: Callable=make_split_weight_generator, noise_level:float=0.05, noise_mode:str='uniform'):
+        super().__init__(prologue_len, epilogue_len)
         if weight is not None:
             assert math.isclose(sum(weight), 1, rel_tol=1e-5), "The sum of weight must be 1"
             self.weight = weight
+        else:
+            self.weight = None
 
         self.weight_generator = weight_generator
         self.noise_level = noise_level
@@ -311,7 +313,7 @@ class WeightSplitter(Splitter):
 
         noisy_indices = np.concatenate(([0],noisy_indices, [length]))
         noisy_indices = np.unique(noisy_indices)
-        if len(noisy_indices) < len(self.weight):
+        if len(noisy_indices) < len(accumulated_weight):
             logger.warning(f"Duplicate indices reduced partitions to {len(noisy_indices)-1}; adjusting")
             return self.noisy_weight_indices(length)
         # Remove duplicates to avoid empty partitions
@@ -347,9 +349,8 @@ class RatioSplitter(Splitter):
     would be extended, otherwise, the stream would be truncated. The extension and truncation are done by randomly sampling the
     original stream.
     """
-    def __init__(self, prologue_len:int, epilogue_len:int, ratio: Iterable[float], noise_level:float=0.01, noise_mode:str='uniform'):
-        self.prologue_len = prologue_len
-        self.epilogue_len = epilogue_len
+    def __init__(self, prologue_len:int=13, epilogue_len:int=7, ratio: float=0.9, noise_level:float=0.01, noise_mode:str='uniform'):
+        super().__init__(prologue_len, epilogue_len)
         self.ratio = ratio
         self.noise_level = noise_level
         self.noise_mode = noise_mode
@@ -727,14 +728,12 @@ class NpzDirExtractor(NpzExtractor):
     """
     The class that extracts direction feature from .npz files.
     """
-    def __init__(self, name="direction", stripper: Optional[Stripper]=None, criteria: Optional[Union[List[Criterion], Criterion]]=None, split_weight: Optional[Callable]=None, split_threshold: int=100, prologue_len: int=10, epilogue_len: int=10):
+    def __init__(self, name="direction", stripper: Optional[Stripper]=None, criteria: Optional[Union[List[Criterion], Criterion]]=None, split_threshold: int=100, splitter: Optional[Splitter]=None):
         # COMMENT: shall we add split_weight in Splitter class? Then extractor only need to add split_threshold and a splitter.
         super().__init__(name=name, criteria=criteria)
         self.stripper = stripper
-        self.split_weight = split_weight
         self.split_threshold = split_threshold
-        self.prologue_len = prologue_len
-        self.epilogue_len = epilogue_len
+        self.splitter = splitter
 
     def single_stream_extract(self, npz_file: NpzFile) -> List[tuple]:
         direction_arr = npz_file['direction']
@@ -757,16 +756,12 @@ class NpzDirExtractor(NpzExtractor):
             streams = criterion.select(streams)
 
         # For each stream that longer than split_threshold, generate split it into multiple streams
-        if self.split_weight:
+        if self.splitter is not None:
             split_streams = []
             for stream in streams:
                 if len(stream) > self.split_threshold:
-                    split_weight = self.split_weight()
-                    if split_weight is not None:
-                        split_stream = WeightSplitter(prologue_len=self.prologue_len, epilogue_len=self.epilogue_len, weight=split_weight).split(stream)
-                        split_streams.extend(split_stream)
-                    else:
-                        split_streams.append(stream)
+                    split_stream = self.splitter.split(stream)
+                    split_streams.extend(split_stream)
                 else:
                     split_streams.append(stream)
             streams = split_streams

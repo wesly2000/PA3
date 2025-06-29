@@ -435,7 +435,10 @@ def test_NpzDirExtractor_6(npz_buffers):
 
     split_prob = [1.0]
     weights = [[0.5, 0.5]]
-    extractor = NpzDirExtractor(split_weight=split_weight_generator(split_prob, weights), split_threshold=10)
+    extractor = NpzDirExtractor(
+        splitter=WeightSplitter(weight_generator=make_split_weight_generator(split_prob, weights)),
+        split_threshold=10
+        )
     result = []
     extractor.extract(result, npz_files)
 
@@ -443,14 +446,20 @@ def test_NpzDirExtractor_6(npz_buffers):
 
     split_prob = [.5, .5]
     weights = [[0.5, 0.5], [0.3, 0.7]]
-    extractor = NpzDirExtractor(split_weight=split_weight_generator(split_prob, weights), split_threshold=10)
+    extractor = NpzDirExtractor(
+        splitter=WeightSplitter(weight_generator=make_split_weight_generator(split_prob, weights)), 
+        split_threshold=10
+        )
     result = []
     extractor.extract(result, npz_files)
     assert len(result) == 120 and np.all(np.array(result) == 1)
 
-    split_prob = [1, 0, 0]
+    split_prob = [1.0, 0.0, 0.0]
     weights = [None, [0.5, 0.5], [0.3, 0.7]]
-    extractor = NpzDirExtractor(split_weight=split_weight_generator(split_prob, weights), split_threshold=10)
+    extractor = NpzDirExtractor(
+        splitter=WeightSplitter(weight_generator=make_split_weight_generator(split_prob, weights)),
+        split_threshold=10
+        )
     result = []
     extractor.extract(result, npz_files)
     assert len(result) == 100 and np.all(np.array(result) == 1)
@@ -458,14 +467,20 @@ def test_NpzDirExtractor_6(npz_buffers):
     # The stream is shorter than split_threshold, so it should not be split
     split_prob = [.5, .5]
     weights = [[0.5, 0.5], [0.3, 0.7]]
-    extractor = NpzDirExtractor(split_weight=split_weight_generator(split_prob, weights), split_threshold=100)
+    extractor = NpzDirExtractor(
+        splitter=WeightSplitter(weight_generator=make_split_weight_generator(split_prob, weights)),
+        split_threshold=100
+        )
     result = []
     extractor.extract(result, npz_files)
     assert len(result) == 100 and np.all(np.array(result) == 1)
 
-    split_prob = [1]
+    split_prob = [1.0]
     weights = [[0.4, 0.2, 0.2, 0.2]]
-    extractor = NpzDirExtractor(split_weight=split_weight_generator(split_prob, weights), split_threshold=10)
+    extractor = NpzDirExtractor(
+        splitter=WeightSplitter(weight_generator=make_split_weight_generator(split_prob, weights)),
+        split_threshold=10
+        )
     result = []
     extractor.extract(result, npz_files)
     assert len(result) == 160 and np.all(np.array(result) == 1)
