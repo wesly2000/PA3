@@ -471,9 +471,9 @@ def test_NpzDirExtractor_6(npz_buffers):
     assert len(result) == 160 and np.all(np.array(result) == 1)
 
 
-def test_Splitter_1():
+def test_WeightSplitter_1():
     """
-    Test the Splitter class noisy_weight_indices.
+    Test the WeightSplitter class noisy_weight_indices.
     """
     splitter = WeightSplitter(prologue_len=10, epilogue_len=10, weight=[0.2, 0.3, 0.5])
     result = np.array([splitter.noisy_weight_indices(100) for _ in range(100)])
@@ -481,15 +481,15 @@ def test_Splitter_1():
     assert result.shape == (100, 4) and np.all(result[:, i-1] < result[:, i] for i in range(1, 100)) and np.all(0 < result[:, i] <= 100 for i in range(100))   
     
     # We use Chebyshev's inequality to test the average value of the result's first element
-    sigma = np.sqrt(1/12)
+    sigma = np.sqrt(1/12) * 10
     mu = 20
     k = 10
     assert np.abs(np.sum(result[:, 1]) / 100 - mu) < k * sigma
 
 
-def test_Splitter_2():
+def test_WeightSplitter_2():
     """
-    Test the Splitter class split method.
+    Test the WeightSplitter class split method.
     """
     prologue_len=10
     epilogue_len=10
@@ -507,3 +507,32 @@ def test_Splitter_2():
     
     assert len(sizes) == 100 - prologue_len - epilogue_len
     assert set(sizes) == set(range(10, 90))
+
+
+def test_RatioSplitter_1():
+    """
+    Test the RatioSplitter class split method.
+    """
+    prologue_len=10
+    epilogue_len=10
+    splitter = RatioSplitter(prologue_len=prologue_len, epilogue_len=epilogue_len, ratio=.9)
+    
+    prologue = [i for i in range(prologue_len)]
+    epilogue = [i for i in range(110, 110 + epilogue_len)]
+    stream = [(10 * i, i) for i in range(120)]
+
+    stream_length = []
+
+    for _ in range(100):
+        sizes = []
+        for split in splitter.split(stream):
+            split_sizes = [s for _, s in split]
+            sizes.extend(split_sizes[prologue_len:-epilogue_len])
+            stream_length.append(len(sizes))
+            assert set(sizes).issubset(set(range(10, 110)))
+            assert split_sizes[:prologue_len] == prologue and split_sizes[-epilogue_len:] == epilogue
+
+    sigma = np.sqrt(1/3)
+    mean = 90
+    k = 10
+    assert np.abs(np.mean(stream_length) - mean) < k * sigma

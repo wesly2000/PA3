@@ -249,9 +249,19 @@ class Criterion():
 
     def select(self, features: Iterable) -> Iterable:
         raise NotImplementedError
-    
 
-class WeightSplitter():
+
+class Splitter():
+    """
+    The class that splits the stream into another stream/streams.
+    """
+    def __init__(self):
+        pass 
+
+    def split(self, stream: Iterable) -> Iterable:
+        raise NotImplementedError
+
+class WeightSplitter(Splitter):
     """
     The class that splits the stream into multiple streams. Each stream is considered as [Prologue] [Content] [Epilogue].
     The split is only applied to the content part.
@@ -321,6 +331,39 @@ class WeightSplitter():
             new_stream = list(zip(new_timestamps, new_sizes))
             yield new_stream
 
+
+class RatioSplitter(Splitter):
+    """
+    The class that splits the stream into a SINGLE stream based on the given ratio. When ratio is larger than 1, the stream
+    would be extended, otherwise, the stream would be truncated. The extension and truncation are done by randomly sampling the
+    original stream.
+    """
+    def __init__(self, prologue_len:int, epilogue_len:int, ratio: Iterable[float], noise_level:float=0.01, noise_mode:str='uniform'):
+        self.prologue_len = prologue_len
+        self.epilogue_len = epilogue_len
+        self.ratio = ratio
+        self.noise_level = noise_level
+        self.noise_mode = noise_mode
+
+    def split(self, stream: Iterable) -> Iterable:
+        # Only fetch the content part of the stream
+        timestamps, sizes = [], []
+        for t, s in stream:
+            timestamps.append(t)
+            sizes.append(s)
+
+        prologue, epilogue = sizes[:self.prologue_len], sizes[-self.epilogue_len:]
+        content = sizes[self.prologue_len : -self.epilogue_len]
+        
+        # Sample the stream with noise
+        noise = np.random.uniform(-self.noise_level, self.noise_level)
+        sample_content = np.random.choice(content, size=int(len(content) * (self.ratio + noise)), replace=True)
+        new_sizes = prologue + sample_content.tolist() + epilogue
+        new_timestamps = np.random.choice(timestamps, size=len(new_sizes), replace=True).tolist()
+        new_timestamps.sort()
+        new_stream = list(zip(new_timestamps, new_sizes))
+
+        yield new_stream
     
 
 class PcapExtractor(Extractor):
