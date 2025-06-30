@@ -349,7 +349,7 @@ class RatioSplitter(Splitter):
     would be extended, otherwise, the stream would be truncated. The extension and truncation are done by randomly sampling the
     original stream.
     """
-    def __init__(self, prologue_len:int=13, epilogue_len:int=7, ratio: float=0.9, noise_level:float=0.01, noise_mode:str='uniform'):
+    def __init__(self, prologue_len:int=13, epilogue_len:int=7, ratio: float=0.9, noise_level:float=0.1, noise_mode:str='uniform'):
         super().__init__(prologue_len, epilogue_len)
         self.ratio = ratio
         self.noise_level = noise_level
@@ -362,16 +362,39 @@ class RatioSplitter(Splitter):
             timestamps.append(t)
             sizes.append(s)
 
-        prologue, epilogue = sizes[:self.prologue_len], sizes[-self.epilogue_len:]
-        content = sizes[self.prologue_len : -self.epilogue_len]
+        prologue= stream[:self.prologue_len]
+        content_sizes = sizes[self.prologue_len : -self.epilogue_len]
+        content_timestamps = timestamps[self.prologue_len : -self.epilogue_len]
+        delta_timestamps = np.concatenate(([0], np.diff(content_timestamps)))
         
-        # Sample the stream with noise
-        noise = np.random.uniform(-self.noise_level, self.noise_level)
-        sample_content = np.random.choice(content, size=int(len(content) * (self.ratio + noise)), replace=True)
-        new_sizes = prologue + sample_content.tolist() + epilogue
-        new_timestamps = np.random.choice(timestamps, size=len(new_sizes), replace=True).tolist()
-        new_timestamps.sort()
-        new_stream = list(zip(new_timestamps, new_sizes))
+        # Sample the content part with noise
+        noisy_ratio = self.ratio + np.random.uniform(-self.noise_level, self.noise_level)
+        if noisy_ratio < 1:  # Truncate the stream
+            sample_sizes = content_sizes[:int(len(content_sizes) * noisy_ratio)]
+            sample_timestamps = content_timestamps[:int(len(content_timestamps) * noisy_ratio)]
+        else:  # Extend the stream
+            # Copy the content sizes and timestamps
+            sample_sizes = content_sizes[:]
+            sample_timestamps = content_timestamps[:]
+            noisy_ratio -= 1
+            while noisy_ratio > 1:
+                sample_sizes.extend(content_sizes)
+                # Add perturbation to the timestamps
+                sample_timestamps.extend([sample_timestamps[-1] + delta_ts for delta_ts in delta_timestamps] )
+                noisy_ratio -= 1
+            if noisy_ratio > 0:
+                sample_sizes.extend(content_sizes[:int(len(content_sizes) * noisy_ratio)])
+                sample_timestamps.extend([sample_timestamps[-1] + delta_ts for delta_ts in delta_timestamps[:int(len(content_sizes) * noisy_ratio)]] )
+
+        new_content = list(zip(sample_timestamps, sample_sizes))
+        # Create the new epilogue
+        # Delay the timestamp of epilogue to the end of the new content
+        epilogue_sizes = sizes[-self.epilogue_len:]
+        epilogue_delta_timestamps = np.concatenate(([0], np.diff(timestamps[-self.epilogue_len:])))
+        epilogue_timestamps = [sample_timestamps[-1] + delta_ts for delta_ts in epilogue_delta_timestamps]
+        epilogue = list(zip(epilogue_timestamps, epilogue_sizes))
+        
+        new_stream = prologue + new_content + epilogue
 
         yield new_stream
     
