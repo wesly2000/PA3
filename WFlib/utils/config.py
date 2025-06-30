@@ -45,6 +45,9 @@ def default_override_prefs(protocol: str = 'normal', keylog_file: Optional[str] 
                 password = f.read().strip()
             DEFAULT_OVERRIDE_PREFS['shadowsocks.password'] = password
         elif protocol == 'trojan':
+            if keylog_file is None:  # No need to decrypt the inner TLS traffic
+                DEFAULT_OVERRIDE_PREFS['tls.keylog_file'] = proxy_keylog_file
+            else: # Decrypt both the inner and outer TLS traffic
                 # First check if merge_keylog.txt exists in the same directory as keylog_file
                 merge_keylog_file = keylog_file.replace('keylog.txt', 'merge_keylog.txt')
                 if not Path(merge_keylog_file).exists():
@@ -57,6 +60,6 @@ def default_override_prefs(protocol: str = 'normal', keylog_file: Optional[str] 
                         with open(proxy_keylog_file, 'r') as f2:
                             f.write(f2.read())
 
-            DEFAULT_OVERRIDE_PREFS['tls.keylog_file'] = merge_keylog_file
+                DEFAULT_OVERRIDE_PREFS['tls.keylog_file'] = merge_keylog_file
 
     return DEFAULT_OVERRIDE_PREFS
