@@ -12,6 +12,18 @@ def get_config(config_path: Path):
         return config
     else:
         return None
+    
+
+def get_tshark_path(config_path: Path, protocol: str = 'normal'):
+    if not config_path.exists():
+        tshark_path = "tshark"
+    else:
+        config = get_config(config_path)
+        if not config:
+            tshark_path = "tshark"
+        else:
+            tshark_path = config[protocol].get('tshark_path', fallback="tshark")
+    return tshark_path
 
 
 def default_override_prefs(protocol: str = 'normal', keylog_file: Optional[str] = None, proxy_keylog_file: Optional[str] = None) -> dict:
