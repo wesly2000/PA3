@@ -45,17 +45,17 @@ def default_override_prefs(protocol: str = 'normal', keylog_file: Optional[str] 
                 password = f.read().strip()
             DEFAULT_OVERRIDE_PREFS['shadowsocks.password'] = password
         elif protocol == 'trojan':
-            # First check if merge_keylog.txt exists in the same directory as keylog_file
-            merge_keylog_file = keylog_file.replace('keylog.txt', 'merge_keylog.txt')
-            if not Path(merge_keylog_file).exists():
-                # If not, merge keylog_file and proxy_keylog_file into a single file named merge_keylog.txt
-                with open(merge_keylog_file, 'w') as f:
-                    with open(keylog_file, 'r') as f1:
-                        f.write(f1.read())
-                    # Add a newline to separate the two keylogs
-                    f.write('\n')
-                    with open(proxy_keylog_file, 'r') as f2:
-                        f.write(f2.read())
+                # First check if merge_keylog.txt exists in the same directory as keylog_file
+                merge_keylog_file = keylog_file.replace('keylog.txt', 'merge_keylog.txt')
+                if not Path(merge_keylog_file).exists():
+                    # If not, merge keylog_file and proxy_keylog_file into a single file named merge_keylog.txt
+                    with open(merge_keylog_file, 'w') as f:
+                        with open(keylog_file, 'r') as f1:
+                            f.write(f1.read())
+                        # Add a newline to separate the two keylogs
+                        f.write('\n')
+                        with open(proxy_keylog_file, 'r') as f2:
+                            f.write(f2.read())
 
             DEFAULT_OVERRIDE_PREFS['tls.keylog_file'] = merge_keylog_file
 
