@@ -21,3 +21,4 @@ main.vscode-cdn.net
 storage.codegpt.co
 go.dev
 goproxy.cn
+zs.cloud-services.top  # Trojan proxy node
