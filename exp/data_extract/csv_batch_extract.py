@@ -9,10 +9,6 @@ from WFlib.tools.extractor import NpzHSDBSExtractor, HSDBSCriterion, NpzDirExtra
 from WFlib.tools.capture import read_host_list
 
 TROJAN_RANGES = [(2200000, 2400000), (10400, 11200), (12800, 13600), (15200, 16800), (80000, 120000)]
-# VMESS_RANGES = [(2200000, 2400000), (6300, 7700), (11900, 12600), (60000, 100000)]
-# SHADOWSOCKS_RANGES = [(2200000, 2400000), (7200, 8000), (12000, 12800), (80000, 120000)]
-
-# TROJAN_RANGES = [(2260000, 2300000), (10400, 11200), (12800, 13600), (15200, 16800), (80000, 120000)]
 VMESS_RANGES = [(2240000, 2272000), (6500, 7500), (12000, 12500), (72000, 74000), (84000, 86000)]
 SHADOWSOCKS_RANGES = [(2280000, 2336000), (7500, 8000), (12500, 13000), (84000, 90000), (105000, 108000)]
 
@@ -40,60 +36,31 @@ if __name__ == '__main__':
     regenerate = 1
     if args.bs_filter:
         if args.protocol == 'vmess':
-            # lower_bounds = np.array([2240000, 6500, 12000, 72000, 84000])   # threshold 0
-            # upper_bounds = np.array([2272000, 7500, 12500, 74000, 86000])  
-            # lower_bounds = np.array([66000, 79000, 2169000, 5400, 10200])     # threshold 40
-            # upper_bounds = np.array([68000, 81000, 2178000, 6000, 10800])
-            # lower_bounds = np.array([2120000, 5500, 9500,  64000, 76800])     # threshold 60
-            # upper_bounds = np.array([2146000, 6000, 10000, 66400, 79200])
             lower_bounds, upper_bounds = bound_gen(*VMESS_RANGES)
             criteria = [
                 BSExcludeCriterion(lower_bounds=lower_bounds, upper_bounds=upper_bounds, threshold=0),
-                # LengthExcludeCriterion(threshold=38),
-                # HSDBSCriterion(k = args.k),
-                # LengthCriterion(k = args.k)
                 ]
-            # stripper = VmessStripper()
             extractor = NpzDirExtractor(criteria=criteria)
         elif args.protocol == 'shadowsocks':
-            # lower_bounds = np.array([2280000, 7500, 12500, 84000, 105000])  # threshold 0
-            # upper_bounds = np.array([2336000, 8000, 13000, 90000, 108000])
-            # lower_bounds = np.array([80000, 97000, 2205000, 6000, 10200])   # threshold 40
-            # upper_bounds = np.array([81000, 99000, 2214000, 6600, 10800])
-            # lower_bounds = np.array([2180000, 5600, 10000, 76000, 94000])     # threshold 60
-            # upper_bounds = np.array([2280000, 6400, 10400, 80000, 96000])
             lower_bounds, upper_bounds = bound_gen(*SHADOWSOCKS_RANGES)
             criteria = [
                 BSExcludeCriterion(lower_bounds=lower_bounds, upper_bounds=upper_bounds, threshold=0), 
-                # LengthExcludeCriterion(threshold=38),
-                # HSDBSCriterion(k = args.k)
-                # LengthCriterion(k = args.k)
                 ]
             extractor = NpzDirExtractor(criteria=criteria)
         elif args.protocol == 'trojan':
             lower_bounds, upper_bounds = bound_gen(*TROJAN_RANGES)
             criteria = [
                 BSExcludeCriterion(lower_bounds=lower_bounds, upper_bounds=upper_bounds, threshold=0),
-                # LengthExcludeCriterion(threshold=38),
-                # HSDBSCriterion(k = args.k)
-                # LengthCriterion(k = args.k)
                 ]
             extractor = NpzDirExtractor(criteria=criteria)
         elif args.protocol == 'normal':
             normal_filter_file = "exp/data_extract/tmp_filter.txt"
-            # criteria = LengthExcludeCriterion(threshold=38)
-            # criteria = HSDBSCriterion(k = args.k)
-            # criteria = LengthCriterion(k = args.k)
-            # extractor = NpzDirExtractor(criteria=criteria, split_weight=split_weight_generator(), split_threshold=200, prologue_len=13, epilogue_len=7)
-            # regenerate = 3
             extractor = NpzDirExtractor()
         else:
             raise ValueError(f"Invalid protocol: {args.protocol}")
     if not args.bs_filter:
         extractor = NpzDirExtractor()
     formatter = CsvFormatter(length=args.length)
-    # criterion = HSDBSCriterion(k = args.k)
-    # extractor = NpzHSDBSExtractor(ignore_control_packets=True, criterion=criterion)
     if args.filter_file:
         SNI_filter = read_host_list(args.filter_file)
     elif normal_filter_file:
