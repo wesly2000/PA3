@@ -1,5 +1,6 @@
 from WFlib.tools.analyzer import Cell, Line, Packet
 from WFlib.tools.visualize import *
+import math
 
 def test_generate_byte_segment_01():
     http2_cell_0 = Cell(upper_protocol="http2", lower_protocol="tls", abs_frame_number=106)
@@ -51,3 +52,14 @@ def test_generate_byte_segment_01():
                 np.array([0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2])]
     
     assert all(np.array_equal(segment, expected_segment) for segment, expected_segment in zip(byte_segments, expected))
+
+
+def test_greedy_mass_covering_01():
+    data = np.array(list(range(100)) + [50] * 40 + [0] * 40 + [99] * 20)
+    ranges, coverage = greedy_mass_covering(data, bin_size=5, coverage_threshold=0.3)
+
+    expect_ranges = [[0, 5], [50, 55]]
+    expect_coverage = .45
+
+    assert ranges == expect_ranges and math.isclose(coverage, expect_coverage)
+    
