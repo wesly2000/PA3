@@ -1,9 +1,16 @@
 from WFlib.tools.analyzer import Line 
 from WFlib.utils.statistics import IQR_bound
-from typing import List
+from WFlib.tools.extractor import NpzExtractor 
+from WFlib.tools.formatter import array_path
+ 
+from typing import List, Tuple, Union, Set
 import numpy as np
+from numpy.typing import ArrayLike
 import torch
 from torch import nn
+import matplotlib.pyplot as plt
+import pandas as pd
+from numpy.lib.npyio import NpzFile
 
 def generate_byte_stream(segment_byte_map: dict, cutoff: int, abs_lower_frame_numbers: List[int]) -> np.ndarray:
         """
@@ -131,3 +138,67 @@ def greedy_mass_covering(arr, bin_size, coverage_threshold):
     
     return merged_ranges, actual_coverage
 
+
+def stream_feature_3D(host: str, SNIs: Union[Set[str], str], base_dir: str, protocol: str, extractor: NpzExtractor, db: pd.DataFrame):
+    """
+    Extract 3D features for a given host and SNIs. The original data is provided by db.
+    """
+    if isinstance(SNIs, str):
+        SNIs = set(SNIs)
+    db = db.query(f"host == {host} and sni in {SNIs} and protocol == {protocol}")
+    groups = db.groupby(['id'], sort=True)
+    yz_3D = []
+
+    for id, group in groups:
+        paths = group.apply(lambda row: f'{base_dir}/{array_path(row["host"], id, row["transport"], row["stream"], protocol)}', axis=1)
+        npz_files = [np.load(path) for path in paths]
+        yz_2D = stream_feature_2D(npz_files, extractor)
+        yz_3D.append(yz_2D)
+
+    return yz_3D
+
+
+def stream_feature_2D(npz_files: List[NpzFile], extractor: NpzExtractor):
+    """
+    Stream level feature extraction, one npz_file represents one stream, we require generally the meta information of the stream being (feature_ts, feature) list, and extract the timestamp and feature series for each stream.
+    """
+    yz_2D = []
+    for npz_file in npz_files:
+        stream = extractor.single_stream_extract(npz_file)
+        timestamp = [s[0] for s in stream]
+        feature = [s[1] for s in stream]
+        yz_2D.append((timestamp, feature))
+
+    return yz_2D
+
+
+def stream_feature_3D_draw(host: str, sni: str, feature: str, yz_3D: List[List[Tuple[ArrayLike, ArrayLike]]], bar_width: float=0.3, cmap_name: str='tab10', alpha: float=0.8):
+    """
+    yz_3D: 
+        list of yz_2D, which is a list of (y, z) tuples.
+    """
+
+    cmap = plt.cm.get_cmap('tab10', len(yz_3D))
+
+    fig = plt.figure(figsize=(10, 6))
+    ax = fig.add_subplot(111, projection='3d')
+    for x, yz_2D in enumerate(yz_3D):
+        for y, z in yz_2D:
+            y = np.array(y)
+            z = np.array(z)
+
+            # Create arrays for bar3d
+            xs = np.full_like(y, x)  # Same x for the whole group
+            ys = y
+            zs = np.zeros_like(z)
+
+            ax.bar3d(xs, ys, zs, dx=bar_width, dy=bar_width, dz=z, color=cmap(x), alpha=0.8)
+
+
+    ax.set_xlabel('capture ID')
+    ax.set_ylabel('timestamp')
+    ax.set_zlabel('value')
+    ax.set_title(f'{feature}, {host}, {sni}')
+
+    plt.tight_layout()
+    plt.show()

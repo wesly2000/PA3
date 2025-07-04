@@ -1,5 +1,8 @@
 from WFlib.tools.analyzer import Cell, Line, Packet
 from WFlib.tools.visualize import *
+from WFlib.tools.extractor import NpzHSDBSExtractor
+from exp.tests.fixture import npz_buffers
+
 import math
 
 def test_generate_byte_segment_01():
@@ -63,3 +66,15 @@ def test_greedy_mass_covering_01():
 
     assert ranges == expect_ranges and math.isclose(coverage, expect_coverage)
     
+
+def test_stream_feature_2D_01(npz_buffers):
+    npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
+    yz_2D = stream_feature_2D(npz_files, NpzHSDBSExtractor(threshold=20, ignore_control_packets=True))
+
+    assert len(yz_2D) == 3
+    target_yz_2D = [
+        ([3, 6, 7, 11], [224, -12, 112, -224]),
+        ([9, 16, 17], [-224, 12, -224]),
+        ([0, 2, 23], [224, -123, 224])
+    ]
+    assert yz_2D == target_yz_2D
