@@ -144,8 +144,8 @@ def stream_feature_3D(host: str, SNIs: Union[Set[str], str], base_dir: str, prot
     Extract 3D features for a given host and SNIs. The original data is provided by db.
     """
     if isinstance(SNIs, str):
-        SNIs = set(SNIs)
-    db = db.query(f"host == {host} and sni in {SNIs} and protocol == {protocol}")
+        SNIs = set([SNIs])
+    db = db.query(f"host == '{host}' and sni in @SNIs and protocol == '{protocol}'")
     groups = db.groupby(['id'], sort=True)
     yz_3D = []
 
@@ -178,7 +178,7 @@ def stream_feature_3D_draw(host: str, sni: str, feature: str, yz_3D: List[List[T
         list of yz_2D, which is a list of (y, z) tuples.
     """
 
-    cmap = plt.cm.get_cmap('tab10', len(yz_3D))
+    cmap = plt.cm.get_cmap(cmap_name, len(yz_3D))
 
     fig = plt.figure(figsize=(10, 6))
     ax = fig.add_subplot(111, projection='3d')
