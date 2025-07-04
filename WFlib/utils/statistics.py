@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Union, List
+from typing import Union, List, Iterable
 import random
 
 def IQR_bound(array: Union[np.array, List]):
@@ -35,3 +35,10 @@ def sample(iterator, k):
             result[s] = item
 
     return result
+
+def jaccard_similarity(set1: Iterable, set2: Iterable):
+    """
+    Calculate the Jaccard similarity between two sets.
+    """
+    set1, set2 = set(set1), set(set2)
+    return len(set1 & set2) / len(set1 | set2)

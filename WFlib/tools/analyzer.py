@@ -5,7 +5,9 @@ import numpy as np
 import pyshark 
 from pathlib import Path
 import re
-from typing import List, Callable, Optional, Tuple
+from typing import List, Tuple
+import pandas as pd
+from WFlib.utils.statistics import jaccard_similarity
 
 AES_128_GCM_TAG_LEN = 16
 CHACHA20_POLY1305_TAG_LEN = 16
@@ -1119,3 +1121,12 @@ def get_reassemble_info(cap: pyshark.FileCapture, protocol_stack: List[str] = ['
             merged_line = line_merge(merged_line, line)
     
     return merged_line
+
+
+def sni_similarity(host: str, proto_a: str, proto_b: str, db: pd.DataFrame) -> float:
+    """
+    Compute the Jaccard similarity of the given host between two protocols. The SNI set of the host is draw from the given database.
+    """
+    host_sni_a = db.query(f"host == '{host}' and protocol == '{proto_a}'")["sni"].tolist()
+    host_sni_b = db.query(f"host == '{host}' and protocol == '{proto_b}'")["sni"].tolist()
+    return jaccard_similarity(host_sni_a, host_sni_b) 
