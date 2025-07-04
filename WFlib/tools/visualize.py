@@ -150,7 +150,7 @@ def stream_feature_3D(host: str, SNIs: Union[Set[str], str], base_dir: str, prot
     yz_3D = []
 
     for id, group in groups:
-        paths = group.apply(lambda row: f'{base_dir}/{array_path(row["host"], id, row["transport"], row["stream"], protocol)}', axis=1)
+        paths = group.apply(lambda row: f'{base_dir}/{array_path(row["host"], id[0], row["transport"], row["stream"], protocol)}', axis=1)
         npz_files = [np.load(path) for path in paths]
         yz_2D = stream_feature_2D(npz_files, extractor)
         yz_3D.append(yz_2D)

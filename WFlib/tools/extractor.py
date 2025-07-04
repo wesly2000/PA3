@@ -209,7 +209,7 @@ def multi_pcap_extract(
     return result
 
 
-def array_path(host: str, id: int, transport: str, stream: int, protocol: str) -> str:
+def array_path(host: str, id: Union[int, str], transport: str, stream: int, protocol: str) -> str:
     return f"{host}_{id}_{transport}_{stream}_{protocol}.npz"
 
 
