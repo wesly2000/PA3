@@ -12,8 +12,7 @@ import multiprocessing as mp
 from functools import partial
 
 from WFlib.tools.extractor import *
-from WFlib.utils.config import default_override_prefs
-from WFlib.utils.config import get_config
+from WFlib.utils.config import default_override_prefs, get_tshark_path
 from WFlib.tools.capture import read_host_list
 
 logger = logging.getLogger(__name__)
@@ -31,7 +30,7 @@ else:
 src = ["58.206.207.126", "192.168.5.5", "10.4.0.3", "192.168.5.7", "2001:da8:283:c004:8177:495b:d038:d48a"]
 PROTOCOLS = ['normal', 'vmess']
 
-def extract_csv_db_per_host_per_protocol(root: str, protocol: str, host: str, host_filter: Set[str], display_filter: str='tcp', db: Optional[pd.DataFrame]=None):
+def extract_csv_db_per_host_per_protocol(root: str, protocol: str, host: str, host_filter: Set[str], display_filter: str='tcp', db: Optional[pd.DataFrame]=None, tshark_path: str='tshark'):
     pcap_dir = f"{root}/{protocol}_capture/{host}"
     proxy_keylog_file = f"{pcap_dir}/proxy_keylog.txt"
 
@@ -55,9 +54,10 @@ def extract_csv_db_per_host(host: str, root: str, host_filter: set,
     """
     result = []
     for protocol in PROTOCOLS:
+        tshark_path = get_tshark_path(config_path, protocol)
         try:
             logger.info(f"Processing Host: {host}, Protocol: {protocol}")
-            result.extend(extract_csv_db_per_host_per_protocol(root, protocol, host, host_filter, display_filter, db))
+            result.extend(extract_csv_db_per_host_per_protocol(root, protocol, host, host_filter, display_filter, db, tshark_path))
             
         except Exception as e:
             logger.error(f"Error processing Host: {host}, Protocol: {protocol}: {e}")

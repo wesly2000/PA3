@@ -21,3 +21,7 @@ main.vscode-cdn.net
 storage.codegpt.co
 go.dev
 goproxy.cn
+zs.cloud-services.top  # Trojan proxy node
+jpx.cloud-services.top  # Trojan proxy node
+sgc.cloud-services.top  # Trojan proxy node
+new.download.the-best-airport.com  # Trojan proxy node

@@ -3,6 +3,7 @@ import io
 import numpy as np
 import pandas as pd
 import pytest
+from tempfile import TemporaryFile
 
 from WFlib.tools.extractor import *
 from WFlib.tools.formatter import PcapFormatter
@@ -293,7 +294,7 @@ def test_NpzHSDBSExtractor_3(npz_buffers):
     Test reading a .npz file and extract the hsdbs feature, this test covers the case that the criterion option is set to HSDBSCriterion selecting the top-k streams.
     """
     # Test selecting the top-2 streams from 3 streams
-    extractor = NpzHSDBSExtractor(criterion=HSDBSCriterion(k=2), ignore_control_packets=True, threshold=32)
+    extractor = NpzHSDBSExtractor(ignore_control_packets=True, threshold=32, criteria=HSDBSCriterion(k=2))
     result = []
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
     extractor.extract(result, npz_files)
@@ -305,7 +306,7 @@ def test_NpzHSDBSExtractor_3(npz_buffers):
         npz_buffer.seek(0)
 
     # When k <= 0, all the streams should be selected
-    extractor = NpzHSDBSExtractor(criterion=HSDBSCriterion(k=0), ignore_control_packets=True, threshold=32)
+    extractor = NpzHSDBSExtractor(ignore_control_packets=True, threshold=32, criteria=HSDBSCriterion(k=0))
     result = []
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
     extractor.extract(result, npz_files)
@@ -316,7 +317,7 @@ def test_NpzHSDBSExtractor_3(npz_buffers):
     for npz_buffer in npz_buffers:
         npz_buffer.seek(0)
     # When k is larger than the number of streams, all the streams should be selected
-    extractor = NpzHSDBSExtractor(criterion=HSDBSCriterion(k=5), ignore_control_packets=True, threshold=32)
+    extractor = NpzHSDBSExtractor(ignore_control_packets=True, threshold=32, criteria=HSDBSCriterion(k=5))
     result = []
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
     extractor.extract(result, npz_files)
@@ -330,7 +331,7 @@ def test_NpzHSDBSExtractor_4(npz_buffers):
     Test reading a .npz file and extract the hsdbs feature, this test covers the case that the criterion option is set to BSExcludeCriterion.
     """
     extractor = NpzHSDBSExtractor(
-        criterion=BSExcludeCriterion(lower_bounds=np.array([350]), upper_bounds=np.array([450]), threshold=0), 
+        criteria=BSExcludeCriterion(lower_bounds=np.array([350]), upper_bounds=np.array([450]), threshold=0), 
         ignore_control_packets=True, threshold=32)
     result = []
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
@@ -346,7 +347,7 @@ def test_NpzHSDBSExtractor_5(npz_buffers):
     """
     Test reading a .npz file and extract the hsdbs feature, this test covers the case that the criterion option is set to BSExcludeCriterion.
     """
-    extractor = NpzHSDBSExtractor(criterion=BSExcludeCriterion(lower_bounds=np.array([350, 460]), upper_bounds=np.array([450, 550])), ignore_control_packets=True, threshold=32)
+    extractor = NpzHSDBSExtractor(criteria=BSExcludeCriterion(lower_bounds=np.array([350, 460]), upper_bounds=np.array([450, 550])), ignore_control_packets=True, threshold=32)
     result = []
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
     extractor.extract(result, npz_files)
@@ -383,7 +384,7 @@ def test_NpzDirExtractor_3(npz_buffers):
     """
     Test reading a .npz file and extract the direction feature, this test covers the case that the criterion option is set to HSDBSCriterion selecting the top-k streams.
     """
-    extractor = NpzDirExtractor(criterion=HSDBSCriterion(k=1), stripper=VmessStripper())
+    extractor = NpzDirExtractor(stripper=VmessStripper(), criteria=HSDBSCriterion(k=1))
     result = []
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
     extractor.extract(result, npz_files)
@@ -396,9 +397,157 @@ def test_NpzDirExtractor_4(npz_buffers):
     """
     Test reading a .npz file and extract the hsdbs feature, this test covers the case that the criterion option is set to BSExcludeCriterion.
     """
-    extractor = NpzDirExtractor(criterion=BSExcludeCriterion(lower_bounds=np.array([350, 460]), upper_bounds=np.array([450, 550]), threshold=32))
+    extractor = NpzDirExtractor(stripper=VmessStripper(), criteria=BSExcludeCriterion(lower_bounds=np.array([350, 460]), upper_bounds=np.array([450, 550]), threshold=32))
     result = []
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
     extractor.extract(result, npz_files)
 
     assert len(result) == 0
+
+
+def test_NpzDirExtractor_5(npz_buffers):
+    """
+    Test reading a .npz file and extract the hsdbs feature, this test covers the case that the criterion option is set to BSExcludeCriterion.
+    """
+    extractor = NpzDirExtractor(criteria=LengthExcludeCriterion(threshold=9))
+    result = []
+    npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
+    extractor.extract(result, npz_files)
+
+    assert result == [1, -1, 1, -1, 1, -1, -1, 1, -1, 1]
+
+
+def test_NpzDirExtractor_6(npz_buffers):
+    """
+    Test reading a .npz file and extract the hsdbs feature, this test covers the case that the criterion option is set to BSExcludeCriterion.
+    """
+
+    stream = {
+        "direction": np.array([1 for _ in range(100)]),
+        "length": np.array([i * 10 + 1 for i in range(100)]),  # Length of 0 is not allowed
+        "timestamp": np.array([i * .1 for i in range(100)])
+    }
+
+    tmp_file = TemporaryFile()
+    np.savez(tmp_file, **stream)
+    tmp_file.seek(0)
+    npz_files = [np.load(tmp_file)]
+
+    split_prob = [1.0]
+    weights = [[0.5, 0.5]]
+    extractor = NpzDirExtractor(
+        splitter=WeightSplitter(weight_generator=make_split_weight_generator(split_prob, weights)),
+        split_threshold=10
+        )
+    result = []
+    extractor.extract(result, npz_files)
+
+    assert len(result) == 120 and np.all(np.array(result) == 1)
+
+    split_prob = [.5, .5]
+    weights = [[0.5, 0.5], [0.3, 0.7]]
+    extractor = NpzDirExtractor(
+        splitter=WeightSplitter(weight_generator=make_split_weight_generator(split_prob, weights)), 
+        split_threshold=10
+        )
+    result = []
+    extractor.extract(result, npz_files)
+    assert len(result) == 120 and np.all(np.array(result) == 1)
+
+    split_prob = [1.0, 0.0, 0.0]
+    weights = [None, [0.5, 0.5], [0.3, 0.7]]
+    extractor = NpzDirExtractor(
+        splitter=WeightSplitter(weight_generator=make_split_weight_generator(split_prob, weights)),
+        split_threshold=10
+        )
+    result = []
+    extractor.extract(result, npz_files)
+    assert len(result) == 100 and np.all(np.array(result) == 1)
+
+    # The stream is shorter than split_threshold, so it should not be split
+    split_prob = [.5, .5]
+    weights = [[0.5, 0.5], [0.3, 0.7]]
+    extractor = NpzDirExtractor(
+        splitter=WeightSplitter(weight_generator=make_split_weight_generator(split_prob, weights)),
+        split_threshold=100
+        )
+    result = []
+    extractor.extract(result, npz_files)
+    assert len(result) == 100 and np.all(np.array(result) == 1)
+
+    split_prob = [1.0]
+    weights = [[0.4, 0.2, 0.2, 0.2]]
+    extractor = NpzDirExtractor(
+        splitter=WeightSplitter(weight_generator=make_split_weight_generator(split_prob, weights)),
+        split_threshold=10
+        )
+    result = []
+    extractor.extract(result, npz_files)
+    assert len(result) == 160 and np.all(np.array(result) == 1)
+
+
+def test_WeightSplitter_1():
+    """
+    Test the WeightSplitter class noisy_weight_indices.
+    """
+    splitter = WeightSplitter(prologue_len=10, epilogue_len=10, weight=[0.2, 0.3, 0.5])
+    result = np.array([splitter.noisy_weight_indices(100) for _ in range(100)])
+
+    assert result.shape == (100, 4) and np.all(result[:, i-1] < result[:, i] for i in range(1, 100)) and np.all(0 < result[:, i] <= 100 for i in range(100))   
+    
+    # We use Chebyshev's inequality to test the average value of the result's first element
+    sigma = np.sqrt(1/12) * 10
+    mu = 20
+    k = 10
+    assert np.abs(np.sum(result[:, 1]) / 100 - mu) < k * sigma
+
+
+def test_WeightSplitter_2():
+    """
+    Test the WeightSplitter class split method.
+    """
+    prologue_len=10
+    epilogue_len=10
+    splitter = WeightSplitter(prologue_len=prologue_len, epilogue_len=epilogue_len, weight=[0.2, 0.3, 0.5])
+    
+    prologue = [i for i in range(prologue_len)]
+    epilogue = [i for i in range(90, 90 + epilogue_len)]
+    stream = [(10 * i, i) for i in range(100)]
+
+    sizes = []
+    for split in splitter.split(stream):
+        split_sizes = [s for _, s in split]
+        sizes.extend(split_sizes[prologue_len:-epilogue_len])
+        assert split_sizes[:prologue_len] == prologue and split_sizes[-epilogue_len:] == epilogue
+    
+    assert len(sizes) == 100 - prologue_len - epilogue_len
+    assert set(sizes) == set(range(10, 90))
+
+
+def test_RatioSplitter_1():
+    """
+    Test the RatioSplitter class split method.
+    """
+    prologue_len=10
+    epilogue_len=10
+    splitter = RatioSplitter(prologue_len=prologue_len, epilogue_len=epilogue_len, ratio=.9)
+    
+    prologue = [i for i in range(prologue_len)]
+    epilogue = [i for i in range(110, 110 + epilogue_len)]
+    stream = [(10 * i, i) for i in range(120)]
+
+    stream_length = []
+
+    for _ in range(100):
+        sizes = []
+        for split in splitter.split(stream):
+            split_sizes = [s for _, s in split]
+            sizes.extend(split_sizes[prologue_len:-epilogue_len])
+            stream_length.append(len(sizes))
+            assert set(sizes).issubset(set(range(10, 110)))
+            assert split_sizes[:prologue_len] == prologue and split_sizes[-epilogue_len:] == epilogue
+
+    sigma = np.sqrt(1/3)
+    mean = 90
+    k = 10
+    assert np.abs(np.mean(stream_length) - mean) < k * sigma

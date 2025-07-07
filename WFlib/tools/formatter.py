@@ -525,7 +525,7 @@ class CsvFormatter(Formatter):
                 self._buf[extractor.name].append(np.array(tmp_buf[extractor.name] + [padding] * padding_len))
 
 
-    def batch_extract(self, base_dir, db_file, protocol, output_file, SNIs=Optional[Union[list, set]], *extractors: NpzExtractor):
+    def batch_extract(self, base_dir, db_file, protocol, output_file, SNIs=Optional[Union[list, set]], *extractors: NpzExtractor, regenerate: int=1):
         """
         Extract all the given features from all the files in the given base directory.
 
@@ -549,6 +549,9 @@ class CsvFormatter(Formatter):
 
         SNIs : list | set
             The SNIs to exclude from the extraction.
+
+        regenerate : int
+            The number of times to regenerate of a given pcap, use a value larger than 1 only when the NpzExtractor is equipped with a splitter.
         """
         label = 0  # Processing a hostname will increase the label by 1
         db = pd.read_csv(db_file).query(f"protocol == '{protocol}'")[['host', 'id', 'stream', 'transport', 'sni']]
@@ -567,7 +570,8 @@ class CsvFormatter(Formatter):
                 paths = host_db.apply(lambda row: f'{base_dir}/{array_path(row["host"], row["id"], row["transport"], row["stream"], protocol)}', axis=1)
 
                 self.load(paths)
-                self.transform(host, label, *extractors)
+                for _ in range(regenerate):
+                    self.transform(host, label, *extractors)
             label += 1
 
         self.dump(output_file)
