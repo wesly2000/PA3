@@ -206,9 +206,9 @@ def stream_feature_3D_draw(host: str, sni: str, feature: str, yz_3D: List[List[T
     ax = fig.add_subplot(111, projection='3d')
     ax.set_box_aspect([1, 5, 1])
     for x, yz_2D in enumerate(yz_3D):
+        yz_2D.sort(key=lambda x: len(x[0]), reverse=True)
         for c, (y, z) in enumerate(yz_2D):
             y = np.array(y)
-            # max_ts = np.max(y)
             y = np.clip(y, 0, 20)
             z = np.array(z)
 
