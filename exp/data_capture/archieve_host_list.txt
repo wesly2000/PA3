@@ -34,3 +34,9 @@ m.sm.cn
 so.douyin.com
 wuqiankx.top
 www.xiaohongshu.com
+
+www.feishu.cn
+www.deepseek.com
+gitee.com
+www.runoob.com
+www.cnblogs.com

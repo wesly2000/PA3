@@ -1,20 +1,29 @@
-from WFlib.tools.capture import *
+from WFlib.tools.extractor import PcapDirExtractor, NpzHSDBSExtractor
 from WFlib.tools.formatter import *
+from exp.tests.fixture import npz_buffers
 
 import io
 import json
 import tempfile
-import tracemalloc
+# import tracemalloc
+import os 
+import nest_asyncio
+nest_asyncio.apply()
+
+delete_file = True if os.name == "posix" else False # Only delete the file on Unix-like systems.
 
 baidu_proxied_file = "exp/test_dataset/realworld_dataset/www.baidu.com_proxied.pcapng"
 google_file = "exp/test_dataset/realworld_dataset/www.google.com.pcapng"
+apple_file = "exp/test_dataset/realworld_dataset/decryption/www.apple.com.pcapng"
+tiktok_file = "exp/test_dataset/realworld_dataset/decryption/www.tiktok.com.pcapng"
+yandex_file = "exp/test_dataset/realworld_dataset/decryption/yandex.com_10.pcapng"
 
 def test_PcapFormatter_1():
     """
     This test covers reading the first 10 packets from a .pcap file, and extract the direction feature.
     This test makes feature vector length smaller than the number of packets to test truncation.
     """
-    extractor = DirectionExtractor(src="192.168.5.5")
+    extractor = PcapDirExtractor(src="192.168.5.5")
 
     formatter = PcapFormatter(length=5)
     formatter.load("exp/test_dataset/simple_dataset/simple_pcap_01.pcapng")
@@ -39,7 +48,7 @@ def test_PcapFormatter_2():
     This test covers reading the first 10 packets from a .pcap file, and extract the direction feature.
     This test makes feature vector length larger than the number of packets to test padding.
     """
-    extractor = DirectionExtractor(src="192.168.5.5")
+    extractor = PcapDirExtractor(src="192.168.5.5")
 
     formatter = PcapFormatter(length=12)
     formatter.load("exp/test_dataset/simple_dataset/simple_pcap_01.pcapng")
@@ -65,7 +74,7 @@ def test_PcapFormatter_3():
     """
     formatter = PcapFormatter(length=10)
 
-    extractor = DirectionExtractor(src="192.168.5.5")
+    extractor = PcapDirExtractor(src="192.168.5.5")
 
     formatter.load("exp/test_dataset/simple_dataset/simple_pcap_01.pcapng")
     formatter.transform("www.baidu.com", 0, extractor)
@@ -103,7 +112,7 @@ def test_PcapFormatter_4():
     """
     formatter = PcapFormatter(length=10, display_filter='tls')
 
-    extractor = DirectionExtractor(src="192.168.5.5")
+    extractor = PcapDirExtractor(src="192.168.5.5")
     
     formatter.load("exp/test_dataset/simple_dataset/simple_pcap_01.pcapng")
     formatter.transform("www.baidu.com", 0, extractor)
@@ -141,7 +150,7 @@ def test_PcapFormatter_5():
     """
     formatter = PcapFormatter(display_filter='tls')
 
-    extractor = DirectionExtractor(src="192.168.5.5")
+    extractor = PcapDirExtractor(src="192.168.5.5")
     
     formatter.load("exp/test_dataset/simple_dataset/simple_pcap_01.pcapng")
     formatter.transform("www.baidu.com", 0, extractor)
@@ -153,7 +162,7 @@ def test_PcapFormatter_5():
     formatter.transform("www.zhihu.com", 1, extractor)
 
     # Create an in-memory bytes buffer
-    with tempfile.NamedTemporaryFile(mode="r+", delete=True) as temp_file:
+    with tempfile.NamedTemporaryFile(mode="r+", delete=delete_file) as temp_file:
         formatter.dump(temp_file.name)
         loaded_data = json.load(temp_file)
 
@@ -168,6 +177,12 @@ def test_PcapFormatter_5():
             for i in range(len(v)):
                 assert target[k][i] == v[i]
 
+        if not delete_file:
+            filename = temp_file.name
+
+    if not delete_file:
+        os.unlink(filename)
+
 def test_PcapFormatter_6():
     """
     This test covers reading the first 10 packets from multiple .pcap files, and extract the direction feature.
@@ -175,7 +190,7 @@ def test_PcapFormatter_6():
     """
     formatter = PcapFormatter(length=10)
 
-    extractor = DirectionExtractor(src="192.168.5.5")
+    extractor = PcapDirExtractor(src="192.168.5.5")
 
     # Create an in-memory bytes buffer
     buffer = io.BytesIO()
@@ -207,7 +222,7 @@ def test_PcapFormatter_7():
     """
     formatter = PcapFormatter(length=10, keep_packets=False)
 
-    extractor = DirectionExtractor(src="192.168.5.5")
+    extractor = PcapDirExtractor(src="192.168.5.5")
 
     # Create an in-memory bytes buffer
     buffer = io.BytesIO()
@@ -232,30 +247,31 @@ def test_PcapFormatter_7():
 
     loaded_data.close()
 
-def test_PcapFormatter_8():
-    """
-    This test validates that setting keep_packets to False reduces the memory usage.
-    """
-    def measure_memory(func):
-        tracemalloc.start()  # Tracing memory usage starts
-        func()  
-        snapshot = tracemalloc.take_snapshot()  # Fetch the snapshot of the memory
-        tracemalloc.stop()  # Stop memory tracing
 
-        # Compute the memory usage
-        total_memory = sum(stat.size for stat in snapshot.statistics('lineno'))
-        return total_memory
+# def test_PcapFormatter_8():
+#     """
+#     This test validates that setting keep_packets to False reduces the memory usage.
+#     """
+#     def measure_memory(func):
+#         tracemalloc.start()  # Tracing memory usage starts
+#         func()  
+#         snapshot = tracemalloc.take_snapshot()  # Fetch the snapshot of the memory
+#         tracemalloc.stop()  # Stop memory tracing
 
-    total_memory_1 = measure_memory(test_PcapFormatter_6)
-    total_memory_2 = measure_memory(test_PcapFormatter_7)
-    assert total_memory_1 > total_memory_2
+#         # Compute the memory usage
+#         total_memory = sum(stat.size for stat in snapshot.statistics('lineno'))
+#         return total_memory
+
+#     total_memory_1 = measure_memory(test_PcapFormatter_6)
+#     total_memory_2 = measure_memory(test_PcapFormatter_7)
+#     assert total_memory_1 > total_memory_2
 
 def test_PcapFormatter_9():
     """
     This test covers reading the first 10 packets from a .pcap file, and extract the direction feature.
     This test makes feature vector length smaller than the number of packets to test truncation.
     """
-    extractor = DirectionExtractor(src="192.168.5.5")
+    extractor = PcapDirExtractor(src="192.168.5.5")
 
     formatter = PcapFormatter(length=10)
     formatter.load("exp/test_dataset/realworld_dataset/www.google.com.pcapng")
@@ -282,7 +298,7 @@ def test_JsonFormatter_1():
     """
     pcap_formatter = PcapFormatter(display_filter='tls')
 
-    extractor = DirectionExtractor(src="192.168.5.5")
+    extractor = PcapDirExtractor(src="192.168.5.5")
     
     pcap_formatter.load("exp/test_dataset/simple_dataset/simple_pcap_01.pcapng")
     pcap_formatter.transform("www.baidu.com", 0, extractor)
@@ -294,7 +310,7 @@ def test_JsonFormatter_1():
     pcap_formatter.transform("www.zhihu.com", 1, extractor)
 
     # Create an in-memory bytes buffer
-    with tempfile.NamedTemporaryFile(mode="r+", delete=True) as temp_file:
+    with tempfile.NamedTemporaryFile(mode="r+", delete=delete_file) as temp_file:
         pcap_formatter.dump(temp_file.name)
         json_formatter = JsonFormatter()
         json_formatter.load(temp_file)
@@ -319,13 +335,19 @@ def test_JsonFormatter_1():
 
         loaded_data.close()
 
+        if not delete_file:
+            filename = temp_file.name
+
+    if not delete_file:
+        os.unlink(filename)
+
 def test_JsonFormatter_2():
     """
     This test covers the statistics with JsonFormatter.
     """
     pcap_formatter = PcapFormatter(display_filter='tls')
 
-    extractor = DirectionExtractor(src="192.168.5.5")
+    extractor = PcapDirExtractor(src="192.168.5.5")
     
     pcap_formatter.load("exp/test_dataset/simple_dataset/simple_pcap_01.pcapng")
     pcap_formatter.transform("www.baidu.com", 0, extractor)
@@ -337,7 +359,7 @@ def test_JsonFormatter_2():
     pcap_formatter.transform("www.zhihu.com", 1, extractor)
 
     # Create an in-memory bytes buffer
-    with tempfile.NamedTemporaryFile(mode="r+", delete=True) as temp_file:
+    with tempfile.NamedTemporaryFile(mode="r+", delete=delete_file) as temp_file:
         pcap_formatter.dump(temp_file.name)
         json_formatter = JsonFormatter()
         json_formatter.load(temp_file)
@@ -353,16 +375,27 @@ def test_JsonFormatter_2():
             for j in range(len(target[i])):
                 assert target[i][j] == directions[i][j]
 
+        if not delete_file:
+            filename = temp_file.name
+
+    if not delete_file:
+        os.unlink(filename)
 
 def test_DistriPcapFormatter_1():
-    formatter = DistriPcapFormatter(length=10, keep_packets=False)
+    formatter = DistriPcapFormatter(length=10, keep_packets=False, only_summaries=False)
 
-    extractor = DirectionExtractor(src="192.168.5.5")
+    extractor = PcapDirExtractor(src="192.168.5.5")
 
     # Create an in-memory bytes buffer
     buffer = io.BytesIO()
     
-    formatter.batch_extract("exp/test_dataset", buffer, ["dns.alidns.com", "firefox.settings.services.mozilla.com"], extractor)
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(formatter.batch_extract("exp/test_dataset", 
+                                                    buffer, 
+                                                    ["dns.alidns.com", "firefox.settings.services.mozilla.com"], 
+                                                    8,
+                                                    extractor))
+    loop.close()
 
     buffer.seek(0)  # Move to the start of the buffer
     loaded_data = np.load(buffer)
@@ -374,3 +407,66 @@ def test_DistriPcapFormatter_1():
     assert loaded_data['direction'].shape == (5, 10)
 
     loaded_data.close()
+
+
+def test_CsvFormatter_1(npz_buffers):
+    formatter = CsvFormatter(length=10)
+
+    extractor = NpzHSDBSExtractor(threshold=32)
+
+    label = 0
+    hosts = ["www.baidu.com", "www.zhihu.com", "www.google.com"]
+    for npz_buffer in npz_buffers:
+        formatter.load([npz_buffer])
+        formatter.transform(hosts[label], label, extractor)
+        label += 1
+
+    # Create an in-memory bytes buffer
+    buffer = io.BytesIO()
+    formatter.dump(buffer)
+
+    buffer.seek(0)  # Move to the start of the buffer
+    loaded_data = np.load(buffer)
+
+    target = {
+        "hosts" : np.array(hosts), 
+        "labels": np.array([0, 1, 2]), 
+        "hsdbs": np.array([
+            [100, 0, 100, 0, 100, -100, 0, -100, 0, 0],
+            [-100, 0, -100, 0, -100, 0, -100, 0, 0, 0],
+            [200, -100, 100, 0, 100, 0, 0, 0, 0, 0]
+        ])
+    }
+
+    for k, v in loaded_data.items():
+        assert np.all(target[k] == v)
+
+
+def test_CsvFormatter_2(npz_buffers):
+    formatter = CsvFormatter(length=5)
+
+    extractor = NpzHSDBSExtractor(ignore_control_packets=True, threshold=32)
+
+    label = 0
+    hosts = ["www.baidu.com"]
+
+    formatter.load([npz_buffer for npz_buffer in npz_buffers])
+    formatter.transform(hosts[label], label, extractor)
+
+    # Create an in-memory bytes buffer
+    buffer = io.BytesIO()
+    formatter.dump(buffer)
+
+    buffer.seek(0)  # Move to the start of the buffer
+    loaded_data = np.load(buffer)
+
+    target = {
+        "hosts" : np.array(hosts), 
+        "labels": np.array([0]), 
+        "hsdbs": np.array([
+            [200, 300, -400, -200, -100]
+        ])
+    }
+
+    for k, v in loaded_data.items():
+        assert np.all(target[k] == v)

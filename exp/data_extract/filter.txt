@@ -1,32 +1,27 @@
-# DNS related services, filtered to avoid DNS cache affects.
 dns.alidns.com
 doh.pub
 dns.cloudflare.com
 dns.twnic.tw
-# Mozilla services for searching. If you are using Firefox as the
-# requesting browser, they may be created.
-firefox.settings.services.mozilla.com
-content-signature-2.cdn.mozilla.net
-firefox-settings-attachments.cdn.mozilla.net
-# VS Code related services.
-main.vscode-cdn.net
-# Microsoft services for searching. If you are using Microsoft Edge as
-# the requesting browser, they may be created.
-browser.events.data.msn.cn
-www.bingapis.com
-edge-consumer-static.azureedge.net
-c.bing.com
-img-s-msn-com.akamaized.net
-login.live.com
-graph.microsoft.com
+doh.dns.sb
 mobile.events.data.microsoft.com
-nav-edge.smartscreen.microsoft.com
-# NetEase mailing service, background noise traffic.
-lingxi.office.163.com
-oxpecker.lx.netease.com
-# Google services
-clientservices.googleapis.com
-mtalk.google.com
-# Misc domains that are not related directly with the target domain.
-weatheroffer.com
-api.infinitynewtab.com
+natfrp-api.globalslb.net
+natfrp-rm.globalslb.net
+default.exp-tas.com
+us-mobile.events.data.microsoft.com
+eu-mobile.events.data.microsoft.com
+au-mobile.events.data.microsoft.com
+jp-mobile.events.data.microsoft.com
+browser.events.data.microsoft.com
+api.snapcraft.io # Ubuntu auto-updates
+motd.ubuntu.com
+launchpad.proxy.ustclug.org
+esm.ubuntu.com
+update.code.visualstudio.com
+main.vscode-cdn.net
+storage.codegpt.co
+go.dev
+goproxy.cn
+zs.cloud-services.top  # Trojan proxy node
+jpx.cloud-services.top  # Trojan proxy node
+sgc.cloud-services.top  # Trojan proxy node
+new.download.the-best-airport.com  # Trojan proxy node

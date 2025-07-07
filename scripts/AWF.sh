@@ -1,13 +1,15 @@
-dataset=CW
+dataset=${1:-CW}
+device=${2:-"cuda:0"}
+batch_size=${3:-128}
 
 python -u exp/train.py \
   --dataset ${dataset} \
   --model AWF \
-  --device cuda:0 \
+  --device ${device} \
   --feature DIR \
   --seq_len 3000 \
   --train_epochs 30 \
-  --batch_size 256 \
+  --batch_size ${batch_size} \
   --learning_rate 8e-4 \
   --optimizer RMSprop \
   --eval_metrics Accuracy Precision Recall F1-score \
@@ -17,7 +19,7 @@ python -u exp/train.py \
 python -u exp/test.py \
   --dataset ${dataset} \
   --model AWF \
-  --device cuda:0 \
+  --device ${device} \
   --feature DIR \
   --seq_len 3000 \
   --batch_size 256 \

@@ -43,6 +43,8 @@ def measurement(y_true, y_pred, eval_metrics, num_tabs=1):
             results[eval_metric] = round(recall_score(y_true, y_pred, average="macro"), 4)
         elif eval_metric == "F1-score":
             results[eval_metric] = round(f1_score(y_true, y_pred, average="macro"), 4)
+        elif eval_metric == "F1-score-per-class":
+            results[eval_metric] = np.round(f1_score(y_true, y_pred, average=None), 4).tolist()
         elif eval_metric == "P@min":
             results[eval_metric] = round(np.min(precision_score(y_true, y_pred, average=None)), 4)
         elif eval_metric == "r-Precision":

@@ -5,6 +5,8 @@ import pyshark
 
 baidu_proxied_file = "exp/test_dataset/realworld_dataset/www.baidu.com_proxied.pcapng"
 google_file = "exp/test_dataset/realworld_dataset/www.google.com.pcapng"
+apple_file = "exp/test_dataset/realworld_dataset/decryption/www.apple.com.pcapng"
+tiktok_file = "exp/test_dataset/realworld_dataset/decryption/www.tiktok.com.pcapng"
 
 def test_SNI_extract_1():
     capture = pyshark.FileCapture(input_file=baidu_proxied_file, display_filter="tls.handshake.type == 1")
@@ -41,7 +43,7 @@ def test_SNI_extract_2():
 
     capture.close()
 
-def test_stream_number_extract():
+def test_stream_number_extract_1():
     capture = pyshark.FileCapture(input_file=baidu_proxied_file, display_filter="tls.handshake.type == 1")
     SNIs = SNI_extract(capture)
     
@@ -54,14 +56,22 @@ def test_stream_number_extract():
     capture.close()
 
 def test_stream_extract_filter():
-    stream_numbers = []
-    display_filter = stream_extract_filter(stream_numbers)
+    tcp_stream_numbers, udp_stream_numbers = [], []
+    display_filter = stream_extract_filter(tcp_stream_numbers, udp_stream_numbers)
     target = ""
     assert display_filter == target
 
-    stream_numbers = ['1', '4', '3']
-    display_filter = stream_extract_filter(stream_numbers)
+    tcp_stream_numbers, udp_stream_numbers = ['1', '4', '3'], []
+    display_filter = stream_extract_filter(tcp_stream_numbers, udp_stream_numbers)
     target = "tcp.stream == 1 or tcp.stream == 4 or tcp.stream == 3"
+
+    tcp_stream_numbers, udp_stream_numbers = [], ['1', '4', '3']
+    display_filter = stream_extract_filter(tcp_stream_numbers, udp_stream_numbers)
+    target = "udp.stream == 1 or udp.stream == 4 or udp.stream == 3"
+
+    tcp_stream_numbers, udp_stream_numbers = ['1'], ['4', '3']
+    display_filter = stream_extract_filter(tcp_stream_numbers, udp_stream_numbers)
+    target = "tcp.stream == 1 or udp.stream == 4 or udp.stream == 3"
 
     assert display_filter == target
 
@@ -116,8 +126,66 @@ def test_SNI_exclude_filter_2():
     target = 16
     SNIs = ['www.google.com', 'mobile.events.data.microsoft.com']
     display_filter = SNI_exclude_filter(google_file, SNIs)
+    cap = pyshark.FileCapture(input_file=google_file, display_filter=display_filter, only_summaries=True, keep_packets=False)
+    cnt = packet_count(cap)
 
-    cnt = packet_count(file=google_file,
-                       display_filter=display_filter)
-
+    cap.close()
     assert target == cnt
+
+def test_h2data_SNI_intersect_1():
+    '''
+    This test covers the intersection of SNI and HTTP/2 DATA streams.
+    '''
+    SNIs = ["is1-ssl.mzstatic.com"]
+    keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
+    tcp_stream_numbers = h2data_SNI_intersect(file=apple_file, SNIs=SNIs, keylog_file=keylog_file)
+    target = {'0'}
+
+    assert tcp_stream_numbers == target
+
+def test_h2data_SNI_intersect_2():
+    '''
+    This test covers the a non-existent SNI, and the result should be empty.
+    '''
+    SNIs = ["is1-ssl.mzstatic"]
+    keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
+    tcp_stream_numbers = h2data_SNI_intersect(file=apple_file, SNIs=SNIs, keylog_file=keylog_file)
+    target = set()
+
+    assert tcp_stream_numbers == target
+
+def test_h3data_SNI_intersect_1():
+    '''
+    This test covers the intersection of SNI and HTTP/3 DATA streams.'
+    '''
+    SNIs = ["lf16-cdn-tos.tiktokcdn-us.com"]
+    keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
+    udp_stream_numbers = h3data_SNI_intersect(file=tiktok_file, SNIs=SNIs, keylog_file=keylog_file)
+
+    target = {'0'}
+
+    assert udp_stream_numbers == target
+
+def test_h3data_SNI_intersect_2():
+    '''
+    This test covers the a non-existent SNI, and the result should be empty.
+    '''
+    SNIs = ["lf16-cdn-tos.tiktokcdn-us."]
+    keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
+    udp_stream_numbers = h3data_SNI_intersect(file=tiktok_file, SNIs=SNIs, keylog_file=keylog_file)
+
+    target = set()
+
+    assert udp_stream_numbers == target
+
+def test_select_stream_with_max_packet_count():
+    """
+    This test covers the selection of the stream with the maximum packet count.
+    """
+    tcp_stream_numbers = {'1', '2', '3'}
+    result = select_stream(apple_file, tcp_stream_numbers, mapper=packet_count, criteria=max)
+
+    target = {'3'}
+
+    assert result == target
+    

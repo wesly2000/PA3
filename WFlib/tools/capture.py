@@ -11,7 +11,7 @@ sniff                    v------------------------------------------------------
 capture                  |--------------------------------------------------------------------------|
 """
 
-from selenium.common.exceptions import WebDriverException
+from selenium.common.exceptions import WebDriverException, TimeoutException
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.firefox.service import Service
@@ -23,18 +23,31 @@ import time
 import threading
 import multiprocessing
 import subprocess
-from typing import Union
+from typing import Union, Tuple, Callable, List
 from pathlib import Path
 from urllib.parse import urlparse
 import os
 import time
 import logging
 import shutil
+import asyncio
+
+from WFlib.utils.config import get_config
 
 logger = logging.getLogger('selenium')
 logger.setLevel(logging.WARN)
 
 gecko_path = shutil.which('geckodriver')
+
+config_path = Path.cwd() / 'config.ini'
+if not config_path.exists():
+    firefox_path = ""
+else:
+    config = get_config(config_path)
+    if config is None or 'firefox' not in config:
+        firefox_path = ""
+    else:
+        firefox_path = config['firefox'].get('firefox_path', fallback="")
 
 """
 This filter is a Capture Filter to filter the annoying traffic which, with high probability, is NOT related with the
@@ -44,13 +57,13 @@ the capture.
 
 The semantics of the filter is that we ONLY want TCP or UDP packets, but the following protocols are NOT considered:
 
-LLMNR (5355), MDNS (5353), SOAP (3702), NTP (123), SSDP (1900), SSH (22), RDP (3389), DOT (853), HTTP (80), Radan HTTP (8088),
+LLMNR (5355), MDNS (5353), SOAP (3702), NTP (123), SSDP (1900), SSH (22/2222), RDP (3389), DOT (853), HTTP (80), Radan HTTP (8088),
 YDService (5574), tat_agent (8186)
 
 NOTE: This filter is not exhausted, and further updates are possible in the future.
 NOTE: Plain HTTP (port 80) is excluded after some consideration, since most of the request are based on HTTPS 
 """
-common_filter = 'not (port 53 or port 22 or port 3389 or port 5355 or port 5353 or port 3702 or port 123 or port 1900 or port 853 or port 80 or port 8088 or port 5574 or port 8186) and (tcp or udp)'
+common_filter = 'not (port 53 or port 22 or port 2222 or port 3389 or port 5355 or port 5353 or port 3702 or port 123 or port 1900 or port 853 or port 80 or port 8088 or port 5574 or port 8186) and (tcp or udp)'
 
 def capture(url, iface, output_file, timeout=200, capture_filter=common_filter, ill_files=None, log_output=None, proxy_log=None):
     stop_event = multiprocessing.Event()
@@ -84,6 +97,7 @@ def capture(url, iface, output_file, timeout=200, capture_filter=common_filter, 
         options.set_preference("browser.cache.memory.enable", False)
         options.set_preference("browser.cache.offline.enable", False)
         options.set_preference("network.http.use-cache", False)
+        options.binary_location = firefox_path
 
         # Configure proxy options for Firefox
         if proxy_log is not None:
@@ -110,10 +124,18 @@ def capture(url, iface, output_file, timeout=200, capture_filter=common_filter, 
             time.sleep(2)
             stop_event.set()
             return
-            
+        
+        driver.set_page_load_timeout(timeout)
+
         try:
             driver.get(url)
-            time.sleep(timeout)
+        except TimeoutException as e:
+            if log_output is not None:
+                with open(log_output, 'a+') as f:
+                    f.write(f"The file {output_file} raises the exception: {e}\n")
+            if ill_files is not None:
+                with open(ill_files, 'a+') as f:
+                    f.write(f"{output_file}\n")
         except Exception as e:
             if log_output is not None:
                 with open(log_output, 'a+') as f:
@@ -136,7 +158,7 @@ def capture(url, iface, output_file, timeout=200, capture_filter=common_filter, 
     browse_thread.join()
     monitor_process.join()
 
-def read_host_list(file) -> list:
+def read_host_list(file) -> set:
     """
     Read the hostname list file, remove the possible duplicates, and store the results into a list.
     """
@@ -151,7 +173,7 @@ def read_host_list(file) -> list:
         else:
             return url
         
-    host_list = []
+    host_list = set()  # Use set to eliminate dups
     with open(file, 'r') as f:
         for line in f:
             stripped_line = line.strip()  # Remove leading and trailing whitespace
@@ -161,7 +183,7 @@ def read_host_list(file) -> list:
             url = stripped_line.split("#")[0].strip() # Ignore inline comments
             hostname = strip_url(url.strip())
             if hostname and hostname not in host_list:
-                host_list.append(hostname)
+                host_list.add(hostname)
 
     return host_list
 
@@ -273,8 +295,8 @@ def batch_capture(base_dir, host_list, iface,
         stdout = open(proxy_log, 'a+') if proxy_log is not None else subprocess.DEVNULL
 
         clash_process = subprocess.Popen(
-            ['/home/lxyu/clash/bin/clash-linux-amd64-debug', '-key-vmess', keylog],
-            stdout=subprocess.DEVNULL,
+            ['/home/lxyu/clash/bin/clash-linux-amd64-debug', '-key-trojan', keylog],
+            stdout=stdout,
             stderr=subprocess.STDOUT 
         )
         try:
@@ -319,6 +341,8 @@ def batch_capture(base_dir, host_list, iface,
                 keylog = f"{base_dir}/{host}/proxy_keylog.txt"
                 monitor_process = multiprocessing.Process(target=launch_proxy, kwargs={"keylog": keylog, "proxy_log": proxy_log})
                 monitor_process.start()
+
+                time.sleep(1)  # maybe waiting for proxy client to launch?
             
             capture(url=url, 
                     timeout=timeout, 
@@ -365,17 +389,15 @@ def SNI_extract(capture : Capture) -> set:
         process_packet(pkt)
     return SNIs
 
-def stream_number_extract(capture : Capture, check) -> set:
+def stream_number_extract(capture : Capture, check) -> Tuple[set, set]:
     """
     Extract all TCP stream numbers for the streams where at least one packet within satisfies
-    the condition required by the check.
+    the condition required by the check. This could be seen as a complementaty for display filter,
+    which only supports relatively simple rules.
 
     For example, if the check checks whether a TLS session is for SNI=www.baidu.com, it iterates
     over all the packets (all Client Hello's actually), if some packet contains the SNI, the tcp.stream
     numbers will be recorded.
-
-    TODO: Currently, the extractor only works for TCP-based protocols. Integrating the support for UDP will
-    be finished in the future. :)
 
     Parameter
     ---------
@@ -386,17 +408,27 @@ def stream_number_extract(capture : Capture, check) -> set:
     ------
     set : The set contains the stream numbers each of which contains at least 1 packet satisfying check.
     """
-    tcp_stream_numbers = set(pkt['TCP'].stream for pkt in capture if 'TCP' in pkt and check(pkt))
-    udp_stream_numbers = set(pkt['UDP'].stream for pkt in capture if 'UDP' in pkt and check(pkt))
+    tcp_stream_numbers, udp_stream_numbers = set(), set()
+    for pkt in capture:
+        if 'TCP' in pkt and check(pkt):
+            tcp_stream_numbers.add(pkt['TCP'].stream)
+        elif 'UDP' in pkt and check(pkt):
+            udp_stream_numbers.add(pkt['UDP'].stream)
     return tcp_stream_numbers, udp_stream_numbers
 
-def stream_extract_filter(stream_numbers : Union[list, set]):
+def stream_extract_filter(tcp_stream_numbers : Union[list, set], udp_stream_numbers : Union[list, set]):
     """
     Extract the streams with the given stream_numbers from input_file, and write the results to output_file.
     """
-    extended_stream_numbers = ["tcp.stream == " + stream_number for stream_number in stream_numbers]
-    display_filter = " or ".join(extended_stream_numbers)
+    tcp_display_filter = " or ".join(["tcp.stream == " + stream_number for stream_number in tcp_stream_numbers])
+    udp_display_filter = " or ".join(["udp.stream == " + stream_number for stream_number in udp_stream_numbers])
 
+    if tcp_display_filter == "":
+        display_filter = udp_display_filter
+    elif udp_display_filter == "":
+        display_filter = tcp_display_filter
+    else:
+        display_filter = f'{tcp_display_filter} or {udp_display_filter}'
     return display_filter
 
 def stream_exclude_filter(tcp_stream_numbers : Union[list, set], udp_stream_numbers : Union[list, set]):
@@ -419,10 +451,58 @@ def stream_exclude_filter(tcp_stream_numbers : Union[list, set], udp_stream_numb
 
     return display_filter
 
+def select_stream(pcap_file: Union[str, Path], 
+                  stream_numbers: set, 
+                  mapper: Callable[[Capture], int],
+                  criteria: Callable[[List[int]], int],
+                  proto: str = "tcp", **extra_data) -> set:
+    """
+    Select a stream from the given.pcap(ng) file. The selection is based on the given criteria over the property of the stream. 
+    The property is obtained using the mapper.
+
+    Params
+    ------
+    pcap_file : str
+        The file path to the.pcap(ng) file.
+
+    stream_numbers : set
+        The set of stream numbers to select from.
+
+    mapper : Callable[[Capture], int]
+        The mapper to obtain the property of the stream. Currently, the property could only be integers.
+
+    proto : str
+        The protocol of the stream. Currently, only "tcp" and "udp" are supported.
+
+    criteria : Callable[[List[int]], int]
+        The criteria to select the stream. The criteria is a function that takes a list of integers as input, and returns the index of the stream to select.
+
+    Returns
+    -------
+    set : The set contains ONE stream number which has the best property judged by criteria.
+    """
+    if proto not in ["tcp", "udp"]:
+        raise ValueError("proto must be either 'tcp' or 'udp'")
+    
+    if len(stream_numbers) <= 1:  # If the candidates are less than 2, no need to select.
+        return stream_numbers
+    
+    stream_property = dict()
+    for stream_number in stream_numbers:
+        stream_filter = f"{proto}.stream == " + stream_number
+        cap = pyshark.FileCapture(input_file=pcap_file, display_filter=stream_filter, **extra_data)
+        stream_property[mapper(cap)] = stream_number
+        cap.close()
+
+    selected_property = criteria(list(stream_property.keys()))
+    selected_stream_number = stream_property[selected_property]
+    # Don't use set("something"), which causing {'s', 'o', ..., 'g'}
+    # Instead, use set(["something"])
+    return set([selected_stream_number])
+
 def contains_SNI(SNIs, pkt):
     if SNIs is None or len(SNIs) == 0:
         return False
-    result = False
 
     if 'TLS' in pkt:
         tls_layer = pkt['TLS']
@@ -437,9 +517,9 @@ def contains_SNI(SNIs, pkt):
             if SNI in SNIs:
                 return True
             
-    return result
+    return False
 
-def SNI_exclude_filter(file, SNIs):
+def SNI_exclude_filter(file, SNIs, custom_parameters = None, override_prefs = None):
     """
     Create a display filter for the given .pcap file which exclude all the TCP streams that contains the SNI in SNIs.
 
@@ -458,8 +538,85 @@ def SNI_exclude_filter(file, SNIs):
     """
     if SNIs is None or len(SNIs) == 0:
         return None
-    client_hello_capture = pyshark.FileCapture(input_file=file, display_filter="tls.handshake.type == 1")
-    tcp_stream_numbers, udp_stream_numbers = stream_number_extract(capture=client_hello_capture, check=lambda pkt: contains_SNI(SNIs, pkt))
-    client_hello_capture.close()
+    
+    tcp_stream_numbers, udp_stream_numbers = SNI_stream_extract(file, SNIs, custom_parameters, override_prefs)
     display_filter = stream_exclude_filter(tcp_stream_numbers, udp_stream_numbers)
     return display_filter
+
+def SNI_stream_extract(file, SNIs, custom_parameters = None, override_prefs = None) -> Tuple[set, set]:
+    """
+    Util function: for a given file, extract the TCP/UDP streams satisfying:
+    1. It is the TLS stream with given SNIs;
+
+    Params
+    ------
+    file : str
+        The file path to the.pcap(ng) file.
+
+    SNIs : list
+        The target SNIs, each TCP stream containing the SNI is included.
+
+    Returns
+    -------
+    The sets contains the TCP and UDP stream numbers, respectively.
+    """
+    client_hello_capture = pyshark.FileCapture( input_file=file, 
+                                                display_filter="tls.handshake.type == 1", 
+                                                custom_parameters=custom_parameters,
+                                                override_prefs=override_prefs)
+    tcp_stream_numbers, udp_stream_numbers = stream_number_extract(capture=client_hello_capture, check=lambda pkt: contains_SNI(SNIs, pkt))
+    client_hello_capture.close()
+
+    return tcp_stream_numbers, udp_stream_numbers
+
+def h2data_SNI_intersect(file, SNIs, keylog_file, custom_parameters = None, override_prefs = None) -> set:
+    """
+    Util function: for a given file, extract the TCP/UDP streams satisfying:
+    1. It is the TLS stream with given SNIs;
+    2. It contains HTTP/2 DATA frames.
+
+    If override_prefs is given, keylog_file will be suppressed.
+    """
+    # HTTP/2 runs atop of TCP, no need to concern about UDP streams
+    tcp_stream_numbers_tls, _ = SNI_stream_extract(file, SNIs, custom_parameters, override_prefs)
+
+    tcp_stream_numbers_h2data = set()
+    for tcp_stream_number in tcp_stream_numbers_tls:
+        capture_h2data = pyshark.FileCapture(input_file=file, 
+                                            display_filter=f"tcp.stream eq {tcp_stream_number} and http2.type == 0",
+                                            only_summaries=True,
+                                            custom_parameters=custom_parameters,
+                                            override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)} if override_prefs is None else override_prefs)
+        for _ in capture_h2data:
+            # If it enters the loop, the stream must contains at least one HTTP/2 DATA frame
+            tcp_stream_numbers_h2data.add(tcp_stream_number)
+            break
+        capture_h2data.close()
+
+    return tcp_stream_numbers_h2data
+
+def h3data_SNI_intersect(file, SNIs, keylog_file, custom_parameters = None, override_prefs = None) -> set:
+    """
+    Util function: for a given file, extract the TCP/UDP streams satisfying:
+    1. It is the QUIC stream with given SNIs;
+    2. It contains HTTP/3 DATA frames.
+
+    If override_prefs is given, keylog_file will be suppressed.
+    """
+    # Note that Client Hello is embedded in QUIC, so we need to use tls.handshake.type == 1 to filter.
+    # HTTP/3 runs atop of UDP, no need to concern about TCP streams
+    _, udp_stream_numbers_quic = SNI_stream_extract(file, SNIs, custom_parameters, override_prefs)
+
+    udp_stream_numbers_h3data = set()
+    for udp_stream_number in udp_stream_numbers_quic:
+        capture_h3data = pyshark.FileCapture(input_file=file, 
+                                            display_filter=f"udp.stream eq {udp_stream_number} and http3.frame_type == 0",
+                                            custom_parameters=custom_parameters,
+                                            override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)} if override_prefs is None else override_prefs)
+        for pkt in capture_h3data:
+            if 'http3' in pkt:
+                udp_stream_numbers_h3data.add(udp_stream_number)
+                break
+        capture_h3data.close()
+
+    return udp_stream_numbers_h3data

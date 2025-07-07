@@ -2,65 +2,18 @@ import numpy as np
 import pyshark
 import json
 from pathlib import Path
+from typing import Union, List, Optional
 import warnings
-import multiprocessing
+import pandas as pd
 from WFlib.tools.capture import SNI_exclude_filter
+from WFlib.tools.extractor import Extractor, array_path, NpzExtractor
+import asyncio
+import nest_asyncio
+nest_asyncio.apply()
 
-class Extractor(object):
-    """
-    The class provides methods for the actual feature extraction work. This is some abstract class, and the 
-    extractors used MUST inherit it.
-    """
-    def __init__(self, name):
-        self._name = name
-        # self._buf = []
+import logging
 
-    # @property
-    # def buf(self):
-    #     return self._buf
-    
-    @property
-    def name(self):
-        return self._name
-
-    def extract(self):
-        raise NotImplementedError
-
-
-class DirectionExtractor(Extractor):
-    """
-    The class provides methods for the packet direction extraction.
-
-    Attributes
-    ----------
-    src : str
-        The source IP address for the extractor to decide ingress or egress.
-    """
-    def __init__(self, src, name="direction"):
-        super().__init__(name=name)
-        self._src = src 
-
-    def extract(self, pkt, target : list, only_summaries=True):
-        """
-        Extract the direction info and store them into target.
-
-        Params
-        ------
-        pkt : packet
-            The packet to extract the feature.
-
-        target : list
-            The variable to store features.
-        """
-        if only_summaries:
-            # When only_summaries == True, pkt.source should be used.
-            src = pkt.source
-        else:
-            if 'ip' not in pkt:
-                pass # Add some warning here
-            src = pkt['ip'].src
-
-        target.append(1 if src == self._src else -1) # 1 for egress, -1 for ingress
+logger = logging.getLogger(__name__)
 
 
 class Formatter(object):
@@ -306,8 +259,8 @@ class PcapFormatter(Formatter):
         # Iterate over all subdirectories in the base directory
         for subdir in sorted(base_dir_path.iterdir()):
             if subdir.is_dir():  # Check if it's a directory
-                print(f"Processing directory {subdir.name}")
-                host = str(subdir).split('/')[-1] #  Consider using subdir.name
+                # print(f"Processing directory {subdir.name}")
+                host = subdir.name #  Consider using subdir.name
                 for file in subdir.iterdir():
                     if file.is_file() and file.suffix in ['.pcapng', '.pcap']:  # Ensure it's a pcap(ng) file
                         display_filter = SNI_exclude_filter(file, SNIs)
@@ -342,7 +295,7 @@ class DistriPcapFormatter(PcapFormatter):
     """
     def __init__(self, length=0, only_summaries=True, keep_packets=True, display_filter=None, num_worker=4):
         super().__init__(length, only_summaries, keep_packets, display_filter)
-        self.num_worker = num_worker
+        self._num_worker = num_worker
 
     def load(self, file):
         raise NotImplementedError()
@@ -351,12 +304,24 @@ class DistriPcapFormatter(PcapFormatter):
         raise NotImplementedError()
     
     def load_and_transform(self, buf, file, *extractors : Extractor):
-        cap = pyshark.FileCapture(  input_file=file, 
-                                    display_filter=self.display_filter,
-                                    only_summaries=self._only_summaries,
-                                    keep_packets=self._keep_packets)
-        
+        # BUG: Running all pytest suite causes DistriPcapFormatter to raise
+        # RuntimeError: Event loop is already running.
+        # This error might raise with the same reason as that in Jupyter Notebook.
+        # Explicitly creating a event loop seems to (partially) solve this issue.
+
+        # This method is mentioned in https://github.com/KimiNewt/pyshark/issues/674,
+        # note that on Linux, SelectorEventLoop should be used, while ProactorEventLoop is used on Windows.
+        # However, on Windows it seems that this error does not occur due to a previous
+        # fix (https://github.com/KimiNewt/pyshark/commit/78b48d65a7b3745456c30e37b1ebac75af984657).
+        # Therefore, we only create explicit event loop when the platform is *nix.
+        # UPDATE: The issue remains, no idea about this:(
         tmp_buf = {extractor.name : [] for extractor in extractors}
+
+        cap = pyshark.FileCapture(input_file=file, 
+                                display_filter=self.display_filter,
+                                only_summaries=self._only_summaries,
+                                keep_packets=self._keep_packets)
+        
         for pkt in cap:
             for extractor in extractors:
                 extractor.extract(pkt, tmp_buf[extractor.name], only_summaries=self._only_summaries)
@@ -375,7 +340,7 @@ class DistriPcapFormatter(PcapFormatter):
             else:
                 buf[extractor.name].append(tmp_buf[extractor.name])
 
-    def batch_extract(self, base_dir, output_file, SNIs=None, *extractors: Extractor):
+    async def batch_extract(self, base_dir, output_file, SNIs=None, num_workers=8, *extractors: Extractor):
         '''
         Example
         -------
@@ -406,18 +371,23 @@ class DistriPcapFormatter(PcapFormatter):
         '''
         base_dir_path = Path(base_dir)
         subdir_list = sorted(filter(lambda subdir: subdir.is_dir(), base_dir_path.iterdir()))
-        # hosts = [subdir.name for subdir in subdir_list]
-        with multiprocessing.Manager() as manager:
-            self._raw_buf = manager.list()
-            num_workers = 6  # For testing purpose.
+        hosts = [subdir.name for subdir in subdir_list]
+        semaphore = asyncio.Semaphore(num_workers)
+        # self._raw_buf = []
+        # with multiprocessing.Manager() as manager:
+        #     self._raw_buf = manager.list()
+        #     num_workers = self._num_worker
 
-            with multiprocessing.Pool(num_workers) as pool:
-                # Note that multiprocessing uses pickle to dump the single-process task, and it re-import the task
-                # during the execution. Therefore, the single-process task must in the top-level (importable) scope.
-                # See https://stackoverflow.com/questions/72766345/attributeerror-cant-pickle-local-object-in-multiprocessing.
-                pool.starmap(single_dir_batch_extract, [(self, SNIs, subdir, self._raw_buf, *extractors) for subdir in subdir_list])
+        #     with multiprocessing.Pool(num_workers) as pool:
+        #         # Note that multiprocessing uses pickle to dump the single-process task, and it re-import the task
+        #         # during the execution. Therefore, the single-process task must in the top-level (importable) scope.
+        #         # See https://stackoverflow.com/questions/72766345/attributeerror-cant-pickle-local-object-in-multiprocessing.
+        #         pool.starmap(single_dir_batch_extract, [(self, SNIs, subdir, self._raw_buf, *extractors) for subdir in subdir_list])
 
-            self._raw_buf = list(self._raw_buf)
+        #     self._raw_buf = list(self._raw_buf)
+        tasks = [asyncio.create_task(single_dir_batch_extract(self, SNIs, subdir, semaphore, *extractors)) for subdir in subdir_list]
+        results = await asyncio.gather(*tasks)
+        self._raw_buf = list(results)
         # Merge stage
         # First, we sort self._raw_buf according to the alphabetical order of the hostnames.
         self._raw_buf.sort(key=lambda x: x[0])
@@ -435,7 +405,7 @@ class DistriPcapFormatter(PcapFormatter):
 
         self.dump(output_file)
         
-def single_dir_batch_extract(formatter : DistriPcapFormatter, SNIs : None, subdir : Path, results : list, *extractors : Extractor):
+async def single_dir_batch_extract(formatter : DistriPcapFormatter, SNIs : None, subdir : Path, semaphore: asyncio.Semaphore, *extractors : Extractor):
     """
     Extract the feature array for the subdir, and prepend the name of the host to it
     to extract the Name-Feature pair.
@@ -448,16 +418,25 @@ def single_dir_batch_extract(formatter : DistriPcapFormatter, SNIs : None, subdi
     results : list
         The pool to append all the sub-process results.
     """
-    print(f"Processing directory {subdir.name}")
-    host = subdir.name #  Consider using subdir.name
-    buf = {extractor.name : [] for extractor in extractors}
-    for file in subdir.iterdir():
-        if file.is_file() and file.suffix in ['.pcapng', '.pcap']:  # Ensure it's a pcap(ng) file
-            display_filter = SNI_exclude_filter(file, SNIs)
-            formatter.display_filter = display_filter
-            formatter.load_and_transform(buf, file, *extractors)
+    async with semaphore:
+        logger.info(f"Processing directory {subdir.name}")
+        host = subdir.name #  Consider using subdir.name
+        buf = {extractor.name : [] for extractor in extractors}
+        for file in subdir.iterdir():
+            if file.is_file() and file.suffix in ['.pcapng', '.pcap']:  # Ensure it's a pcap(ng) file
+                try:
+                    display_filter = SNI_exclude_filter(file, SNIs)
+                except Exception as e:
+                    logger.error(f"Error processing file {file}: {e}")
+                    continue
+                formatter.display_filter = display_filter
+                try: 
+                    formatter.load_and_transform(buf, file, *extractors)
+                except Exception as e:
+                    logger.error(f"Error processing file {file}: {e}")
+                    continue
 
-    results.append((host, buf))
+        return (host, buf)
 
 
 class JsonFormatter(Formatter):
@@ -507,3 +486,92 @@ class JsonFormatter(Formatter):
         Get the un-transformed feature buffer by its name.
         """
         return self._raw_buf[name]
+    
+class CsvFormatter(Formatter):
+    """
+    Convert a csv database (along with its linked array files) into a .npz dataset.
+    """
+    def __init__(self, length=1000):
+        super().__init__(length)
+
+
+    def load(self, paths: List[Union[str, Path]]):
+        self._raw_buf = [np.load(path) for path in paths]
+    
+
+    def transform(self, host : str, label : int, *extractors : NpzExtractor):
+        if host not in self._buf['hosts']:
+            self._buf['hosts'].append(host)
+
+        self._buf['labels'].append(label)
+        tmp_buf = dict()
+
+        for extractor in extractors:
+            tmp_buf[extractor.name] = []
+            # Initialize a new list for the given feature name
+            if extractor.name not in self._buf:
+                self._buf[extractor.name] = []
+
+        for extractor in extractors:
+            extractor.extract(tmp_buf[extractor.name], self._raw_buf)
+
+        # Dump features into ndarray, and append to self._buf[name]
+        for extractor in extractors: 
+            if self._length <= len(tmp_buf[extractor.name]): # Truncate
+                self._buf[extractor.name].append(np.array(tmp_buf[extractor.name][:self._length]))
+            else:
+                padding = 0
+                padding_len = self._length - len(tmp_buf[extractor.name])
+                self._buf[extractor.name].append(np.array(tmp_buf[extractor.name] + [padding] * padding_len))
+
+
+    def batch_extract(self, base_dir, db_file, protocol, output_file, SNIs=Optional[Union[list, set]], *extractors: NpzExtractor, regenerate: int=1):
+        """
+        Extract all the given features from all the files in the given base directory.
+
+        Params
+        ------
+        base_dir : str
+            The base directory to hold all the .npz files, the directory structure should be
+            the same as that created by csv_db_extract.
+
+        db_file : str
+            The csv file to store the database.
+
+        protocol : str
+            The protocol considered in the extraction.    
+
+        output_file : str
+            The file to store all the features extracted.
+
+        extractors : Extractor
+            The extractors for feature extraction.
+
+        SNIs : list | set
+            The SNIs to exclude from the extraction.
+
+        regenerate : int
+            The number of times to regenerate of a given pcap, use a value larger than 1 only when the NpzExtractor is equipped with a splitter.
+        """
+        label = 0  # Processing a hostname will increase the label by 1
+        db = pd.read_csv(db_file).query(f"protocol == '{protocol}'")[['host', 'id', 'stream', 'transport', 'sni']]
+        if SNIs is not None:
+            db = db[~db['sni'].isin(SNIs)]
+            db = db[['host', 'id', 'stream', 'transport']]
+
+        # Fetch all the hosts from the database and sort them alphabetically
+        hosts = sorted(db['host'].unique())
+
+        # Iterate over all hosts in the database
+        for host in hosts:
+            logger.info(f"Processing host: {host}, protocol: {protocol}")
+            for pcap_id in db[db['host'] == host]['id'].unique():
+                host_db = db[(db['host'] == host) & (db['id'] == int(pcap_id))]
+                paths = host_db.apply(lambda row: f'{base_dir}/{array_path(row["host"], row["id"], row["transport"], row["stream"], protocol)}', axis=1)
+
+                self.load(paths)
+                for _ in range(regenerate):
+                    self.transform(host, label, *extractors)
+            label += 1
+
+        self.dump(output_file)
