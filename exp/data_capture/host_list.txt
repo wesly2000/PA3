@@ -2,7 +2,6 @@
 # www.wikipedia.org
 # openai.com
 # www.wireshark.org
-# www.reddit.com
 # www.youtube.com
 # play.google.com
 # www.quora.com
@@ -10,32 +9,32 @@
 # gitee.com
 # telegram.org
 # zeek.org
-
-www.semanticscholar.org
-www.amazon.com
-www.netflix.com
-www.office.com
-duckduckgo.com
-www.torproject.org
-www.cnn.com
-www.apple.com
-www.dropbox.com
-stackexchange.com
-stackoverflow.com
-mathoverflow.net
-www.wikihow.com
-store.steampowered.com
-www.mozilla.org
-archive.org
-www.academia.edu
-www.oracle.com
-www.elsevier.com
+# www.semanticscholar.org
+# www.amazon.com
+# www.netflix.com
+# www.office.com
+# duckduckgo.com
+# www.torproject.org
+# www.cnn.com
+# www.apple.com
+# www.dropbox.com
+# stackexchange.com
+# stackoverflow.com
+# mathoverflow.net
+# www.wikihow.com
+# store.steampowered.com
+# www.mozilla.org
+# archive.org
+# www.academia.edu
+# www.oracle.com
+# www.elsevier.com
 www.ieee.org
 dl.acm.org
 ocw.mit.edu
 www.overleaf.com
-www.gnu.org
 music.youtube.com
 greasyfork.org
 www.v2ex.com
 www.docker.com
+www.apache.org
+www.tiktok.com
