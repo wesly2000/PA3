@@ -23,7 +23,7 @@ if not config_path.exists():
     tshark_path = "tshark"
 else:
     config = get_config(config_path)
-    if not config:
+    if config is None:
         tshark_path = "tshark"
     else:
         tshark_path = config['tshark'].get('tshark_path', fallback="tshark")
