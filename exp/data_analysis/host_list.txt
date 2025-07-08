@@ -1,13 +1,5 @@
-# gitee.com
-# github.com 
-# telegram.org
-# top.baidu.com
-# www.runoob.com
-ask.zol.com.cn
-www.dropbox.com
-www.elsevier.com
-www.feishu.cn
-www.fromgeek.com
+ai.zjnav.com
+archive.org
 ask.zol.com.cn
 chrome.pictureknow.com
 cloud.tencent.com
