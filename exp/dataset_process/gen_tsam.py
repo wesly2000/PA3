@@ -15,29 +15,23 @@ from WFlib.tools import data_processor
 
 
 def process_TSAM(sequence, maximum_load_time, max_matrix_len):
-    feature_pkts = np.zeros((2, max_matrix_len))
-    feature_size = np.zeros((2, max_matrix_len))
+    TSAM = np.zeros((2, max_matrix_len))
     for time, direction, size in sequence:
         if time == -2:
             break
         if direction > 0:
             if time >= maximum_load_time:
-                feature_pkts[0][-1] += 1
-                feature_size[0][-1] += size
+                TSAM[0][-1] += size
             else:
                 idx = int(time * (max_matrix_len - 1) / maximum_load_time)
-                feature_pkts[0][idx] += 1
-                feature_size[0][idx] += size
+                TSAM[0][idx] += size
         if direction < 0:
             if time >= maximum_load_time:
-                feature_pkts[1][-1] += 1
-                feature_size[1][-1] += size
+                TSAM[1][-1] += size
             else:
                 idx = int(time * (max_matrix_len - 1) / maximum_load_time)
-                feature_pkts[1][idx] += 1
-                feature_size[1][idx] += size
-    feature_size = feature_size / 1500.0
-    TSAM = np.array([feature_pkts, feature_size])
+                TSAM[1][idx] += size
+    TSAM = TSAM / 1500.0
     return TSAM
 
 
