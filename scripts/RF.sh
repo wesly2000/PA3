@@ -1,23 +1,18 @@
-dataset=CW
+dataset=${1:-CW}
+device=${2:-"cuda:0"}
+batch_size=${3:-200}
 
-for filename in train valid test
-do 
-    python -u exp/dataset_process/gen_tam.py \
-      --dataset ${dataset} \
-      --seq_len 5000 \
-      --in_file ${filename}
-done
+feature=tsam
+seq_len=1800
 
 python -u exp/train.py \
   --dataset ${dataset} \
   --model RF \
-  --device cuda:0 \
-  --train_file tam_train \
-  --valid_file tam_valid \
-  --feature TAM \
-  --seq_len 1800 \
+  --device ${device} \
+  --feature ${feature} \
+  --seq_len ${seq_len} \
   --train_epochs 30 \
-  --batch_size 200 \
+  --batch_size ${batch_size} \
   --learning_rate 5e-4 \
   --optimizer Adam \
   --eval_metrics Accuracy Precision Recall F1-score \
@@ -27,10 +22,9 @@ python -u exp/train.py \
 python -u exp/test.py \
   --dataset ${dataset} \
   --model RF \
-  --device cuda:0 \
-  --test_file tam_test \
-  --feature TAM \
-  --seq_len 1800 \
+  --device ${device} \
+  --feature ${feature} \
+  --seq_len ${seq_len} \
   --batch_size 256 \
   --eval_metrics Accuracy Precision Recall F1-score \
   --load_name max_f1
