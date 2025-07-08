@@ -1,14 +1,14 @@
 dataset=${1:-CW}
-device=${2:-"cuda:1"}
+device=${2:-"cuda:0"}
 checkpoints=${3:-normal}
 
-seq_len=5000
-feature=hsdbs_bin
+feature=tsam
+seq_len=1800
 
 python -u exp/test_specific.py \
   --dataset ${dataset} \
   --checkpoints ${checkpoints} \
-  --model DF \
+  --model RF \
   --device ${device} \
   --feature ${feature} \
   --seq_len ${seq_len} \
