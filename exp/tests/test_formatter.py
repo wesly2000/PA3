@@ -1,4 +1,4 @@
-from WFlib.tools.extractor import PcapDirExtractor, NpzHSDBSExtractor
+from WFlib.tools.extractor import PcapDirExtractor, NpzHSDBSExtractor, NpzRawExtractor
 from WFlib.tools.formatter import *
 from exp.tests.fixture import npz_buffers
 
@@ -465,6 +465,72 @@ def test_CsvFormatter_2(npz_buffers):
         "labels": np.array([0]), 
         "hsdbs": np.array([
             [200, 300, -400, -200, -100]
+        ])
+    }
+
+    for k, v in loaded_data.items():
+        assert np.all(target[k] == v)
+
+
+def test_CsvFormatter_3(npz_buffers):
+    """
+    This test covers the use of NpzRawExtractor, and no padding is performed.
+    """
+    formatter = CsvFormatter(length=5)
+
+    extractor = NpzRawExtractor(features=["length", "direction", "timestamp"])
+
+    label = 0
+    hosts = ["www.baidu.com"]
+
+    formatter.load([npz_buffer for npz_buffer in npz_buffers])
+    formatter.transform(hosts[label], label, extractor)
+
+    # Create an in-memory bytes buffer
+    buffer = io.BytesIO()
+    formatter.dump(buffer)
+
+    buffer.seek(0)  # Move to the start of the buffer
+    loaded_data = np.load(buffer)
+
+    target = {
+        "hosts" : np.array(hosts), 
+        "labels": np.array([0]), 
+        "raw": np.array([
+            [(0, 1, 132), (1, 1, 132), (2, -1, 31), (3, 1, 132), (4,-1, 20)]
+        ])
+    }
+
+    for k, v in loaded_data.items():
+        assert np.all(target[k] == v)
+
+
+def test_CsvFormatter_4(npz_buffers):
+    """
+    This test covers the use of NpzRawExtractor, and padding (-2, -2, -2) is performed.
+    """
+    formatter = CsvFormatter(length=30)
+
+    extractor = NpzRawExtractor(features=["length", "direction", "timestamp"])
+
+    label = 0
+    hosts = ["www.baidu.com"]
+
+    formatter.load([npz_buffer for npz_buffer in npz_buffers])
+    formatter.transform(hosts[label], label, extractor)
+
+    # Create an in-memory bytes buffer
+    buffer = io.BytesIO()
+    formatter.dump(buffer)
+
+    buffer.seek(0)  # Move to the start of the buffer
+    loaded_data = np.load(buffer)
+
+    target = {
+        "hosts" : np.array(hosts), 
+        "labels": np.array([0]), 
+        "raw": np.array([
+            [(0, 1, 132), (1, 1, 132), (2, -1, 31), (3, 1, 132), (4, -1, 20), (5, 1, 132), (6, -1, 32), (7, 1, 132), (8, -1, 20), (9, -1, 132), (10, 1, 20), (11, -1, 132), (12, 1, 20), (13, -1, 132), (14, 1, 20), (15, -1, 132), (16, 1, 32), (17, -1, 132), (18, 1, 20), (19, -1, 132), (20, 1, 20), (21, -1, 132), (22, 1, 20), (23, 1, 132), (24, -1, 20), (25, 1, 132), (26, -1, 20), (-2, -2, -2), (-2, -2, -2), (-2, -2, -2)]
         ])
     }
 

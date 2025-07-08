@@ -520,7 +520,10 @@ class CsvFormatter(Formatter):
             if self._length <= len(tmp_buf[extractor.name]): # Truncate
                 self._buf[extractor.name].append(np.array(tmp_buf[extractor.name][:self._length]))
             else:
-                padding = 0
+                if extractor.name == 'raw':
+                    padding = tuple([-2] * len(extractor.features))  # Awkward padding, but should be useful
+                else:
+                    padding = 0
                 padding_len = self._length - len(tmp_buf[extractor.name])
                 self._buf[extractor.name].append(np.array(tmp_buf[extractor.name] + [padding] * padding_len))
 
