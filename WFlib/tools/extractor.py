@@ -814,13 +814,16 @@ class NpzRawExtractor(NpzExtractor):
     lead to a 2D feature vector. Note that whether or NOT the timestamp is included in the features, the resulting feature is
     ALWAYS sorted according to timestamp by ascending order.
     """
-    supported_features = ['direction', 'length', 'timestamp']
+    supported_features = {'direction', 'length', 'timestamp'}
 
     def __init__(self, features: Union[Set[str], List[str]], name: str='raw', criteria: Optional[Union[List[Criterion], Criterion]]=None):
         super().__init__(name=name, criteria=criteria)
         features = set(features)
         assert features.issubset(self.supported_features), f"Unsupported features: {features - self.supported_features}"
-        self.features = sorted(features)
+        features = list(features)
+        # Sort features in order: timestamp, direction, length
+        feature_order = {'timestamp': 0, 'direction': 1, 'length': 2}
+        self.features = sorted(features, key=lambda x: feature_order[x])
 
     def single_stream_extract(self, npz_file: NpzFile) -> List[tuple]:
         timestamp_arr = npz_file['timestamp']
