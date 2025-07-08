@@ -68,37 +68,21 @@ np.random.seed(fix_seed)
 
 # Argument parser for command-line options, arguments, and sub-commands
 parser = argparse.ArgumentParser(description="Feature extraction")
-parser.add_argument("--dataset", "-d", type=str, required=True, default="gpts", help="Dataset name")
-parser.add_argument("--in_file", type=str, default="train", help="input file")
+parser.add_argument("--output_file", "-o", type=str, required=True, help="output file")
+parser.add_argument("--input_file", "-i", type=str, required=True, help="input file")
 parser.add_argument("-t", type=int, default=80)
 parser.add_argument("-l", type=int, default=1800)
 
 
 # Parse arguments
 args = parser.parse_args()
-in_path = Path("./data/split", args.dataset)
-if not in_path.exists():
-    raise FileNotFoundError(f"The dataset path does not exist: {in_path.resolve()}")
 
-# Define output file path
-if args.t != 80 or args.l != 1800:
-    out_file = in_path / f"tsam_{args.t}_{args.l}_{args.in_file}.npz"
-else:
-    out_file = in_path / f"tsam_{args.in_file}.npz"
+data = np.load(args.input_file, allow_pickle=True)
+X = data["raw"]
+labels = data["labels"]
+hosts = data["hosts"]
 
-# # If the output file does not exist, process the input file
-if not os.path.exists(out_file):
-    # Load dataset from the specified .npz file
-    data = np.load(in_path / f"{args.in_file}.npz", allow_pickle=True)
-    X = data["X"]
-    y = data["y"]
-    p = data["p"]
-    # Extract the Traffic Size Aggregation Matrix (TSAM)
-    X = extract_TSAM(X, args.t, args.l)
-    # Print processing information
-    print(f"{args.in_file} process done: X = {X.shape}, y = {y.shape}")
-    # Save the processed data into a new .npz file
-    np.savez(out_file, X=X, y=y, p=p)
-else:
-    # Print a message if the output file already exists
-    print(f"{out_file} has been generated.")
+# Extract the Traffic Size Aggregation Matrix (TSAM)
+tsam = extract_TSAM(X, args.t, args.l)
+# Save the processed data into a new .npz file
+np.savez(args.output_file, tsam=tsam, labels=labels, hosts=hosts)
