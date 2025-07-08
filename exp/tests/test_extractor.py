@@ -551,3 +551,20 @@ def test_RatioSplitter_1():
     mean = 90
     k = 10
     assert np.abs(np.mean(stream_length) - mean) < k * sigma
+
+
+def test_NpzRawExtractor_1(npz_buffers):
+    """
+    Test the NpzRawExtractor class extract method.
+    """
+    extractor = NpzRawExtractor(features=['direction', 'length'])
+    result = []
+    npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
+    extractor.extract(result, npz_files)
+    
+    target = [
+        (1, 132), (1, 132), (-1, 31), (1, 132), (-1, 20), (1, 132), (-1, 32), (1, 132), (-1, 20), (-1, 132), (1, 20), (-1, 132), (1, 20), (-1, 132), (1, 20), (-1, 132), (1, 32), (-1, 132), (1, 20), (-1, 132), (1, 20), (-1, 132), (1, 20), (1, 132), (-1, 20), (1, 132), (-1, 20),
+    ]
+    
+    assert result == target
+    

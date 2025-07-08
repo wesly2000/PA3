@@ -796,3 +796,48 @@ class NpzDirExtractor(NpzExtractor):
         dir_lengths.sort(key=lambda x: x[0])
         # Use the sign function of the lengths to get the direction
         target += [np.sign(size) for _, size in dir_lengths]
+
+
+class NpzRawExtractor(NpzExtractor):
+    """
+    This class extracts one, or multiple raw features from the .npz files, i.e., features among direction, length and timestamp.
+    Note that this class is originally designed for connecting to TSAM/TAM generators in exp/dataset_process/gen_tsam.py and
+    exp/dataset_process/gen_tam.py, respectively.
+
+    The caller should be careful that this class generates features in 2D or 3D dimensions, where the corresponding Formatter
+    MUST consider padding proper values if the dimension is larger than 1.
+
+    The return, when the dimension is larger than 1, is a list of tuples, where each tuple contains the feature vector of a
+    single packet.
+
+    Dimension is specified using the name of raw feature. For instance, passing ['direction', 'length'] to the features arg would
+    lead to a 2D feature vector. Note that whether or NOT the timestamp is included in the features, the resulting feature is
+    ALWAYS sorted according to timestamp by ascending order.
+    """
+    supported_features = ['direction', 'length', 'timestamp']
+
+    def __init__(self, features: Union[Set[str], List[str]], name: str='raw', criteria: Optional[Union[List[Criterion], Criterion]]=None):
+        super().__init__(name=name, criteria=criteria)
+        features = set(features)
+        assert features.issubset(self.supported_features), f"Unsupported features: {features - self.supported_features}"
+        self.features = sorted(features)
+
+    def single_stream_extract(self, npz_file: NpzFile) -> List[tuple]:
+        timestamp_arr = npz_file['timestamp']
+        feature_arrs = [npz_file[feature] for feature in self.features]
+        return [(timestamp, tuple(features)) for timestamp, *features in zip(timestamp_arr, *feature_arrs)]
+
+    def extract(self, target: list, npz_file_list: List[NpzFile]):
+        streams = []
+        for npz_file in npz_file_list:
+            streams.append(self.single_stream_extract(npz_file))
+
+        for criterion in self.criteria:
+            streams = criterion.select(streams)
+
+        raw_features = []
+        for stream in streams:
+            raw_features.extend(stream)
+
+        raw_features.sort(key=lambda x: x[0])
+        target += [feature for _, feature in raw_features]
