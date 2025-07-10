@@ -1,4 +1,4 @@
-from typing import Union, List, Set, Optional, Iterable, Tuple, Callable
+from typing import Union, List, Set, Optional, Iterable, Tuple, Callable, Dict, Any
 import numpy as np
 from numpy.lib.npyio import NpzFile
 import pandas as pd
@@ -477,6 +477,19 @@ class NpzExtractor(Extractor):
 
     def extract(self, target: list, npz_file_list: List[NpzFile]):
         raise NotImplementedError
+    
+    def load_streams(self, npz_file_list: List[NpzFile]) -> List[Dict[str, np.ndarray]]:
+        """
+        A stream is a dict of timestamp, direction, length arrays.
+        """
+        streams = []
+        for npz_file in npz_file_list:
+            stream = {}
+            stream['timestamp'] = npz_file['timestamp']
+            stream['direction'] = npz_file['direction']
+            stream['length'] = npz_file['length']
+            streams.append(stream)
+        return streams
 
 
 class CsvDirExtractor(CsvExtractor):
@@ -659,16 +672,20 @@ class LengthCriterion(Criterion):
         return [features[i] for i in top_k_indices]
     
 
-class LengthExcludeCriterion(Criterion):
+class LengthExcludeCriterion(CheckCriterion):
     """
     The criterion that excludes the streams with the number of frames smaller than the given threshold.
     """
     def __init__(self, threshold: int = 32):
         self.threshold = threshold
+        def condition(length):
+            return length > self.threshold
+        super().__init__(name="length_exclude", condition=condition)
+
+    def feature_map(self, stream: Dict[str, np.ndarray]):
+        return len(stream['length'])
     
-    def select(self, features: List[List[tuple]]) -> List[List[tuple]]:
-        return [feature for feature in features if len(feature) > self.threshold]
-    
+
 
 class HSDBSExcludeCriterion(CheckCriterion):
     """
@@ -800,7 +817,7 @@ class VmessStripper(Stripper):
 
 class NpzDirExtractor(NpzExtractor):
     """
-    The class that extracts direction feature from .npz files.
+    The class that extracts directional packet length feature from .npz files.
     """
     def __init__(self, name="direction", stripper: Optional[Stripper]=None, criteria: Optional[Union[List[Criterion], Criterion]]=None, split_threshold: int=100, splitter: Optional[Splitter]=None):
         # COMMENT: shall we add split_weight in Splitter class? Then extractor only need to add split_threshold and a splitter.
@@ -809,10 +826,8 @@ class NpzDirExtractor(NpzExtractor):
         self.split_threshold = split_threshold
         self.splitter = splitter
 
-    def single_stream_extract(self, npz_file: NpzFile) -> List[tuple]:
-        direction_arr = npz_file['direction']
-        timestamp_arr = npz_file['timestamp']
-        length_arr = npz_file['length']
+    def single_stream_extract(self, stream: Dict[str, np.ndarray]) -> List[tuple]:
+        direction_arr, timestamp_arr, length_arr = stream['direction'], stream['timestamp'], stream['length']
 
         if self.stripper:
             direction_arr = self.stripper.strip(direction_arr)
@@ -822,12 +837,12 @@ class NpzDirExtractor(NpzExtractor):
         return [(timestamp, direction * length) for timestamp, direction, length in zip(timestamp_arr, direction_arr, length_arr)]  
 
     def extract(self, target: list, npz_file_list: List[NpzFile]):
-        streams = []
-        for npz_file in npz_file_list:
-            streams.append(self.single_stream_extract(npz_file))
+        streams = self.load_streams(npz_file_list)
 
         for criterion in self.criteria:
             streams = criterion.select(streams)
+
+        streams = [self.single_stream_extract(stream) for stream in streams]
 
         # For each stream that longer than split_threshold, generate split it into multiple streams
         if self.splitter is not None:
@@ -845,8 +860,7 @@ class NpzDirExtractor(NpzExtractor):
             dir_lengths.extend(stream)
 
         dir_lengths.sort(key=lambda x: x[0])
-        # Use the sign function of the lengths to get the direction
-        target += [np.sign(size) for _, size in dir_lengths]
+        target += [size for _, size in dir_lengths]
 
 
 class NpzRawExtractor(NpzExtractor):
@@ -876,22 +890,19 @@ class NpzRawExtractor(NpzExtractor):
         feature_order = {'timestamp': 0, 'direction': 1, 'length': 2}
         self.features = sorted(features, key=lambda x: feature_order[x])
 
-    def single_stream_extract(self, npz_file: NpzFile) -> List[tuple]:
-        timestamp_arr = npz_file['timestamp']
-        feature_arrs = [npz_file[feature] for feature in self.features]
+    def single_stream_extract(self, stream: Dict[str, np.ndarray]) -> List[tuple]:
+        timestamp_arr, feature_arrs = stream['timestamp'], [stream[feature] for feature in self.features]
         return [(timestamp, tuple(features)) for timestamp, *features in zip(timestamp_arr, *feature_arrs)]
 
     def extract(self, target: list, npz_file_list: List[NpzFile]):
-        streams = []
-        for npz_file in npz_file_list:
-            streams.append(self.single_stream_extract(npz_file))
+        streams = self.load_streams(npz_file_list)
 
         for criterion in self.criteria:
             streams = criterion.select(streams)
 
         raw_features = []
         for stream in streams:
-            raw_features.extend(stream)
+            raw_features.extend(self.single_stream_extract(stream))
 
         raw_features.sort(key=lambda x: x[0])
         target += [feature for _, feature in raw_features]

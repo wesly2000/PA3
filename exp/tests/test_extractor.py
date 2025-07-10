@@ -368,7 +368,7 @@ def test_NpzDirExtractor_1(npz_buffers):
     extractor.extract(result, npz_files)
     target = np.array([1, 1, -1, 1, -1, 1, -1, 1, -1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, 1, -1, 1, -1])
 
-    assert np.all(result == target)
+    assert np.all(np.sign(result) == target)
 
 def test_NpzDirExtractor_2(npz_buffers):
     """
@@ -380,20 +380,20 @@ def test_NpzDirExtractor_2(npz_buffers):
     extractor.extract(result, npz_files)
     target = np.array([1, 1, -1, 1, -1, 1, 1, -1, -1, 1, -1, 1, -1, 1, -1, -1, 1, -1, 1, 1, 1, -1, 1, -1])
 
-    assert np.all(result == target)
+    assert np.all(np.sign(result) == target)
 
 
 def test_NpzDirExtractor_3(npz_buffers):
     """
     Test reading a .npz file and extract the direction feature, this test covers the case that the criterion option is set to HSDBSCriterion selecting the top-k streams.
     """
-    extractor = NpzDirExtractor(stripper=VmessStripper(), criteria=HSDBSCriterion(k=1))
+    extractor = NpzDirExtractor(stripper=VmessStripper(), criteria=HSDBSCriterion(k=1, threshold=0))
     result = []
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
     extractor.extract(result, npz_files)
     target = np.array([1, -1, 1, 1, -1, -1, 1, -1, 1])
 
-    assert np.all(result == target)
+    assert np.all(np.sign(result) == target)
 
 
 def test_NpzDirExtractor_4(npz_buffers):
@@ -417,7 +417,8 @@ def test_NpzDirExtractor_5(npz_buffers):
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
     extractor.extract(result, npz_files)
 
-    assert result == [1, -1, 1, -1, 1, -1, -1, 1, -1, 1]
+    target = np.array([1, -1, 1, -1, 1, -1, -1, 1, -1, 1])
+    assert np.all(np.sign(result) == target)
 
 
 def test_NpzDirExtractor_6(npz_buffers):
@@ -445,7 +446,7 @@ def test_NpzDirExtractor_6(npz_buffers):
     result = []
     extractor.extract(result, npz_files)
 
-    assert len(result) == 120 and np.all(np.array(result) == 1)
+    assert len(result) == 120 and np.all(np.sign(result) == 1)
 
     split_prob = [.5, .5]
     weights = [[0.5, 0.5], [0.3, 0.7]]
@@ -455,7 +456,7 @@ def test_NpzDirExtractor_6(npz_buffers):
         )
     result = []
     extractor.extract(result, npz_files)
-    assert len(result) == 120 and np.all(np.array(result) == 1)
+    assert len(result) == 120 and np.all(np.sign(result) == 1)
 
     split_prob = [1.0, 0.0, 0.0]
     weights = [None, [0.5, 0.5], [0.3, 0.7]]
@@ -465,7 +466,7 @@ def test_NpzDirExtractor_6(npz_buffers):
         )
     result = []
     extractor.extract(result, npz_files)
-    assert len(result) == 100 and np.all(np.array(result) == 1)
+    assert len(result) == 100 and np.all(np.sign(result) == 1)
 
     # The stream is shorter than split_threshold, so it should not be split
     split_prob = [.5, .5]
@@ -476,7 +477,7 @@ def test_NpzDirExtractor_6(npz_buffers):
         )
     result = []
     extractor.extract(result, npz_files)
-    assert len(result) == 100 and np.all(np.array(result) == 1)
+    assert len(result) == 100 and np.all(np.sign(result) == 1)
 
     split_prob = [1.0]
     weights = [[0.4, 0.2, 0.2, 0.2]]
@@ -486,7 +487,7 @@ def test_NpzDirExtractor_6(npz_buffers):
         )
     result = []
     extractor.extract(result, npz_files)
-    assert len(result) == 160 and np.all(np.array(result) == 1)
+    assert len(result) == 160 and np.all(np.sign(result) == 1)
 
 
 def test_WeightSplitter_1():
