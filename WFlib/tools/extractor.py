@@ -238,18 +238,59 @@ class Criterion():
     """
     The class that provides the criterion for selecting the top-k streams. All the criteria should inherit this class,
     which must implement the select method.
-
-    Attributes
-    ----------
-    k : int
-        The number of streams to select. If k <= 0, all the streams will be selected.
     """
-    def __init__(self, k:int=0):
-        self.k = k
+    def __init__(self, name: str):
+        self.name = name
 
-    def select(self, features: Iterable) -> Iterable:
+    def select(self, streams: List[Dict[str, np.ndarray]]) -> List[Dict[str, np.ndarray]]:
         raise NotImplementedError
+    
 
+class SortCriterion(Criterion):
+    """
+    The abstract class that provides the criterion to select a given range of streams whose
+    feature provided and sorted by the criterion.
+
+    One common example is the length criterion, which selects the top-k streams with the largest length.
+    """
+    def __init__(self, name: str, slice: slice):
+        super().__init__(name)
+        self.slice = slice
+
+    def feature_map(self, stream: Dict[str, np.ndarray]):
+        """
+        Map the stream to a feature, which MUST be compatible in sort method.
+        """
+        raise NotImplementedError
+    
+    def select(self, streams: List[Dict[str, np.ndarray]]) -> List[Dict[str, np.ndarray]]:
+        """
+        Select the streams according to the criterion. Note that the sorting order is ALWAYS ascending.
+        """
+        sorted_streams = sorted(streams, key=self.feature_map)
+        return sorted_streams[self.slice]
+    
+
+class CheckCriterion(Criterion):
+    """
+    The abstract class that provides the criterion to check if a stream satisfies the given condition.
+    """
+    def __init__(self, name: str, condition: Callable[[Any], bool]):
+        super().__init__(name)
+        self.condition = condition
+
+    def feature_map(self, stream: Dict[str, np.ndarray]):
+        """
+        Map the stream to a feature, which MUST be compatible in the condition.
+        """
+        raise NotImplementedError
+    
+    def select(self, streams: List[Dict[str, np.ndarray]]) -> List[Dict[str, np.ndarray]]:
+        """
+        Select the streams according to the criterion.
+        """
+        return [stream for stream in streams if self.condition(self.feature_map(stream))]
+    
 
 class Splitter():
     """
