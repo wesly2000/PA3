@@ -670,7 +670,7 @@ class LengthExcludeCriterion(Criterion):
         return [feature for feature in features if len(feature) > self.threshold]
     
 
-class BSExcludeCriterion(Criterion):
+class HSDBSExcludeCriterion(CheckCriterion):
     """
     The criterion that excludes the streams with burst size falls in the given range.
     """
@@ -678,20 +678,19 @@ class BSExcludeCriterion(Criterion):
         self.lower_bounds = lower_bounds
         self.upper_bounds = upper_bounds
         self.threshold = threshold
+        def condition(feature):
+            in_range = (self.lower_bounds <= feature) & (feature <= self.upper_bounds)
+            return not in_range.any()
+        super().__init__(name="hsdbs_exclude", condition=condition)
 
-    def select(self, features: List[List[tuple]]) -> List[List[tuple]]:
-        
-        # Original list comprehension version:
-        # return [feature for feature in features if not (self.lower_bounds <= sum(abs(size) for _, size in feature) & (sum(abs(size) for _, size in feature) <= self.upper_bounds)).any()]
-        
-        # Expanded for-loop version for debugging
-        result = []
-        for feature in features:
-            total_size = sum(abs(size) - self.threshold for _, size in feature if abs(size) > self.threshold)
-            in_range = (self.lower_bounds <= total_size) & (total_size <= self.upper_bounds)
-            if not in_range.any():
-                result.append(feature)
-        return result
+
+    def feature_map(self, stream: Dict[str, np.ndarray]):
+        length = stream['length']
+        return np.sum(length[length > self.threshold] - self.threshold)
+    
+
+    def select(self, streams: List[Dict[str, np.ndarray]]) -> List[Dict[str, np.ndarray]]:
+        return super().select(streams)
 
 
 class NpzHSDBSExtractor(NpzExtractor):
