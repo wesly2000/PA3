@@ -617,20 +617,30 @@ class PcapDeltaExtractor(PcapExtractor):
         super().__init__(name=name)
     
 
-class HSDBSCriterion(Criterion):
+class HSDBSCriterion(SortCriterion):
     """
     The criterion that selects the top-k streams by Header Stripped Directional Burst Size (HSDBS) feature.
     """
-    def __init__(self, k:int=0):
+    def __init__(self, k:int=0, threshold:int=40):
         self.k = k
+        self.threshold = threshold
+        if k > 0:
+            _slice = slice(-k, None)
+            super().__init__(name="hsdbs", slice=_slice)
 
-    def select(self, features: List[List[tuple]]) -> List[List[tuple]]:
+    def feature_map(self, stream: Dict[str, np.ndarray]):
+        """
+        Map the stream to a feature, which MUST be compatible in sort method.
+        """
+        length = stream['length']
+        return np.sum(length[length > self.threshold] - self.threshold)
+    
+    
+    def select(self, streams: List[Dict[str, np.ndarray]]) -> List[Dict[str, np.ndarray]]:
         if self.k <= 0:
-            return features
-        
-        feature_sizes = [(i, sum(abs(size) for _, size in feature)) for i, feature in enumerate(features)]
-        top_k_indices = [i for i, _ in sorted(feature_sizes, key=lambda x: x[1], reverse=True)[:self.k]]
-        return [features[i] for i in top_k_indices]
+            return streams
+        else:
+            return super().select(streams)
     
 
 class LengthCriterion(Criterion):
