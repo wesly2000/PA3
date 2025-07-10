@@ -712,8 +712,8 @@ class NpzHSDBSExtractor(NpzExtractor):
         self.threshold = threshold
         self.ignore_control_packets = ignore_control_packets
 
-    def single_stream_extract(self, npz_file: NpzFile) -> List[tuple]:
-        direction_arr, length_arr, timestamp_arr = npz_file['direction'], npz_file['length'], npz_file['timestamp']
+    def single_stream_extract(self, stream: Dict[str, np.ndarray]) -> List[tuple]:
+        direction_arr, length_arr, timestamp_arr = stream['direction'], stream['length'], stream['timestamp']
 
         if self.ignore_control_packets:
             # The ignore_control_packets option is used to filter out control TCP packets, e.g., SYN, ACK, etc., before creating bursts. The feature helps to maintain the burst application layer semantics.
@@ -745,12 +745,13 @@ class NpzHSDBSExtractor(NpzExtractor):
     
 
     def extract(self, target: list, npz_file_list: List[NpzFile]):
-        stream_bursts = []
-        for npz_file in npz_file_list:
-            stream_bursts.append(self.single_stream_extract(npz_file))
-        
+        streams = self.load_streams(npz_file_list)
         for criterion in self.criteria:
-            stream_bursts = criterion.select(stream_bursts)
+            streams = criterion.select(streams)
+        
+        stream_bursts = []
+        for stream in streams:
+            stream_bursts.append(self.single_stream_extract(stream))
 
         bursts = []
         for stream_burst in stream_bursts:
