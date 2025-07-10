@@ -656,20 +656,24 @@ class HSDBSCriterion(SortCriterion):
             return super().select(streams)
     
 
-class LengthCriterion(Criterion):
+class LengthCriterion(SortCriterion):
     """
     The criterion that selects the top-k streams by stream length feature.
     """
     def __init__(self, k:int=0):
         self.k = k
+        if k > 0:
+            _slice = slice(-k, None)
+            super().__init__(name="length", slice=_slice)
 
-    def select(self, features: List[List[tuple]]) -> List[List[tuple]]:
+    def feature_map(self, stream: Dict[str, np.ndarray]):
+        return len(stream['length'])
+    
+    def select(self, streams: List[Dict[str, np.ndarray]]) -> List[Dict[str, np.ndarray]]:
         if self.k <= 0:
-            return features
-        
-        feature_lengths = [(i, len(feature)) for i, feature in enumerate(features)]
-        top_k_indices = [i for i, _ in sorted(feature_lengths, key=lambda x: x[1], reverse=True)[:self.k]]
-        return [features[i] for i in top_k_indices]
+            return streams
+        else:
+            return super().select(streams)
     
 
 class LengthExcludeCriterion(CheckCriterion):

@@ -572,3 +572,19 @@ def test_NpzRawExtractor_1(npz_buffers):
     
     assert result == target
     
+
+def test_NpzRawExtractor_2(npz_buffers):
+    """
+    Test the NpzRawExtractor class extract method using LengthCriterion.
+    """
+    extractor = NpzRawExtractor(features=['direction', 'length'], criteria=LengthCriterion(k=2))
+    result = []
+    npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
+    extractor.extract(result, npz_files)
+
+    target = [
+        (1, 132), (1, 132), (-1, 31), (1, 132), (-1, 20), (1, 132), (-1, 32), (1, 132), (-1, 20), (-1, 132), (1, 20), (-1, 132), (1, 20), (-1, 132), (1, 20), (1, 132), (-1, 20), (1, 132), (-1, 20)  
+    ]
+    
+    assert result == target
+    
