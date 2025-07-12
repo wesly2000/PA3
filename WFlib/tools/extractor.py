@@ -843,12 +843,9 @@ class NpzDirExtractor(NpzExtractor):
     """
     The class that extracts directional packet length feature from .npz files.
     """
-    def __init__(self, name="direction", stripper: Optional[Stripper]=None, criteria: Optional[Union[List[Criterion], Criterion]]=None, split_threshold: int=100, splitter: Optional[Splitter]=None):
-        # COMMENT: shall we add split_weight in Splitter class? Then extractor only need to add split_threshold and a splitter.
+    def __init__(self, name="direction", stripper: Optional[Stripper]=None, criteria: Optional[Union[List[Criterion], Criterion]]=None):
         super().__init__(name=name, criteria=criteria)
         self.stripper = stripper
-        self.split_threshold = split_threshold
-        self.splitter = splitter
 
     def single_stream_extract(self, stream: Dict[str, np.ndarray]) -> List[tuple]:
         direction_arr, timestamp_arr, length_arr = stream['direction'], stream['timestamp'], stream['length']
@@ -867,17 +864,6 @@ class NpzDirExtractor(NpzExtractor):
             streams = criterion.select(streams)
 
         streams = [self.single_stream_extract(stream) for stream in streams]
-
-        # For each stream that longer than split_threshold, generate split it into multiple streams
-        if self.splitter is not None:
-            split_streams = []
-            for stream in streams:
-                if len(stream) > self.split_threshold:
-                    split_stream = self.splitter.split(stream)
-                    split_streams.extend(split_stream)
-                else:
-                    split_streams.append(stream)
-            streams = split_streams
 
         if self.stripper is not None:
             streams = [self.stripper.strip(stream) for stream in streams]
