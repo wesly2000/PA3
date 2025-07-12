@@ -801,23 +801,43 @@ class NpzHSDBSExtractor(NpzExtractor):
 
 class Stripper():
     """
-    The class that strips some elements from the original features.
-    """
-    def __init__(self, exclude_indices: List[int]):
-        self.exclude_indices = exclude_indices
+    The class that strips some elements from the original features. 
 
-    def strip(self, feature: np.ndarray) -> np.ndarray:
+    WARNING: Stripper could only be used for packet-wise features, e.g., direction, packet length, packet timestamp, etc.. Moreover, the caller MUST not filter out the packets according to some criterion. For instance, please do NOT use Stripper when extracting threshold > 0. Future versions might support such cases.
+    """
+    def __init__(self, protocol: str='abstract'):
+        self.protocol = protocol
+
+    def searching(self, feature: Iterable) -> Iterable:
+        """
+        The method that decide the proper indices to be stripped.
+        """
         raise NotImplementedError
+
+    def strip(self, feature: Iterable) -> Iterable:
+        exclude_indices = self.searching(feature)
+        return [feature[i] for i in range(len(feature)) if i not in exclude_indices]
     
 class VmessStripper(Stripper):
     """
     The class that strips the VMess feature from the original features.
     """
     def __init__(self):
-        super().__init__(exclude_indices=[3])
-        
-    def strip(self, feature: np.ndarray) -> np.ndarray:
-        return np.delete(feature, self.exclude_indices)
+        super().__init__(protocol='vmess')
+
+    def searching(self, feature: Iterable) -> Iterable:
+        return [3, 6, 7]
+    
+
+class ShadowsocksStripper(Stripper):
+    """
+    The class that strips the Shadowsocks feature from the original features.
+    """
+    def __init__(self):
+        super().__init__(protocol='shadowsocks')
+
+    def searching(self, feature: Iterable) -> Iterable:
+        return [3, 4, 7, 8]
 
 class NpzDirExtractor(NpzExtractor):
     """
@@ -858,6 +878,9 @@ class NpzDirExtractor(NpzExtractor):
                 else:
                     split_streams.append(stream)
             streams = split_streams
+
+        if self.stripper is not None:
+            streams = [self.stripper.strip(stream) for stream in streams]
 
         dir_lengths = []
         for stream in streams:
