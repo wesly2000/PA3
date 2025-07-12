@@ -370,7 +370,7 @@ def test_NpzDirExtractor_1(npz_buffers):
 
     assert np.all(np.sign(result) == target)
 
-def test_VmessStripper_1(npz_buffers):
+def test_VMessStripper_1(npz_buffers):
     """
     Test reading a .npz file and extract the direction feature, this test covers the case that the stripper option is set to VmessStripper.
     """
@@ -383,7 +383,7 @@ def test_VmessStripper_1(npz_buffers):
     assert np.all(np.sign(result) == target)
 
 
-def test_VmessStripper_2(npz_buffers):
+def test_VMessStripper_2(npz_buffers):
     """
     Test reading a .npz file and extract the direction feature, this test covers the case that the criterion option is set to HSDBSCriterion selecting the top-k streams.
     """
@@ -396,7 +396,7 @@ def test_VmessStripper_2(npz_buffers):
     assert np.all(np.sign(result) == target)
 
 
-def test_VmessStripper_3(npz_buffers):
+def test_VMessStripper_3(npz_buffers):
     """
     Test reading a .npz file and extract the hsdbs feature, this test covers the case that the criterion option is set to BSExcludeCriterion.
     """
@@ -406,6 +406,19 @@ def test_VmessStripper_3(npz_buffers):
     extractor.extract(result, npz_files)
 
     assert len(result) == 0
+
+
+def test_ShadowsocksStripper_1(npz_buffers):
+    """
+    Test reading a .npz file and extract the direction feature, this test covers the case that the criterion option is set to HSDBSCriterion selecting the top-k streams.
+    """
+    extractor = NpzDirExtractor(stripper=ShadowsocksStripper(), criteria=HSDBSCriterion(k=1, threshold=0))
+    result = []
+    npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
+    extractor.extract(result, npz_files)
+    target = np.array([1, -1, 1, -1, -1, 1])
+
+    assert np.all(np.sign(result) == target)
 
 
 def test_LengthExcludeCriterion_1(npz_buffers):
