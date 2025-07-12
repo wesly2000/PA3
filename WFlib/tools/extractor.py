@@ -808,15 +808,15 @@ class Stripper():
     def __init__(self, protocol: str='abstract'):
         self.protocol = protocol
 
-    def searching(self, feature: Iterable) -> Iterable:
+    def searching(self, feature: np.ndarray) -> Iterable:
         """
         The method that decide the proper indices to be stripped.
         """
         raise NotImplementedError
 
-    def strip(self, feature: Iterable) -> Iterable:
+    def strip(self, feature: np.ndarray) -> np.ndarray:
         exclude_indices = self.searching(feature)
-        return [feature[i] for i in range(len(feature)) if i not in exclude_indices]
+        return np.delete(feature, exclude_indices)
     
 class VmessStripper(Stripper):
     """
@@ -825,7 +825,7 @@ class VmessStripper(Stripper):
     def __init__(self):
         super().__init__(protocol='vmess')
 
-    def searching(self, feature: Iterable) -> Iterable:
+    def searching(self, feature: np.ndarray) -> Iterable:
         return [3, 6, 7]
     
 
@@ -836,7 +836,7 @@ class ShadowsocksStripper(Stripper):
     def __init__(self):
         super().__init__(protocol='shadowsocks')
 
-    def searching(self, feature: Iterable) -> Iterable:
+    def searching(self, feature: np.ndarray) -> Iterable:
         return [3, 4, 7, 8]
 
 class NpzDirExtractor(NpzExtractor):
