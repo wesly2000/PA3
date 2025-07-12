@@ -34,6 +34,8 @@ import asyncio
 
 from WFlib.utils.config import get_config
 
+PAGE_LOAD_TIMEOUT = 40  # A fixed limit for complete webpage loading 
+
 logger = logging.getLogger('selenium')
 logger.setLevel(logging.WARN)
 
@@ -125,6 +127,8 @@ def capture(url, iface, output_file, timeout=200, capture_filter=common_filter, 
             stop_event.set()
             return
             
+        driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
+
         try:
             driver.get(url)
             time.sleep(timeout)
@@ -135,6 +139,8 @@ def capture(url, iface, output_file, timeout=200, capture_filter=common_filter, 
             if ill_files is not None:
                 with open(ill_files, 'a+') as f:
                     f.write(f"{output_file}\n")
+
+
         driver.quit()
         
         time.sleep(2)
