@@ -818,7 +818,7 @@ class Stripper():
         exclude_indices = self.searching(feature)
         return np.delete(feature, exclude_indices)
     
-class VmessStripper(Stripper):
+class VMessStripper(Stripper):
     """
     The class that strips the VMess feature from the original features.
     """
