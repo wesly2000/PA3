@@ -865,9 +865,6 @@ class NpzDirExtractor(NpzExtractor):
 
         streams = [self.single_stream_extract(stream) for stream in streams]
 
-        if self.stripper is not None:
-            streams = [self.stripper.strip(stream) for stream in streams]
-
         dir_lengths = []
         for stream in streams:
             dir_lengths.extend(stream)
