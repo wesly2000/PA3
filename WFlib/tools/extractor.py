@@ -1,4 +1,4 @@
-from typing import Union, List, Set, Optional, Iterable, Tuple, Callable
+from typing import Union, List, Set, Optional, Iterable, Tuple, Callable, Dict, Any
 import numpy as np
 from numpy.lib.npyio import NpzFile
 import pandas as pd
@@ -238,18 +238,59 @@ class Criterion():
     """
     The class that provides the criterion for selecting the top-k streams. All the criteria should inherit this class,
     which must implement the select method.
-
-    Attributes
-    ----------
-    k : int
-        The number of streams to select. If k <= 0, all the streams will be selected.
     """
-    def __init__(self, k:int=0):
-        self.k = k
+    def __init__(self, name: str):
+        self.name = name
 
-    def select(self, features: Iterable) -> Iterable:
+    def select(self, streams: List[Dict[str, np.ndarray]]) -> List[Dict[str, np.ndarray]]:
         raise NotImplementedError
+    
 
+class SortCriterion(Criterion):
+    """
+    The abstract class that provides the criterion to select a given range of streams whose
+    feature provided and sorted by the criterion.
+
+    One common example is the length criterion, which selects the top-k streams with the largest length.
+    """
+    def __init__(self, name: str, slice: slice):
+        super().__init__(name)
+        self.slice = slice
+
+    def feature_map(self, stream: Dict[str, np.ndarray]):
+        """
+        Map the stream to a feature, which MUST be compatible in sort method.
+        """
+        raise NotImplementedError
+    
+    def select(self, streams: List[Dict[str, np.ndarray]]) -> List[Dict[str, np.ndarray]]:
+        """
+        Select the streams according to the criterion. Note that the sorting order is ALWAYS ascending.
+        """
+        sorted_streams = sorted(streams, key=self.feature_map)
+        return sorted_streams[self.slice]
+    
+
+class CheckCriterion(Criterion):
+    """
+    The abstract class that provides the criterion to check if a stream satisfies the given condition.
+    """
+    def __init__(self, name: str, condition: Callable[[Any], bool]):
+        super().__init__(name)
+        self.condition = condition
+
+    def feature_map(self, stream: Dict[str, np.ndarray]):
+        """
+        Map the stream to a feature, which MUST be compatible in the condition.
+        """
+        raise NotImplementedError
+    
+    def select(self, streams: List[Dict[str, np.ndarray]]) -> List[Dict[str, np.ndarray]]:
+        """
+        Select the streams according to the criterion.
+        """
+        return [stream for stream in streams if self.condition(self.feature_map(stream))]
+    
 
 class Splitter():
     """
@@ -436,6 +477,19 @@ class NpzExtractor(Extractor):
 
     def extract(self, target: list, npz_file_list: List[NpzFile]):
         raise NotImplementedError
+    
+    def load_streams(self, npz_file_list: List[NpzFile]) -> List[Dict[str, np.ndarray]]:
+        """
+        A stream is a dict of timestamp, direction, length arrays.
+        """
+        streams = []
+        for npz_file in npz_file_list:
+            stream = {}
+            stream['timestamp'] = npz_file['timestamp']
+            stream['direction'] = npz_file['direction']
+            stream['length'] = npz_file['length']
+            streams.append(stream)
+        return streams
 
 
 class CsvDirExtractor(CsvExtractor):
@@ -576,50 +630,68 @@ class PcapDeltaExtractor(PcapExtractor):
         super().__init__(name=name)
     
 
-class HSDBSCriterion(Criterion):
+class HSDBSCriterion(SortCriterion):
     """
     The criterion that selects the top-k streams by Header Stripped Directional Burst Size (HSDBS) feature.
     """
-    def __init__(self, k:int=0):
+    def __init__(self, k:int=0, threshold:int=40):
         self.k = k
+        self.threshold = threshold
+        if k > 0:
+            _slice = slice(-k, None)
+            super().__init__(name="hsdbs", slice=_slice)
 
-    def select(self, features: List[List[tuple]]) -> List[List[tuple]]:
+    def feature_map(self, stream: Dict[str, np.ndarray]):
+        """
+        Map the stream to a feature, which MUST be compatible in sort method.
+        """
+        length = stream['length']
+        return np.sum(length[length > self.threshold] - self.threshold)
+    
+    
+    def select(self, streams: List[Dict[str, np.ndarray]]) -> List[Dict[str, np.ndarray]]:
         if self.k <= 0:
-            return features
-        
-        feature_sizes = [(i, sum(abs(size) for _, size in feature)) for i, feature in enumerate(features)]
-        top_k_indices = [i for i, _ in sorted(feature_sizes, key=lambda x: x[1], reverse=True)[:self.k]]
-        return [features[i] for i in top_k_indices]
+            return streams
+        else:
+            return super().select(streams)
     
 
-class LengthCriterion(Criterion):
+class LengthCriterion(SortCriterion):
     """
     The criterion that selects the top-k streams by stream length feature.
     """
     def __init__(self, k:int=0):
         self.k = k
+        if k > 0:
+            _slice = slice(-k, None)
+            super().__init__(name="length", slice=_slice)
 
-    def select(self, features: List[List[tuple]]) -> List[List[tuple]]:
+    def feature_map(self, stream: Dict[str, np.ndarray]):
+        return len(stream['length'])
+    
+    def select(self, streams: List[Dict[str, np.ndarray]]) -> List[Dict[str, np.ndarray]]:
         if self.k <= 0:
-            return features
-        
-        feature_lengths = [(i, len(feature)) for i, feature in enumerate(features)]
-        top_k_indices = [i for i, _ in sorted(feature_lengths, key=lambda x: x[1], reverse=True)[:self.k]]
-        return [features[i] for i in top_k_indices]
+            return streams
+        else:
+            return super().select(streams)
     
 
-class LengthExcludeCriterion(Criterion):
+class LengthExcludeCriterion(CheckCriterion):
     """
     The criterion that excludes the streams with the number of frames smaller than the given threshold.
     """
     def __init__(self, threshold: int = 32):
         self.threshold = threshold
-    
-    def select(self, features: List[List[tuple]]) -> List[List[tuple]]:
-        return [feature for feature in features if len(feature) > self.threshold]
+        def condition(length):
+            return length > self.threshold
+        super().__init__(name="length_exclude", condition=condition)
+
+    def feature_map(self, stream: Dict[str, np.ndarray]):
+        return len(stream['length'])
     
 
-class BSExcludeCriterion(Criterion):
+
+class HSDBSExcludeCriterion(CheckCriterion):
     """
     The criterion that excludes the streams with burst size falls in the given range.
     """
@@ -627,20 +699,19 @@ class BSExcludeCriterion(Criterion):
         self.lower_bounds = lower_bounds
         self.upper_bounds = upper_bounds
         self.threshold = threshold
+        def condition(feature):
+            in_range = (self.lower_bounds <= feature) & (feature <= self.upper_bounds)
+            return not in_range.any()
+        super().__init__(name="hsdbs_exclude", condition=condition)
 
-    def select(self, features: List[List[tuple]]) -> List[List[tuple]]:
-        
-        # Original list comprehension version:
-        # return [feature for feature in features if not (self.lower_bounds <= sum(abs(size) for _, size in feature) & (sum(abs(size) for _, size in feature) <= self.upper_bounds)).any()]
-        
-        # Expanded for-loop version for debugging
-        result = []
-        for feature in features:
-            total_size = sum(abs(size) - self.threshold for _, size in feature if abs(size) > self.threshold)
-            in_range = (self.lower_bounds <= total_size) & (total_size <= self.upper_bounds)
-            if not in_range.any():
-                result.append(feature)
-        return result
+
+    def feature_map(self, stream: Dict[str, np.ndarray]):
+        length = stream['length']
+        return np.sum(length[length > self.threshold] - self.threshold)
+    
+
+    def select(self, streams: List[Dict[str, np.ndarray]]) -> List[Dict[str, np.ndarray]]:
+        return super().select(streams)
 
 
 class NpzHSDBSExtractor(NpzExtractor):
@@ -661,8 +732,8 @@ class NpzHSDBSExtractor(NpzExtractor):
         self.threshold = threshold
         self.ignore_control_packets = ignore_control_packets
 
-    def single_stream_extract(self, npz_file: NpzFile) -> List[tuple]:
-        direction_arr, length_arr, timestamp_arr = npz_file['direction'], npz_file['length'], npz_file['timestamp']
+    def single_stream_extract(self, stream: Dict[str, np.ndarray]) -> List[tuple]:
+        direction_arr, length_arr, timestamp_arr = stream['direction'], stream['length'], stream['timestamp']
 
         if self.ignore_control_packets:
             # The ignore_control_packets option is used to filter out control TCP packets, e.g., SYN, ACK, etc., before creating bursts. The feature helps to maintain the burst application layer semantics.
@@ -694,12 +765,13 @@ class NpzHSDBSExtractor(NpzExtractor):
     
 
     def extract(self, target: list, npz_file_list: List[NpzFile]):
-        stream_bursts = []
-        for npz_file in npz_file_list:
-            stream_bursts.append(self.single_stream_extract(npz_file))
-        
+        streams = self.load_streams(npz_file_list)
         for criterion in self.criteria:
-            stream_bursts = criterion.select(stream_bursts)
+            streams = criterion.select(streams)
+        
+        stream_bursts = []
+        for stream in streams:
+            stream_bursts.append(self.single_stream_extract(stream))
 
         bursts = []
         for stream_burst in stream_bursts:
@@ -749,7 +821,7 @@ class VmessStripper(Stripper):
 
 class NpzDirExtractor(NpzExtractor):
     """
-    The class that extracts direction feature from .npz files.
+    The class that extracts directional packet length feature from .npz files.
     """
     def __init__(self, name="direction", stripper: Optional[Stripper]=None, criteria: Optional[Union[List[Criterion], Criterion]]=None, split_threshold: int=100, splitter: Optional[Splitter]=None):
         # COMMENT: shall we add split_weight in Splitter class? Then extractor only need to add split_threshold and a splitter.
@@ -758,10 +830,8 @@ class NpzDirExtractor(NpzExtractor):
         self.split_threshold = split_threshold
         self.splitter = splitter
 
-    def single_stream_extract(self, npz_file: NpzFile) -> List[tuple]:
-        direction_arr = npz_file['direction']
-        timestamp_arr = npz_file['timestamp']
-        length_arr = npz_file['length']
+    def single_stream_extract(self, stream: Dict[str, np.ndarray]) -> List[tuple]:
+        direction_arr, timestamp_arr, length_arr = stream['direction'], stream['timestamp'], stream['length']
 
         if self.stripper:
             direction_arr = self.stripper.strip(direction_arr)
@@ -771,12 +841,12 @@ class NpzDirExtractor(NpzExtractor):
         return [(timestamp, direction * length) for timestamp, direction, length in zip(timestamp_arr, direction_arr, length_arr)]  
 
     def extract(self, target: list, npz_file_list: List[NpzFile]):
-        streams = []
-        for npz_file in npz_file_list:
-            streams.append(self.single_stream_extract(npz_file))
+        streams = self.load_streams(npz_file_list)
 
         for criterion in self.criteria:
             streams = criterion.select(streams)
+
+        streams = [self.single_stream_extract(stream) for stream in streams]
 
         # For each stream that longer than split_threshold, generate split it into multiple streams
         if self.splitter is not None:
@@ -794,5 +864,49 @@ class NpzDirExtractor(NpzExtractor):
             dir_lengths.extend(stream)
 
         dir_lengths.sort(key=lambda x: x[0])
-        # Use the sign function of the lengths to get the direction
-        target += [np.sign(size) for _, size in dir_lengths]
+        target += [size for _, size in dir_lengths]
+
+
+class NpzRawExtractor(NpzExtractor):
+    """
+    This class extracts one, or multiple raw features from the .npz files, i.e., features among direction, length and timestamp.
+    Note that this class is originally designed for connecting to TSAM/TAM generators in exp/dataset_process/gen_tsam.py and
+    exp/dataset_process/gen_tam.py, respectively.
+
+    The caller should be careful that this class generates features in 2D or 3D dimensions, where the corresponding Formatter
+    MUST consider padding proper values if the dimension is larger than 1.
+
+    The return, when the dimension is larger than 1, is a list of tuples, where each tuple contains the feature vector of a
+    single packet.
+
+    Dimension is specified using the name of raw feature. For instance, passing ['direction', 'length'] to the features arg would
+    lead to a 2D feature vector. Note that whether or NOT the timestamp is included in the features, the resulting feature is
+    ALWAYS sorted according to timestamp by ascending order.
+    """
+    supported_features = {'direction', 'length', 'timestamp'}
+
+    def __init__(self, features: Union[Set[str], List[str]], name: str='raw', criteria: Optional[Union[List[Criterion], Criterion]]=None):
+        super().__init__(name=name, criteria=criteria)
+        features = set(features)
+        assert features.issubset(self.supported_features), f"Unsupported features: {features - self.supported_features}"
+        features = list(features)
+        # Sort features in order: timestamp, direction, length
+        feature_order = {'timestamp': 0, 'direction': 1, 'length': 2}
+        self.features = sorted(features, key=lambda x: feature_order[x])
+
+    def single_stream_extract(self, stream: Dict[str, np.ndarray]) -> List[tuple]:
+        timestamp_arr, feature_arrs = stream['timestamp'], [stream[feature] for feature in self.features]
+        return [(timestamp, tuple(features)) for timestamp, *features in zip(timestamp_arr, *feature_arrs)]
+
+    def extract(self, target: list, npz_file_list: List[NpzFile]):
+        streams = self.load_streams(npz_file_list)
+
+        for criterion in self.criteria:
+            streams = criterion.select(streams)
+
+        raw_features = []
+        for stream in streams:
+            raw_features.extend(self.single_stream_extract(stream))
+
+        raw_features.sort(key=lambda x: x[0])
+        target += [feature for _, feature in raw_features]

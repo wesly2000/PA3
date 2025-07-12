@@ -22,10 +22,6 @@ def length_align(X, seq_len):
         X = np.pad(X, pad_width=pad_width, mode="constant", constant_values=0)  # Pad the sequence with zeros
     return X
 
-BIN_RANGE = 50000
-BIN_STEP = 500
-BINS = np.arange(-BIN_RANGE, BIN_RANGE + BIN_STEP, BIN_STEP)
-
 def load_data(data_path, feature_type, seq_len, num_tab=1):
     """
     Load and process data from a specified path.
@@ -46,6 +42,24 @@ def load_data(data_path, feature_type, seq_len, num_tab=1):
         X = np.sign(X)  # Directional feature
         X = length_align(X, seq_len)
         X = torch.tensor(X[:,np.newaxis], dtype=torch.float32)
+    elif feature_type == "size":
+        X = length_align(X, seq_len)
+        X = torch.tensor(X[:,np.newaxis], dtype=torch.float32)
+    elif feature_type == "size_bin":
+        BIN_RANGE = 1500
+        BIN_STEP = 1000
+        BINS = np.arange(-BIN_RANGE, BIN_RANGE + BIN_STEP, BIN_STEP)
+        X = length_align(X, seq_len)
+        # Create a mask for non-zero elements
+        non_zero_mask = X != 0
+        # Initialize result array with zeros
+        binned_X = np.zeros_like(X)
+        # Only apply binning to non-zero elements
+        if np.any(non_zero_mask):
+            bin_idx = np.digitize(X[non_zero_mask], BINS) - 1
+            bin_idx = np.clip(bin_idx, 0, len(BINS) - 2)
+            binned_X[non_zero_mask] = (BINS[bin_idx] + BINS[bin_idx + 1]) / 2
+        X = torch.tensor(binned_X[:,np.newaxis], dtype=torch.float32)
     elif feature_type == "DT":
         X = length_align(X, seq_len)
         X = torch.tensor(X[:,np.newaxis], dtype=torch.float32)
@@ -71,6 +85,9 @@ def load_data(data_path, feature_type, seq_len, num_tab=1):
         X = length_align(X, seq_len)
         X = torch.tensor(X[:,np.newaxis], dtype=torch.float32)
     elif feature_type == "hsdbs_bin":
+        BIN_RANGE = 500000
+        BIN_STEP = 2000
+        BINS = np.arange(-BIN_RANGE, BIN_RANGE + BIN_STEP, BIN_STEP)
         X = length_align(X, seq_len)
         # Create a mask for non-zero elements
         non_zero_mask = X != 0
@@ -82,7 +99,9 @@ def load_data(data_path, feature_type, seq_len, num_tab=1):
             bin_idx = np.clip(bin_idx, 0, len(BINS) - 2)
             binned_X[non_zero_mask] = (BINS[bin_idx] + BINS[bin_idx + 1]) / 2
         X = torch.tensor(binned_X[:,np.newaxis], dtype=torch.float32)
-        
+    elif feature_type == "tsam":
+        X = length_align(X, seq_len)
+        X = torch.tensor(X[:,np.newaxis], dtype=torch.float32)
     else:
         raise ValueError(f"Feature type {feature_type} is not matched.")
     

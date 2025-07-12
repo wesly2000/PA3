@@ -162,12 +162,35 @@ def stream_feature_2D(npz_files: List[NpzFile], extractor: NpzExtractor):
     """
     Stream level feature extraction, one npz_file represents one stream, we require generally the meta information of the stream being (feature_ts, feature) list, and extract the timestamp and feature series for each stream.
     """
+
+    BIN_RANGE = 50000
+    BIN_STEP = 500
+    BINS = np.arange(-BIN_RANGE, BIN_RANGE + BIN_STEP, BIN_STEP)
+
     yz_2D = []
+    stream_start_times = []
     for npz_file in npz_files:
         stream = extractor.single_stream_extract(npz_file)
-        timestamp = [s[0] for s in stream]
-        feature = [s[1] for s in stream]
-        yz_2D.append((timestamp, feature))
+        timestamp = np.array([s[0] for s in stream])
+        feature = np.array([s[1] for s in stream])
+        # Add bins to the feature and clip the feature to the range [lower_bound, upper_bound]
+        # Create a mask for non-zero elements
+        non_zero_mask = feature != 0
+        # Initialize result array with zeros
+        binned_feature = np.zeros_like(feature)
+
+        # Only apply binning to non-zero elements
+        if np.any(non_zero_mask):
+            bin_idx = np.digitize(feature[non_zero_mask], BINS) - 1
+            bin_idx = np.clip(bin_idx, 0, len(BINS) - 2)
+            binned_feature[non_zero_mask] = (BINS[bin_idx] + BINS[bin_idx + 1]) / 2
+
+        yz_2D.append((timestamp, binned_feature))
+
+        stream_start_times.append(np.min(timestamp))
+
+    start_time = np.min(stream_start_times)
+    yz_2D = [(timestamp - start_time, binned_feature) for timestamp, binned_feature in yz_2D]
 
     return yz_2D
 
@@ -177,14 +200,16 @@ def stream_feature_3D_draw(host: str, sni: str, feature: str, yz_3D: List[List[T
     yz_3D: 
         list of yz_2D, which is a list of (y, z) tuples.
     """
-
-    cmap = plt.cm.get_cmap(cmap_name, len(yz_3D))
-
+    cmap = plt.cm.get_cmap(cmap_name, 10)
+    
     fig = plt.figure(figsize=(10, 6))
     ax = fig.add_subplot(111, projection='3d')
+    ax.set_box_aspect([1, 5, 1])
     for x, yz_2D in enumerate(yz_3D):
-        for y, z in yz_2D:
+        yz_2D.sort(key=lambda x: len(x[0]), reverse=True)
+        for c, (y, z) in enumerate(yz_2D):
             y = np.array(y)
+            y = np.clip(y, 0, 20)
             z = np.array(z)
 
             # Create arrays for bar3d
@@ -192,7 +217,8 @@ def stream_feature_3D_draw(host: str, sni: str, feature: str, yz_3D: List[List[T
             ys = y
             zs = np.zeros_like(z)
 
-            ax.bar3d(xs, ys, zs, dx=bar_width, dy=bar_width, dz=z, color=cmap(x), alpha=0.8)
+            color = cmap(c)            
+            ax.plot(xs, y, z, color=color, alpha=0.8)
 
 
     ax.set_xlabel('capture ID')
