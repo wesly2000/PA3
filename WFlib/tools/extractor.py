@@ -8,6 +8,15 @@ import io
 from pathlib import Path
 import math
 
+
+class StreamProcessingError(Exception):
+    """Exception raised when stream processing fails with index information."""
+    def __init__(self, message: str, stream_index: int, original_exception: Exception = None):
+        self.message = message
+        self.stream_index = stream_index
+        self.original_exception = original_exception
+        super().__init__(self.message)
+
 logger = logging.getLogger(__name__)
 
 '''
@@ -826,7 +835,7 @@ class VMessStripper(Stripper):
         super().__init__(protocol='vmess')
 
     def searching(self, feature: np.ndarray) -> Iterable:
-        return [3, 6, 7]
+        return [3, 6]
     
 
 class ShadowsocksStripper(Stripper):
@@ -842,6 +851,8 @@ class ShadowsocksStripper(Stripper):
 class NpzDirExtractor(NpzExtractor):
     """
     The class that extracts directional packet length feature from .npz files.
+
+    TODO: Shall we return the error when IndexError occurs, which would be used by the caller to log some warnings? Currently, we just pass it.
     """
     def __init__(self, name="direction", stripper: Optional[Stripper]=None, criteria: Optional[Union[List[Criterion], Criterion]]=None):
         super().__init__(name=name, criteria=criteria)
@@ -851,9 +862,12 @@ class NpzDirExtractor(NpzExtractor):
         direction_arr, timestamp_arr, length_arr = stream['direction'], stream['timestamp'], stream['length']
 
         if self.stripper:
-            direction_arr = self.stripper.strip(direction_arr)
-            timestamp_arr = self.stripper.strip(timestamp_arr)
-            length_arr = self.stripper.strip(length_arr)
+            try:
+                direction_arr = self.stripper.strip(direction_arr)
+                timestamp_arr = self.stripper.strip(timestamp_arr)
+                length_arr = self.stripper.strip(length_arr)
+            except IndexError as e:
+                pass
 
         return [(timestamp, direction * length) for timestamp, direction, length in zip(timestamp_arr, direction_arr, length_arr)]  
 
@@ -863,11 +877,9 @@ class NpzDirExtractor(NpzExtractor):
         for criterion in self.criteria:
             streams = criterion.select(streams)
 
-        streams = [self.single_stream_extract(stream) for stream in streams]
-
         dir_lengths = []
         for stream in streams:
-            dir_lengths.extend(stream)
+            dir_lengths.extend(self.single_stream_extract(stream))
 
         dir_lengths.sort(key=lambda x: x[0])
         target += [size for _, size in dir_lengths]
