@@ -58,9 +58,20 @@ if __name__ == '__main__':
             extractor = NpzDirExtractor()
         else:
             raise ValueError(f"Invalid protocol: {args.protocol}")
+        
     if not args.bs_filter:
-        extractor = NpzDirExtractor()
+        # extractor = NpzHSDBSExtractor(threshold=40, ignore_control_packets=True)
+        if args.protocol == 'vmess':
+            extractor = NpzDirExtractor(stripper=VMessStripper())
+        elif args.protocol == 'shadowsocks':
+            extractor = NpzDirExtractor(stripper=ShadowsocksStripper())
+        elif args.protocol == 'trojan':
+            extractor = NpzDirExtractor()
+        else:
+            extractor = NpzDirExtractor()
+
     formatter = CsvFormatter(length=args.length)
+
     if args.filter_file:
         SNI_filter = read_host_list(args.filter_file)
     elif normal_filter_file:
