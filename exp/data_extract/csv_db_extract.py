@@ -18,14 +18,6 @@ from WFlib.tools.capture import read_host_list
 logger = logging.getLogger(__name__)
 
 config_path = Path.cwd() / 'config.ini'
-if not config_path.exists():
-    tshark_path = "tshark"
-else:
-    config = get_config(config_path)
-    if config is None:
-        tshark_path = "tshark"
-    else:
-        tshark_path = config['tshark'].get('tshark_path', fallback="tshark")
 
 src = ["58.206.207.126", "192.168.5.5", "10.4.0.3", "192.168.5.7", "2001:da8:283:c004:8177:495b:d038:d48a"]
 PROTOCOLS = ['trojan', 'shadowsocks', 'vmess']
