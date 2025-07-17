@@ -1,6 +1,8 @@
 from WFlib.tools.extractor import PcapDirExtractor, NpzHSDBSExtractor
 from WFlib.tools.formatter import *
 from exp.tests.fixture import npz_buffers
+from pathlib import Path
+from WFlib.utils.config import get_tshark_path
 
 import io
 import json
@@ -18,6 +20,9 @@ apple_file = "exp/test_dataset/realworld_dataset/decryption/www.apple.com.pcapng
 tiktok_file = "exp/test_dataset/realworld_dataset/decryption/www.tiktok.com.pcapng"
 yandex_file = "exp/test_dataset/realworld_dataset/decryption/yandex.com_10.pcapng"
 
+config_path = Path.cwd() / 'config.ini'
+tshark_path = get_tshark_path(config_path, 'normal')
+
 def test_PcapFormatter_1():
     """
     This test covers reading the first 10 packets from a .pcap file, and extract the direction feature.
@@ -25,7 +30,7 @@ def test_PcapFormatter_1():
     """
     extractor = PcapDirExtractor(src="192.168.5.5")
 
-    formatter = PcapFormatter(length=5)
+    formatter = PcapFormatter(length=5, tshark_path=tshark_path)
     formatter.load("exp/test_dataset/simple_dataset/simple_pcap_01.pcapng")
     formatter.transform("www.baidu.com", 0, extractor)
 
@@ -50,7 +55,7 @@ def test_PcapFormatter_2():
     """
     extractor = PcapDirExtractor(src="192.168.5.5")
 
-    formatter = PcapFormatter(length=12)
+    formatter = PcapFormatter(length=12, tshark_path=tshark_path)
     formatter.load("exp/test_dataset/simple_dataset/simple_pcap_01.pcapng")
     formatter.transform("www.baidu.com", 0, extractor)
 
@@ -72,7 +77,7 @@ def test_PcapFormatter_3():
     """
     This test covers reading the first 10 packets from multiple .pcap files, and extract the direction feature.
     """
-    formatter = PcapFormatter(length=10)
+    formatter = PcapFormatter(length=10, tshark_path=tshark_path)
 
     extractor = PcapDirExtractor(src="192.168.5.5")
 
@@ -110,7 +115,7 @@ def test_PcapFormatter_4():
     This test covers reading the first 10 packets from multiple .pcap files, and extract the direction feature.
     This test involves the use of display filter.
     """
-    formatter = PcapFormatter(length=10, display_filter='tls')
+    formatter = PcapFormatter(length=10, display_filter='tls', tshark_path=tshark_path)
 
     extractor = PcapDirExtractor(src="192.168.5.5")
     
@@ -148,7 +153,7 @@ def test_PcapFormatter_5():
     This test covers reading the first 10 packets from multiple .pcap files, and extract the direction feature.
     This test involves the use of display filter.
     """
-    formatter = PcapFormatter(display_filter='tls')
+    formatter = PcapFormatter(display_filter='tls', tshark_path=tshark_path)
 
     extractor = PcapDirExtractor(src="192.168.5.5")
     
@@ -188,7 +193,7 @@ def test_PcapFormatter_6():
     This test covers reading the first 10 packets from multiple .pcap files, and extract the direction feature.
     This test involves the use of batch_extract.
     """
-    formatter = PcapFormatter(length=10)
+    formatter = PcapFormatter(length=10, tshark_path=tshark_path)
 
     extractor = PcapDirExtractor(src="192.168.5.5")
 
@@ -220,7 +225,7 @@ def test_PcapFormatter_7():
     This test covers reading the first 10 packets from multiple .pcap files, and extract the direction feature.
     This test involves the use of batch_extract, and setting keep_packets to False for memory optimization.
     """
-    formatter = PcapFormatter(length=10, keep_packets=False)
+    formatter = PcapFormatter(length=10, keep_packets=False, tshark_path=tshark_path)
 
     extractor = PcapDirExtractor(src="192.168.5.5")
 
@@ -273,7 +278,7 @@ def test_PcapFormatter_9():
     """
     extractor = PcapDirExtractor(src="192.168.5.5")
 
-    formatter = PcapFormatter(length=10)
+    formatter = PcapFormatter(length=10, tshark_path=tshark_path)
     formatter.load("exp/test_dataset/realworld_dataset/www.google.com.pcapng")
     formatter.transform("www.google.com", 0, extractor)
 
@@ -296,7 +301,7 @@ def test_JsonFormatter_1():
     This test covers reading a .json file, and extract the direction feature, truncate/pad it to given length,
     and dump it into a .npz file.
     """
-    pcap_formatter = PcapFormatter(display_filter='tls')
+    pcap_formatter = PcapFormatter(display_filter='tls', tshark_path=tshark_path)
 
     extractor = PcapDirExtractor(src="192.168.5.5")
     
@@ -345,7 +350,7 @@ def test_JsonFormatter_2():
     """
     This test covers the statistics with JsonFormatter.
     """
-    pcap_formatter = PcapFormatter(display_filter='tls')
+    pcap_formatter = PcapFormatter(display_filter='tls', tshark_path=tshark_path)
 
     extractor = PcapDirExtractor(src="192.168.5.5")
     
@@ -382,7 +387,7 @@ def test_JsonFormatter_2():
         os.unlink(filename)
 
 def test_DistriPcapFormatter_1():
-    formatter = DistriPcapFormatter(length=10, keep_packets=False, only_summaries=False)
+    formatter = DistriPcapFormatter(length=10, keep_packets=False, only_summaries=False, tshark_path=tshark_path)
 
     extractor = PcapDirExtractor(src="192.168.5.5")
 

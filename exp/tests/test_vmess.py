@@ -16,7 +16,7 @@ from WFlib.tools.extractor import pcap_to_dataframe, single_pcap_extract, multi_
 import nest_asyncio 
 nest_asyncio.apply()
 
-config_path = Path.cwd() / 'custom_config.ini'
+config_path = Path.cwd() / 'config.ini'
 if not config_path.exists():
     VMESS_ENABLED = False
 else:
@@ -294,7 +294,7 @@ def test_h2_stream_analysis_per_host_1():
     root = 'exp/test_dataset/realworld_dataset'
     host = 's.weibo.com'
     host_filter = {'firefox.settings.services.mozilla.com'}
-    df = h2_stream_analysis_per_host(root=root, protocol='vmess', host=host, host_filter=host_filter)
+    df = h2_stream_analysis_per_host(root=root, protocol='vmess', host=host, host_filter=host_filter, tshark_path=tshark_path)
 
     assert df.loc[0, 'h2_avg'] == 1 and \
             df.loc[0, 'avail_h2_avg'] == 1 and \
@@ -308,7 +308,7 @@ def test_h2_stream_analysis_per_host_2():
     root = 'exp/test_dataset/realworld_dataset'
     host = 'top.baidu.com'
     host_filter = {'firefox.settings.services.mozilla.com'}
-    df = h2_stream_analysis_per_host(root=root, protocol='vmess', host=host, host_filter=host_filter)
+    df = h2_stream_analysis_per_host(root=root, protocol='vmess', host=host, host_filter=host_filter, tshark_path=tshark_path)
 
     assert df.loc[0, 'h2_avg'] == 1.5 and \
             df.loc[0, 'avail_h2_avg'] == 1.5 and \

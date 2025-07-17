@@ -17,7 +17,7 @@ from WFlib.tools.extractor import pcap_to_dataframe
 import nest_asyncio 
 nest_asyncio.apply()
 
-config_path = Path.cwd() / 'custom_config.ini'
+config_path = Path.cwd() / 'config.ini'
 if not config_path.exists():
     SS_ENABLED = False
 else:

@@ -96,7 +96,7 @@ class PcapFormatter(Formatter):
     The class to convert .pcap files to .npz files. Moreover, it supports to convert .pcap files to .json files for
     raw feature extraction (See Attributes in __init__), where no truncation/padding would be applied.
     """
-    def __init__(self, length=0, only_summaries=True, keep_packets=True, display_filter=None):
+    def __init__(self, length=0, only_summaries=True, keep_packets=True, display_filter=None, tshark_path='tshark'):
         """
         Attributes
         ----------
@@ -155,7 +155,7 @@ class PcapFormatter(Formatter):
         self._only_summaries = only_summaries
         self._keep_packets = keep_packets
         self._raw = length <= 0
-
+        self._tshark_path = tshark_path
     @property
     def display_filter(self):
         return self._display_filter
@@ -168,7 +168,8 @@ class PcapFormatter(Formatter):
         self._raw_buf = pyshark.FileCapture(input_file=file, 
                                             display_filter=self.display_filter,
                                             only_summaries=self._only_summaries,
-                                            keep_packets=self._keep_packets)
+                                            keep_packets=self._keep_packets,
+                                            tshark_path=self._tshark_path)
 
     def transform(self, host : str, label : int, *extractors : Extractor):
         """
@@ -293,8 +294,8 @@ class DistriPcapFormatter(PcapFormatter):
 
     c.sort(key=lambda x: x[0])
     """
-    def __init__(self, length=0, only_summaries=True, keep_packets=True, display_filter=None, num_worker=4):
-        super().__init__(length, only_summaries, keep_packets, display_filter)
+    def __init__(self, length=0, only_summaries=True, keep_packets=True, display_filter=None, num_worker=4, tshark_path='tshark'):
+        super().__init__(length, only_summaries, keep_packets, display_filter, tshark_path)
         self._num_worker = num_worker
 
     def load(self, file):
@@ -320,7 +321,8 @@ class DistriPcapFormatter(PcapFormatter):
         cap = pyshark.FileCapture(input_file=file, 
                                 display_filter=self.display_filter,
                                 only_summaries=self._only_summaries,
-                                keep_packets=self._keep_packets)
+                                keep_packets=self._keep_packets,
+                                tshark_path=self._tshark_path)
         
         for pkt in cap:
             for extractor in extractors:

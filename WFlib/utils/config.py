@@ -6,7 +6,7 @@ import WFlib
 SUPPORTED_BASE = ['tcp', 'tls']
 SUPPORTED_PROTOCOL = ['normal', 'vmess', 'shadowsocks']
 
-DEFAULT_CONFIG_PATH = Path(WFlib.__file__).parent / 'custom_config.ini'
+DEFAULT_CONFIG_PATH = Path(WFlib.__file__).parent / 'config.ini'
 
 def get_config(custom_config_path: Path):
     if custom_config_path.exists():
