@@ -1,9 +1,16 @@
 from WFlib.tools.analyzer import Line 
 from WFlib.utils.statistics import IQR_bound
-from typing import List
+from WFlib.tools.extractor import NpzExtractor 
+from WFlib.tools.formatter import array_path
+ 
+from typing import List, Tuple, Union, Set
 import numpy as np
+from numpy.typing import ArrayLike
 import torch
 from torch import nn
+import matplotlib.pyplot as plt
+import pandas as pd
+from numpy.lib.npyio import NpzFile
 
 def generate_byte_stream(segment_byte_map: dict, cutoff: int, abs_lower_frame_numbers: List[int]) -> np.ndarray:
         """
@@ -72,3 +79,152 @@ def get_activations(model: nn.Module, input_data: torch.Tensor, layer_names: Lis
     model(X)
 
     return activation
+
+def greedy_mass_covering(arr, bin_size, coverage_threshold):
+    # Step 1: Bin the array
+    arr = np.array(arr)
+    min_val = arr.min()
+    max_val = arr.max()
+    bin_edges = np.arange(min_val, max_val + bin_size, bin_size)
+    hist, edges = np.histogram(arr, bins=bin_edges)
+    
+    total_mass = hist.sum()
+    target_mass = coverage_threshold * total_mass
+    n_bins = len(hist)
+    
+    # Step 2: Create all possible intervals (i, j)
+    intervals = []
+    for i in range(n_bins):
+        mass = 0
+        for j in range(i, n_bins):
+            mass += hist[j]
+            width = edges[j+1] - edges[i]
+            if mass > 0:
+                density = mass / width
+                intervals.append((-density, mass, i, j))  # max-heap with negative density
+    
+    # Step 3: Greedy selection of non-overlapping intervals
+    intervals.sort()
+    selected = []
+    covered_bins = set()
+    collected_mass = 0
+    
+    for _, mass, i, j in intervals:
+        if collected_mass >= target_mass:
+            break
+        if any(k in covered_bins for k in range(i, j+1)):
+            continue
+        selected.append((i, j))
+        collected_mass += mass
+        covered_bins.update(range(i, j+1))
+    
+    # Step 4: Merge overlapping/adjacent intervals into ranges
+    selected.sort()
+    merged_ranges = []
+    for i, j in selected:
+        start = edges[i]
+        end = edges[j+1]
+        if not merged_ranges:
+            merged_ranges.append([start, end])
+        else:
+            last_start, last_end = merged_ranges[-1]
+            if start <= last_end:
+                merged_ranges[-1][1] = max(last_end, end)
+            else:
+                merged_ranges.append([start, end])
+    
+    # Final actual coverage
+    actual_coverage = collected_mass / total_mass
+    
+    return merged_ranges, actual_coverage
+
+
+def stream_feature_3D(host: str, SNIs: Union[Set[str], str], base_dir: str, protocol: str, extractor: NpzExtractor, db: pd.DataFrame):
+    """
+    Extract 3D features for a given host and SNIs. The original data is provided by db.
+    """
+    if isinstance(SNIs, str):
+        SNIs = set([SNIs])
+    db = db.query(f"host == '{host}' and sni in @SNIs and protocol == '{protocol}'")
+    groups = db.groupby(['id'], sort=True)
+    yz_3D = []
+
+    for id, group in groups:
+        paths = group.apply(lambda row: f'{base_dir}/{array_path(row["host"], id[0], row["transport"], row["stream"], protocol)}', axis=1)
+        npz_files = [np.load(path) for path in paths]
+        yz_2D = stream_feature_2D(npz_files, extractor)
+        yz_3D.append(yz_2D)
+
+    return yz_3D
+
+
+def stream_feature_2D(npz_files: List[NpzFile], extractor: NpzExtractor):
+    """
+    Stream level feature extraction, one npz_file represents one stream, we require generally the meta information of the stream being (feature_ts, feature) list, and extract the timestamp and feature series for each stream.
+    """
+
+    BIN_RANGE = 50000
+    BIN_STEP = 500
+    BINS = np.arange(-BIN_RANGE, BIN_RANGE + BIN_STEP, BIN_STEP)
+
+    yz_2D = []
+    stream_start_times = []
+    for npz_file in npz_files:
+        stream = extractor.single_stream_extract(npz_file)
+        timestamp = np.array([s[0] for s in stream])
+        feature = np.array([s[1] for s in stream])
+        # Add bins to the feature and clip the feature to the range [lower_bound, upper_bound]
+        # Create a mask for non-zero elements
+        non_zero_mask = feature != 0
+        # Initialize result array with zeros
+        binned_feature = np.zeros_like(feature)
+
+        # Only apply binning to non-zero elements
+        if np.any(non_zero_mask):
+            bin_idx = np.digitize(feature[non_zero_mask], BINS) - 1
+            bin_idx = np.clip(bin_idx, 0, len(BINS) - 2)
+            binned_feature[non_zero_mask] = (BINS[bin_idx] + BINS[bin_idx + 1]) / 2
+
+        yz_2D.append((timestamp, binned_feature))
+
+        stream_start_times.append(np.min(timestamp))
+
+    start_time = np.min(stream_start_times)
+    yz_2D = [(timestamp - start_time, binned_feature) for timestamp, binned_feature in yz_2D]
+
+    return yz_2D
+
+
+def stream_feature_3D_draw(host: str, sni: str, feature: str, yz_3D: List[List[Tuple[ArrayLike, ArrayLike]]], bar_width: float=0.3, cmap_name: str='tab10', alpha: float=0.8):
+    """
+    yz_3D: 
+        list of yz_2D, which is a list of (y, z) tuples.
+    """
+    cmap = plt.cm.get_cmap(cmap_name, 10)
+    
+    fig = plt.figure(figsize=(10, 6))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.set_box_aspect([1, 5, 1])
+    for x, yz_2D in enumerate(yz_3D):
+        yz_2D.sort(key=lambda x: len(x[0]), reverse=True)
+        for c, (y, z) in enumerate(yz_2D):
+            y = np.array(y)
+            y = np.clip(y, 0, 20)
+            z = np.array(z)
+
+            # Create arrays for bar3d
+            xs = np.full_like(y, x)  # Same x for the whole group
+            ys = y
+            zs = np.zeros_like(z)
+
+            color = cmap(c)            
+            ax.plot(xs, y, z, color=color, alpha=0.8)
+
+
+    ax.set_xlabel('capture ID')
+    ax.set_ylabel('timestamp')
+    ax.set_zlabel('value')
+    ax.set_title(f'{feature}, {host}, {sni}')
+
+    plt.tight_layout()
+    plt.show()

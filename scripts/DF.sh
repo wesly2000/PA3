@@ -2,12 +2,15 @@ dataset=${1:-CW}
 device=${2:-"cuda:1"}
 batch_size=${3:-128}
 
+seq_len=5000
+feature=hsdbs_bin
+
 python -u exp/train.py \
   --dataset ${dataset} \
   --model DF \
   --device ${device} \
-  --feature DIR \
-  --seq_len 5000 \
+  --feature ${feature} \
+  --seq_len ${seq_len} \
   --train_epochs 30 \
   --batch_size ${batch_size} \
   --learning_rate 2e-3 \
@@ -20,8 +23,8 @@ python -u exp/test.py \
   --dataset ${dataset} \
   --model DF \
   --device ${device} \
-  --feature DIR \
-  --seq_len 5000 \
+  --feature ${feature} \
+  --seq_len ${seq_len} \
   --batch_size 256 \
   --eval_metrics Accuracy Precision Recall F1-score \
   --load_name max_f1

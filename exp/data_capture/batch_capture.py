@@ -15,7 +15,7 @@ if __name__ == '__main__':
     parser.add_argument('-i', '--iface', type=str, help="The interface to perform capturing")
     parser.add_argument('-r', '--repeat', type=int, default=20, help="How many times the request will repeat")
     parser.add_argument('-t', '--timeout', type=int, default=200, help="The living time for a browsing session")
-    parser.add_argument('--use-proxy', action='store_true', help="To use proxy for proxied traffic capture.")
+    parser.add_argument('-p', '--proxy', type=str, default=None, help="Proxy protocol, None if no proxy enabled")
     parser.add_argument('--dry-run', action='store_true', help="To output the file names will be created without actual creation.")
     args = parser.parse_args()
 
@@ -23,7 +23,7 @@ if __name__ == '__main__':
     ill_files = os.path.join(args.dir, "ill_files.txt")
     host_list = read_host_list(args.list)
 
-    proxy_log = os.path.join(args.dir, "proxy_log.txt") if args.use_proxy else None
+    proxy_log = os.path.join(args.dir, "proxy_log.txt") if args.proxy is not None else None
 
 
     if args.dry_run:
@@ -53,5 +53,6 @@ if __name__ == '__main__':
                       timeout=args.timeout,
                       ill_files=ill_files,
                       log_output=log_output,
-                      proxy_log=proxy_log
+                      proxy_log=proxy_log,
+                      proxy=str.lower(args.proxy) if args.proxy is not None else None
                       )

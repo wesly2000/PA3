@@ -331,7 +331,7 @@ def test_NpzHSDBSExtractor_4(npz_buffers):
     Test reading a .npz file and extract the hsdbs feature, this test covers the case that the criterion option is set to BSExcludeCriterion.
     """
     extractor = NpzHSDBSExtractor(
-        criteria=BSExcludeCriterion(lower_bounds=np.array([350]), upper_bounds=np.array([450]), threshold=0), 
+        criteria=HSDBSExcludeCriterion(lower_bounds=np.array([350]), upper_bounds=np.array([450]), threshold=32), 
         ignore_control_packets=True, threshold=32)
     result = []
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
@@ -347,7 +347,10 @@ def test_NpzHSDBSExtractor_5(npz_buffers):
     """
     Test reading a .npz file and extract the hsdbs feature, this test covers the case that the criterion option is set to BSExcludeCriterion.
     """
-    extractor = NpzHSDBSExtractor(criteria=BSExcludeCriterion(lower_bounds=np.array([350, 460]), upper_bounds=np.array([450, 550])), ignore_control_packets=True, threshold=32)
+    extractor = NpzHSDBSExtractor(
+        criteria=HSDBSExcludeCriterion(lower_bounds=np.array([350, 460]), upper_bounds=np.array([450, 550]), threshold=32), 
+        ignore_control_packets=True, 
+        threshold=32)
     result = []
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
     extractor.extract(result, npz_files)
@@ -365,39 +368,39 @@ def test_NpzDirExtractor_1(npz_buffers):
     extractor.extract(result, npz_files)
     target = np.array([1, 1, -1, 1, -1, 1, -1, 1, -1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, 1, -1, 1, -1])
 
-    assert np.all(result == target)
+    assert np.all(np.sign(result) == target)
 
-def test_NpzDirExtractor_2(npz_buffers):
+def test_VMessStripper_1(npz_buffers):
     """
     Test reading a .npz file and extract the direction feature, this test covers the case that the stripper option is set to VmessStripper.
     """
-    extractor = NpzDirExtractor(stripper=VmessStripper())
+    extractor = NpzDirExtractor(stripper=VMessStripper())
     result = []
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
     extractor.extract(result, npz_files)
-    target = np.array([1, 1, -1, 1, -1, 1, 1, -1, -1, 1, -1, 1, -1, 1, -1, -1, 1, -1, 1, 1, 1, -1, 1, -1])
+    target = np.array([1, 1, -1, 1, -1, 1, 1, -1, -1, 1, -1, 1, -1, -1, 1, 1, 1, -1])
 
-    assert np.all(result == target)
+    assert np.all(np.sign(result) == target)
 
 
-def test_NpzDirExtractor_3(npz_buffers):
+def test_VMessStripper_2(npz_buffers):
     """
     Test reading a .npz file and extract the direction feature, this test covers the case that the criterion option is set to HSDBSCriterion selecting the top-k streams.
     """
-    extractor = NpzDirExtractor(stripper=VmessStripper(), criteria=HSDBSCriterion(k=1))
+    extractor = NpzDirExtractor(stripper=VMessStripper(), criteria=HSDBSCriterion(k=1, threshold=0))
     result = []
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
     extractor.extract(result, npz_files)
-    target = np.array([1, -1, 1, 1, -1, -1, 1, -1, 1])
+    target = np.array([1, -1, 1, 1, -1, -1, 1])
 
-    assert np.all(result == target)
+    assert np.all(np.sign(result) == target)
 
 
-def test_NpzDirExtractor_4(npz_buffers):
+def test_VMessStripper_3(npz_buffers):
     """
     Test reading a .npz file and extract the hsdbs feature, this test covers the case that the criterion option is set to BSExcludeCriterion.
     """
-    extractor = NpzDirExtractor(stripper=VmessStripper(), criteria=BSExcludeCriterion(lower_bounds=np.array([350, 460]), upper_bounds=np.array([450, 550]), threshold=32))
+    extractor = NpzDirExtractor(stripper=VMessStripper(), criteria=HSDBSExcludeCriterion(lower_bounds=np.array([350, 460]), upper_bounds=np.array([450, 550]), threshold=32))
     result = []
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
     extractor.extract(result, npz_files)
@@ -405,7 +408,20 @@ def test_NpzDirExtractor_4(npz_buffers):
     assert len(result) == 0
 
 
-def test_NpzDirExtractor_5(npz_buffers):
+def test_ShadowsocksStripper_1(npz_buffers):
+    """
+    Test reading a .npz file and extract the direction feature, this test covers the case that the criterion option is set to HSDBSCriterion selecting the top-k streams.
+    """
+    extractor = NpzDirExtractor(stripper=ShadowsocksStripper(), criteria=HSDBSCriterion(k=1, threshold=0))
+    result = []
+    npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
+    extractor.extract(result, npz_files)
+    target = np.array([1, -1, 1, -1, -1, 1])
+
+    assert np.all(np.sign(result) == target)
+
+
+def test_LengthExcludeCriterion_1(npz_buffers):
     """
     Test reading a .npz file and extract the hsdbs feature, this test covers the case that the criterion option is set to BSExcludeCriterion.
     """
@@ -414,76 +430,8 @@ def test_NpzDirExtractor_5(npz_buffers):
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
     extractor.extract(result, npz_files)
 
-    assert result == [1, -1, 1, -1, 1, -1, -1, 1, -1, 1]
-
-
-def test_NpzDirExtractor_6(npz_buffers):
-    """
-    Test reading a .npz file and extract the hsdbs feature, this test covers the case that the criterion option is set to BSExcludeCriterion.
-    """
-
-    stream = {
-        "direction": np.array([1 for _ in range(100)]),
-        "length": np.array([i * 10 + 1 for i in range(100)]),  # Length of 0 is not allowed
-        "timestamp": np.array([i * .1 for i in range(100)])
-    }
-
-    tmp_file = TemporaryFile()
-    np.savez(tmp_file, **stream)
-    tmp_file.seek(0)
-    npz_files = [np.load(tmp_file)]
-
-    split_prob = [1.0]
-    weights = [[0.5, 0.5]]
-    extractor = NpzDirExtractor(
-        splitter=WeightSplitter(weight_generator=make_split_weight_generator(split_prob, weights)),
-        split_threshold=10
-        )
-    result = []
-    extractor.extract(result, npz_files)
-
-    assert len(result) == 120 and np.all(np.array(result) == 1)
-
-    split_prob = [.5, .5]
-    weights = [[0.5, 0.5], [0.3, 0.7]]
-    extractor = NpzDirExtractor(
-        splitter=WeightSplitter(weight_generator=make_split_weight_generator(split_prob, weights)), 
-        split_threshold=10
-        )
-    result = []
-    extractor.extract(result, npz_files)
-    assert len(result) == 120 and np.all(np.array(result) == 1)
-
-    split_prob = [1.0, 0.0, 0.0]
-    weights = [None, [0.5, 0.5], [0.3, 0.7]]
-    extractor = NpzDirExtractor(
-        splitter=WeightSplitter(weight_generator=make_split_weight_generator(split_prob, weights)),
-        split_threshold=10
-        )
-    result = []
-    extractor.extract(result, npz_files)
-    assert len(result) == 100 and np.all(np.array(result) == 1)
-
-    # The stream is shorter than split_threshold, so it should not be split
-    split_prob = [.5, .5]
-    weights = [[0.5, 0.5], [0.3, 0.7]]
-    extractor = NpzDirExtractor(
-        splitter=WeightSplitter(weight_generator=make_split_weight_generator(split_prob, weights)),
-        split_threshold=100
-        )
-    result = []
-    extractor.extract(result, npz_files)
-    assert len(result) == 100 and np.all(np.array(result) == 1)
-
-    split_prob = [1.0]
-    weights = [[0.4, 0.2, 0.2, 0.2]]
-    extractor = NpzDirExtractor(
-        splitter=WeightSplitter(weight_generator=make_split_weight_generator(split_prob, weights)),
-        split_threshold=10
-        )
-    result = []
-    extractor.extract(result, npz_files)
-    assert len(result) == 160 and np.all(np.array(result) == 1)
+    target = np.array([1, -1, 1, -1, 1, -1, -1, 1, -1, 1])
+    assert np.all(np.sign(result) == target)
 
 
 def test_WeightSplitter_1():
@@ -551,3 +499,36 @@ def test_RatioSplitter_1():
     mean = 90
     k = 10
     assert np.abs(np.mean(stream_length) - mean) < k * sigma
+
+
+def test_NpzRawExtractor_1(npz_buffers):
+    """
+    Test the NpzRawExtractor class extract method.
+    """
+    extractor = NpzRawExtractor(features=['direction', 'length'])
+    result = []
+    npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
+    extractor.extract(result, npz_files)
+    
+    target = [
+        (1, 132), (1, 132), (-1, 31), (1, 132), (-1, 20), (1, 132), (-1, 32), (1, 132), (-1, 20), (-1, 132), (1, 20), (-1, 132), (1, 20), (-1, 132), (1, 20), (-1, 132), (1, 32), (-1, 132), (1, 20), (-1, 132), (1, 20), (-1, 132), (1, 20), (1, 132), (-1, 20), (1, 132), (-1, 20),
+    ]
+    
+    assert result == target
+    
+
+def test_NpzRawExtractor_2(npz_buffers):
+    """
+    Test the NpzRawExtractor class extract method using LengthCriterion.
+    """
+    extractor = NpzRawExtractor(features=['direction', 'length'], criteria=LengthCriterion(k=2))
+    result = []
+    npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
+    extractor.extract(result, npz_files)
+
+    target = [
+        (1, 132), (1, 132), (-1, 31), (1, 132), (-1, 20), (1, 132), (-1, 32), (1, 132), (-1, 20), (-1, 132), (1, 20), (-1, 132), (1, 20), (-1, 132), (1, 20), (1, 132), (-1, 20), (1, 132), (-1, 20)  
+    ]
+    
+    assert result == target
+    

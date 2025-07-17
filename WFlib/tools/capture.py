@@ -11,7 +11,7 @@ sniff                    v------------------------------------------------------
 capture                  |--------------------------------------------------------------------------|
 """
 
-from selenium.common.exceptions import WebDriverException, TimeoutException
+from selenium.common.exceptions import WebDriverException
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.firefox.service import Service
@@ -33,6 +33,8 @@ import shutil
 import asyncio
 
 from WFlib.utils.config import get_config
+
+PAGE_LOAD_TIMEOUT = 40  # A fixed limit for complete webpage loading 
 
 logger = logging.getLogger('selenium')
 logger.setLevel(logging.WARN)
@@ -124,18 +126,12 @@ def capture(url, iface, output_file, timeout=200, capture_filter=common_filter, 
             time.sleep(2)
             stop_event.set()
             return
-        
-        driver.set_page_load_timeout(timeout)
+            
+        driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
 
         try:
             driver.get(url)
-        except TimeoutException as e:
-            if log_output is not None:
-                with open(log_output, 'a+') as f:
-                    f.write(f"The file {output_file} raises the exception: {e}\n")
-            if ill_files is not None:
-                with open(ill_files, 'a+') as f:
-                    f.write(f"{output_file}\n")
+            time.sleep(timeout)
         except Exception as e:
             if log_output is not None:
                 with open(log_output, 'a+') as f:
@@ -143,6 +139,8 @@ def capture(url, iface, output_file, timeout=200, capture_filter=common_filter, 
             if ill_files is not None:
                 with open(ill_files, 'a+') as f:
                     f.write(f"{output_file}\n")
+
+
         driver.quit()
         
         time.sleep(2)
@@ -238,7 +236,8 @@ def batch_capture(base_dir, host_list, iface,
                   timeout=200, 
                   ill_files=None,
                   log_output=None,
-                  proxy_log=None):
+                  proxy_log=None,
+                  proxy=None):
     """
     Capture the traffic of a list of hosts. The capturing and storing process is illustrated as follows.
     Suppose the host_list = [www.baidu.com, www.zhihu.com, www.google.com], and the base_dir is set to
@@ -290,12 +289,22 @@ def batch_capture(base_dir, host_list, iface,
     use_proxy : boolean
         Whether to capture proxied traffic.
     """
-    def launch_proxy(keylog, proxy_log):
+    def launch_proxy(keylog, proxy_log, proxy):
         # TODO: Currently, only Clash is supported. More proxy clients would be supported in the future.
         stdout = open(proxy_log, 'a+') if proxy_log is not None else subprocess.DEVNULL
 
+        if proxy == "vmess":
+            cmd = ['/home/lxyu/clash/bin/clash-linux-amd64-debug', '-key-vmess', keylog]
+        elif proxy == "trojan":
+            cmd = ['/home/lxyu/clash/bin/clash-linux-amd64-debug', '-key-trojan', keylog]
+        elif proxy == "shadowsocks":
+            # TODO: Write SS passwd directly in Clash
+            cmd = ['/home/lxyu/clash/bin/clash-linux-amd64-debug']
+        else:
+            raise NotImplementedError
+
         clash_process = subprocess.Popen(
-            ['/home/lxyu/clash/bin/clash-linux-amd64-debug', '-key-trojan', keylog],
+            cmd,
             stdout=stdout,
             stderr=subprocess.STDOUT 
         )
@@ -339,7 +348,7 @@ def batch_capture(base_dir, host_list, iface,
             # Launch Clash asynchronously
             if proxy_log is not None:
                 keylog = f"{base_dir}/{host}/proxy_keylog.txt"
-                monitor_process = multiprocessing.Process(target=launch_proxy, kwargs={"keylog": keylog, "proxy_log": proxy_log})
+                monitor_process = multiprocessing.Process(target=launch_proxy, kwargs={"keylog": keylog, "proxy_log": proxy_log, "proxy": proxy})
                 monitor_process.start()
 
                 time.sleep(1)  # maybe waiting for proxy client to launch?
