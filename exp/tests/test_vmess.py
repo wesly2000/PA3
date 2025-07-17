@@ -8,7 +8,7 @@ import os
 import pytest
 import pandas as pd
 
-from WFlib.utils.config import get_config, default_override_prefs
+from WFlib.utils.config import get_config, default_override_prefs, get_tshark_path
 from WFlib.tools.analyzer import *
 from WFlib.tools.visualize import *
 from exp.data_analysis.http2_stream_analysis import *
@@ -16,16 +16,17 @@ from WFlib.tools.extractor import pcap_to_dataframe, single_pcap_extract, multi_
 import nest_asyncio 
 nest_asyncio.apply()
 
-config_path = Path.cwd() / 'config.ini'
+config_path = Path.cwd() / 'custom_config.ini'
 if not config_path.exists():
     VMESS_ENABLED = False
 else:
     config = get_config(config_path)
-    if config is None or 'vmess' not in config:
+    if 'vmess' not in config:
         VMESS_ENABLED = False
     else:
         VMESS_ENABLED = config['vmess'].getboolean('enabled', fallback=False)
-        tshark_path = config['tshark'].get('tshark_path', fallback="tshark")
+
+tshark_path = get_tshark_path(config_path, 'vmess')
 
 
 skip_vmess = pytest.mark.skipif(
@@ -63,7 +64,8 @@ def capture_gen(request):
         input_file=pcap_file, 
         custom_parameters=custom_parameters,
         display_filter=display_filter, 
-        override_prefs=override_prefs
+        override_prefs=override_prefs,
+        tshark_path=tshark_path
         )
     
     yield cap
