@@ -12,7 +12,7 @@ from exp.tests.test_formatter import google_file, apple_file, tiktok_file, yande
 
 from exp.tests.fixture import npz_buffers
 
-config_path = Path.cwd() / 'config.ini'
+config_path = Path.cwd() / 'custom_config.ini'
 if not config_path.exists():
     tshark_path = "tshark"
 else:

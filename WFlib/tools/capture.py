@@ -39,7 +39,7 @@ logger.setLevel(logging.WARN)
 
 gecko_path = shutil.which('geckodriver')
 
-config_path = Path.cwd() / 'config.ini'
+config_path = Path.cwd() / 'custom_config.ini'
 if not config_path.exists():
     firefox_path = ""
 else:

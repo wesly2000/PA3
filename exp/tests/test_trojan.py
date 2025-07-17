@@ -8,7 +8,7 @@ import os
 import pytest
 import pandas as pd
 
-from WFlib.utils.config import get_config, default_override_prefs
+from WFlib.utils.config import get_config, default_override_prefs, get_tshark_path
 from WFlib.tools.analyzer import *
 from WFlib.tools.visualize import *
 from exp.data_analysis.http2_stream_analysis import *
@@ -17,8 +17,7 @@ from WFlib.tools.extractor import pcap_to_dataframe
 import nest_asyncio 
 nest_asyncio.apply()
 
-tshark_path = None
-config_path = Path.cwd() / 'config.ini'
+config_path = Path.cwd() / 'custom_config.ini'
 if not config_path.exists():
     TROJAN_ENABLED = False
 else:
@@ -27,9 +26,8 @@ else:
         TROJAN_ENABLED = False
     else:
         TROJAN_ENABLED = config['trojan'].getboolean('enabled', fallback=False)
-        tshark_path = config['trojan'].get('tshark_path')
-        if tshark_path is None:
-            TROJAN_ENABLED = False
+
+tshark_path = get_tshark_path(config_path, 'trojan')
 
 
 skip_trojan = pytest.mark.skipif(
