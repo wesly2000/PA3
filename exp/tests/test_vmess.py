@@ -8,7 +8,7 @@ import os
 import pytest
 import pandas as pd
 
-from WFlib.utils.config import get_config, default_override_prefs
+from WFlib.utils.config import get_config, default_override_prefs, get_tshark_path
 from WFlib.tools.analyzer import *
 from WFlib.tools.visualize import *
 from exp.data_analysis.http2_stream_analysis import *
@@ -21,11 +21,12 @@ if not config_path.exists():
     VMESS_ENABLED = False
 else:
     config = get_config(config_path)
-    if config is None or 'vmess' not in config:
+    if 'vmess' not in config:
         VMESS_ENABLED = False
     else:
         VMESS_ENABLED = config['vmess'].getboolean('enabled', fallback=False)
-        tshark_path = config['tshark'].get('tshark_path', fallback="tshark")
+
+tshark_path = get_tshark_path(config_path, 'vmess')
 
 
 skip_vmess = pytest.mark.skipif(
@@ -63,7 +64,8 @@ def capture_gen(request):
         input_file=pcap_file, 
         custom_parameters=custom_parameters,
         display_filter=display_filter, 
-        override_prefs=override_prefs
+        override_prefs=override_prefs,
+        tshark_path=tshark_path
         )
     
     yield cap
@@ -292,7 +294,7 @@ def test_h2_stream_analysis_per_host_1():
     root = 'exp/test_dataset/realworld_dataset'
     host = 's.weibo.com'
     host_filter = {'firefox.settings.services.mozilla.com'}
-    df = h2_stream_analysis_per_host(root=root, protocol='vmess', host=host, host_filter=host_filter)
+    df = h2_stream_analysis_per_host(root=root, protocol='vmess', host=host, host_filter=host_filter, tshark_path=tshark_path)
 
     assert df.loc[0, 'h2_avg'] == 1 and \
             df.loc[0, 'avail_h2_avg'] == 1 and \
@@ -306,7 +308,7 @@ def test_h2_stream_analysis_per_host_2():
     root = 'exp/test_dataset/realworld_dataset'
     host = 'top.baidu.com'
     host_filter = {'firefox.settings.services.mozilla.com'}
-    df = h2_stream_analysis_per_host(root=root, protocol='vmess', host=host, host_filter=host_filter)
+    df = h2_stream_analysis_per_host(root=root, protocol='vmess', host=host, host_filter=host_filter, tshark_path=tshark_path)
 
     assert df.loc[0, 'h2_avg'] == 1.5 and \
             df.loc[0, 'avail_h2_avg'] == 1.5 and \

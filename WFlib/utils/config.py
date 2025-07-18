@@ -1,18 +1,24 @@
 from pathlib import Path
 from typing import Optional
 from configparser import ConfigParser
+import WFlib
 
 SUPPORTED_BASE = ['tcp', 'tls']
 SUPPORTED_PROTOCOL = ['normal', 'vmess', 'shadowsocks']
 
-def get_config(config_path: Path):
-    if config_path.exists():
-        config = ConfigParser()
-        config.read(config_path)
-        return config
+DEFAULT_CONFIG_PATH = Path(WFlib.__file__).parent / 'config.ini'
+
+def get_config(custom_config_path: Path):
+    if custom_config_path.exists():
+        config_path = custom_config_path
+    elif DEFAULT_CONFIG_PATH.exists():
+        config_path = DEFAULT_CONFIG_PATH
     else:
         return None
     
+    config = ConfigParser()
+    config.read(config_path)
+    return config
 
 def get_tshark_path(config_path: Path, protocol: str = 'normal'):
     if not config_path.exists():

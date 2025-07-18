@@ -1,15 +1,19 @@
 from WFlib.tools.capture import *
 from WFlib.tools.analyzer import packet_count
 import pyshark
-
+from pathlib import Path
+from WFlib.utils.config import get_tshark_path
 
 baidu_proxied_file = "exp/test_dataset/realworld_dataset/www.baidu.com_proxied.pcapng"
 google_file = "exp/test_dataset/realworld_dataset/www.google.com.pcapng"
 apple_file = "exp/test_dataset/realworld_dataset/decryption/www.apple.com.pcapng"
 tiktok_file = "exp/test_dataset/realworld_dataset/decryption/www.tiktok.com.pcapng"
 
+config_path = Path.cwd() / 'config.ini'
+tshark_path = get_tshark_path(config_path, 'normal')
+
 def test_SNI_extract_1():
-    capture = pyshark.FileCapture(input_file=baidu_proxied_file, display_filter="tls.handshake.type == 1")
+    capture = pyshark.FileCapture(input_file=baidu_proxied_file, display_filter="tls.handshake.type == 1", tshark_path=tshark_path)
     SNIs = SNI_extract(capture)
 
     target = {
@@ -27,7 +31,7 @@ def test_SNI_extract_1():
     capture.close()
 
 def test_SNI_extract_2():
-    capture = pyshark.FileCapture(input_file=google_file, display_filter="tls.handshake.type == 1")
+    capture = pyshark.FileCapture(input_file=google_file, display_filter="tls.handshake.type == 1", tshark_path=tshark_path)
     SNIs = SNI_extract(capture)
 
     target = {
@@ -44,7 +48,7 @@ def test_SNI_extract_2():
     capture.close()
 
 def test_stream_number_extract_1():
-    capture = pyshark.FileCapture(input_file=baidu_proxied_file, display_filter="tls.handshake.type == 1")
+    capture = pyshark.FileCapture(input_file=baidu_proxied_file, display_filter="tls.handshake.type == 1", tshark_path=tshark_path)
     SNIs = SNI_extract(capture)
     
     tcp_stream_numbers, _ = stream_number_extract(capture=capture, check=lambda pkt: contains_SNI(SNIs, pkt))
@@ -105,13 +109,13 @@ def test_stream_exclude_filter_4():
 def test_SNI_exclude_filter_1():
     SNIs = read_host_list("exp/data_extract/filter.txt")
 
-    client_hello_capture = pyshark.FileCapture(input_file=baidu_proxied_file, display_filter="tls.handshake.type == 1")
+    client_hello_capture = pyshark.FileCapture(input_file=baidu_proxied_file, display_filter="tls.handshake.type == 1", tshark_path=tshark_path)
     tcp_stream_numbers, _ = stream_number_extract(capture=client_hello_capture, check=lambda pkt: contains_SNI(SNIs, pkt))
     client_hello_capture.close()
 
-    display_filter = SNI_exclude_filter(baidu_proxied_file, SNIs)
+    display_filter = SNI_exclude_filter(baidu_proxied_file, SNIs, tshark_path=tshark_path)
 
-    capture = pyshark.FileCapture(input_file=baidu_proxied_file, display_filter=display_filter)
+    capture = pyshark.FileCapture(input_file=baidu_proxied_file, display_filter=display_filter, tshark_path=tshark_path)
     for pkt in capture:
         if 'TCP' in pkt:
             assert pkt['TCP'].stream not in tcp_stream_numbers 
@@ -125,8 +129,8 @@ def test_SNI_exclude_filter_2():
     """
     target = 16
     SNIs = ['www.google.com', 'mobile.events.data.microsoft.com']
-    display_filter = SNI_exclude_filter(google_file, SNIs)
-    cap = pyshark.FileCapture(input_file=google_file, display_filter=display_filter, only_summaries=True, keep_packets=False)
+    display_filter = SNI_exclude_filter(google_file, SNIs, tshark_path=tshark_path)
+    cap = pyshark.FileCapture(input_file=google_file, display_filter=display_filter, only_summaries=True, keep_packets=False, tshark_path=tshark_path)
     cnt = packet_count(cap)
 
     cap.close()
@@ -138,7 +142,7 @@ def test_h2data_SNI_intersect_1():
     '''
     SNIs = ["is1-ssl.mzstatic.com"]
     keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
-    tcp_stream_numbers = h2data_SNI_intersect(file=apple_file, SNIs=SNIs, keylog_file=keylog_file)
+    tcp_stream_numbers = h2data_SNI_intersect(file=apple_file, SNIs=SNIs, keylog_file=keylog_file, tshark_path=tshark_path)
     target = {'0'}
 
     assert tcp_stream_numbers == target
@@ -149,7 +153,7 @@ def test_h2data_SNI_intersect_2():
     '''
     SNIs = ["is1-ssl.mzstatic"]
     keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
-    tcp_stream_numbers = h2data_SNI_intersect(file=apple_file, SNIs=SNIs, keylog_file=keylog_file)
+    tcp_stream_numbers = h2data_SNI_intersect(file=apple_file, SNIs=SNIs, keylog_file=keylog_file, tshark_path=tshark_path)
     target = set()
 
     assert tcp_stream_numbers == target
@@ -160,7 +164,7 @@ def test_h3data_SNI_intersect_1():
     '''
     SNIs = ["lf16-cdn-tos.tiktokcdn-us.com"]
     keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
-    udp_stream_numbers = h3data_SNI_intersect(file=tiktok_file, SNIs=SNIs, keylog_file=keylog_file)
+    udp_stream_numbers = h3data_SNI_intersect(file=tiktok_file, SNIs=SNIs, keylog_file=keylog_file, tshark_path=tshark_path)
 
     target = {'0'}
 
@@ -172,7 +176,7 @@ def test_h3data_SNI_intersect_2():
     '''
     SNIs = ["lf16-cdn-tos.tiktokcdn-us."]
     keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
-    udp_stream_numbers = h3data_SNI_intersect(file=tiktok_file, SNIs=SNIs, keylog_file=keylog_file)
+    udp_stream_numbers = h3data_SNI_intersect(file=tiktok_file, SNIs=SNIs, keylog_file=keylog_file, tshark_path=tshark_path )
 
     target = set()
 
@@ -183,7 +187,7 @@ def test_select_stream_with_max_packet_count():
     This test covers the selection of the stream with the maximum packet count.
     """
     tcp_stream_numbers = {'1', '2', '3'}
-    result = select_stream(apple_file, tcp_stream_numbers, mapper=packet_count, criteria=max)
+    result = select_stream(apple_file, tcp_stream_numbers, mapper=packet_count, criteria=max, tshark_path=tshark_path)
 
     target = {'3'}
 

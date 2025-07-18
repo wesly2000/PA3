@@ -27,7 +27,7 @@ def test_PcapDirExtractor_1():
     """
     extractor = PcapDirExtractor(src=["192.168.5.5", "10.4.0.3"])
 
-    formatter = PcapFormatter(length=10)
+    formatter = PcapFormatter(length=10, tshark_path=tshark_path)
     formatter.load(google_file)
     formatter.transform("www.google.com", 0, extractor)
 
@@ -58,7 +58,7 @@ def test_PcapDirExtractor_1():
 
 def test_PcapDirExtractor_2():
     extractor = PcapDirExtractor(src=["58.206.207.126", "2001:da8:283:c004:8177:495b:d038:d48a"])
-    formatter = PcapFormatter(length=31)
+    formatter = PcapFormatter(length=31, tshark_path=tshark_path)
     formatter.load(yandex_file)
     formatter.transform("www.yandex.com", 0, extractor)
 
@@ -85,7 +85,7 @@ def test_PcapTsExtractor_1():
     """
     extractor = PcapTsExtractor()
 
-    formatter = PcapFormatter(length=10, display_filter="tcp.stream != 1")
+    formatter = PcapFormatter(length=10, display_filter="tcp.stream != 1", tshark_path=tshark_path)
 
     formatter.load("exp/test_dataset/realworld_dataset/www.google.com.pcapng")
     formatter.transform("www.google.com", 0, extractor)
@@ -114,7 +114,7 @@ def test_PcapTsExtractor_2():
     """
     extractor = PcapTsExtractor(src='192.168.5.5')
 
-    formatter = PcapFormatter(length=10, display_filter="quic")
+    formatter = PcapFormatter(length=10, display_filter="quic", tshark_path=tshark_path)
 
     formatter.load("exp/test_dataset/realworld_dataset/www.google.com.pcapng")
     formatter.transform("www.google.com", 0, extractor)
@@ -144,7 +144,7 @@ def test_PcapTsExtractor_3():
     """
     extractor = PcapTsExtractor(src=["192.168.5.5", "10.4.0.3"])
 
-    formatter = PcapFormatter(length=5)
+    formatter = PcapFormatter(length=5, tshark_path=tshark_path)
 
     formatter.load(google_file)
     formatter.transform("www.google.com", 0, extractor)

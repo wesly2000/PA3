@@ -6,6 +6,7 @@ from pathlib import Path
 import pyshark
 import os
 import pytest
+from WFlib.utils.config import get_tshark_path
 
 import nest_asyncio 
 nest_asyncio.apply()
@@ -15,6 +16,9 @@ google_file = "exp/test_dataset/realworld_dataset/www.google.com.pcapng"
 apple_file = "exp/test_dataset/realworld_dataset/decryption/www.apple.com.pcapng"
 tiktok_file = "exp/test_dataset/realworld_dataset/decryption/www.tiktok.com.pcapng"
 
+config_path = Path.cwd() / 'config.ini'
+tshark_path = get_tshark_path(config_path, 'normal')
+
 @pytest.fixture
 def baidu_proxied_cap(request):
     if 'display_filter' in request.param:
@@ -22,7 +26,7 @@ def baidu_proxied_cap(request):
     else:
         display_filter = None
     
-    cap = pyshark.FileCapture(input_file=baidu_proxied_file, display_filter=display_filter, only_summaries=True, keep_packets=False)
+    cap = pyshark.FileCapture(input_file=baidu_proxied_file, display_filter=display_filter, only_summaries=True, keep_packets=False, tshark_path=tshark_path)
     yield cap
 
     cap.close()
@@ -37,7 +41,8 @@ def apple_cap(request):
 
     cap = pyshark.FileCapture(input_file=apple_file, display_filter=display_filter,
                             custom_parameters=["-C", "Customized", "-2"],
-                            override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
+                            override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)},
+                            tshark_path=tshark_path)
     yield cap
 
     cap.close()
@@ -51,7 +56,8 @@ def tiktok_cap(request):
     keylog_file = "exp/test_dataset/realworld_dataset/decryption/keylog.txt"
 
     cap = pyshark.FileCapture(  input_file=tiktok_file, display_filter=display_filter,
-                                override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
+                                override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)},
+                                tshark_path=tshark_path)
     yield cap
 
     cap.close()

@@ -9,14 +9,16 @@ import logging
 
 from WFlib.tools.capture import *
 from WFlib.utils.statistics import *
-from WFlib.utils.config import default_override_prefs
+from WFlib.utils.config import default_override_prefs, get_tshark_path
 
 logger = logging.getLogger(__name__)
 
 PROTOCOLS = ['normal', 'vmess']
 custom_parameters=["-2"]
+config_path = Path.cwd() / 'config.ini'
 
-def h2_stream_analysis_per_sni(file: Path, host_filter: Set[str], custom_parameters = None, override_prefs = None):
+
+def h2_stream_analysis_per_sni(file: Path, host_filter: Set[str], custom_parameters = None, override_prefs = None, tshark_path = 'tshark'):
     """
     Count the average number of HTTP/2 streams and available HTTP/2 streams (streams with HTTP/2 DATA frames).
     To make these statistics reusable, store them into .csv files. The key is (host, SNI, protocol).
@@ -28,7 +30,9 @@ def h2_stream_analysis_per_sni(file: Path, host_filter: Set[str], custom_paramet
     origin_cap = pyshark.FileCapture(input_file=file, 
                                      display_filter="tls.handshake.type == 1",
                                      custom_parameters=custom_parameters, 
-                                     override_prefs=override_prefs)
+                                     override_prefs=override_prefs,
+                                     tshark_path=tshark_path
+                                     )
 
     SNIs = SNI_extract(origin_cap)
 
@@ -37,11 +41,11 @@ def h2_stream_analysis_per_sni(file: Path, host_filter: Set[str], custom_paramet
 
     for SNI in filtered_SNIs:
         # Fetch the number of all HTTP/2 streams for the same SNI
-        tcp_stream_numbers, _ = SNI_stream_extract(file, [SNI], custom_parameters, override_prefs)
+        tcp_stream_numbers, _ = SNI_stream_extract(file, [SNI], custom_parameters, override_prefs, tshark_path)
         h2_stream_number = len(tcp_stream_numbers)
         # Fetch the number of all available HTTP/2 streams for the same SNI
         try:
-            tcp_stream_numbers = h2data_SNI_intersect(file, [SNI], None, custom_parameters, override_prefs)
+            tcp_stream_numbers = h2data_SNI_intersect(file, [SNI], None, custom_parameters, override_prefs, tshark_path)
         except Exception as e:
             logger.error(f"Error in file {file}: {e}")
             continue
@@ -50,7 +54,7 @@ def h2_stream_analysis_per_sni(file: Path, host_filter: Set[str], custom_paramet
         yield SNI, h2_stream_number, available_h2_stream_number
 
 
-def h2_stream_analysis_per_host(root: str, protocol: str, host: str, host_filter: Set[str]) -> pd.DataFrame:
+def h2_stream_analysis_per_host(root: str, protocol: str, host: str, host_filter: Set[str], tshark_path) -> pd.DataFrame:
     """
     Count the average number of HTTP/2 streams and available HTTP/2 streams (streams with HTTP/2 DATA frames).
     To make these statistics reusable, store them into .csv files. The key is (host, SNI, protocol).
@@ -78,7 +82,8 @@ def h2_stream_analysis_per_host(root: str, protocol: str, host: str, host_filter
             logger.info(f"Processing {file}")
             for SNI, h2, avail_h2 in h2_stream_analysis_per_sni(file, host_filter,   
                                                                     custom_parameters=custom_parameters, 
-                                                                    override_prefs=override_prefs):
+                                                                    override_prefs=override_prefs,
+                                                                    tshark_path=tshark_path):
                 if SNI not in stats:
                     stats[SNI] = {'h2': [h2], 'avail_h2': [avail_h2]}
                 else:
@@ -102,15 +107,16 @@ def h2_stream_analysis_per_host(root: str, protocol: str, host: str, host_filter
         
 def h2_stream_analysis(root: str, host_list: Set[str], database_file: str, host_filter: Set[str]):
     existed_df = pd.read_csv(database_file)[['host', 'protocol']]
-    for host in host_list:
+    for host in sorted(host_list):
         for protocol in PROTOCOLS:
+            tshark_path = get_tshark_path(config_path, protocol)
             logger.info(f"Host: {host}, Protocol: {protocol}")
             # Check if the host with the given protocol has been computed
             if ((existed_df['host'] == host) & (existed_df['protocol'] == protocol)).any():
                 logger.info(f"Host: {host}, Protocol: {protocol} has been computed, skip")
                 continue
             try:
-                df = h2_stream_analysis_per_host(root, protocol, host, host_filter)
+                df = h2_stream_analysis_per_host(root, protocol, host, host_filter, tshark_path)
             except Exception as e:
                 logger.error(f"Error in host: {host}, Protocol: {protocol}: {e}")
                 continue
