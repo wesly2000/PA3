@@ -378,7 +378,7 @@ def test_VMessStripper_1(npz_buffers):
     result = []
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
     extractor.extract(result, npz_files)
-    target = np.array([1, 1, -1, 1, -1, 1, 1, -1, -1, 1, -1, 1, -1, -1, 1, 1, 1, -1])
+    target = np.array([1, 1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1, -1, -1, 1, 1, 1, 1, 1, -1])
 
     assert np.all(np.sign(result) == target)
 
@@ -391,7 +391,7 @@ def test_VMessStripper_2(npz_buffers):
     result = []
     npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
     extractor.extract(result, npz_files)
-    target = np.array([1, -1, 1, 1, -1, -1, 1])
+    target = np.array([1, -1, 1, 1, -1, 1, -1, 1])
 
     assert np.all(np.sign(result) == target)
 

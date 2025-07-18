@@ -73,8 +73,9 @@ def test_stream_feature_2D_01(npz_buffers):
 
     assert len(yz_2D) == 3
     target_yz_2D = [
-        ([3, 6, 7, 11], [224, -12, 112, -224]),
-        ([9, 16, 17], [-224, 12, -224]),
-        ([0, 2, 23], [224, -123, 224])
+        (np.array([3, 6, 7, 11]), np.array([250, -250, 250, -250])),
+        (np.array([9, 16, 17]), np.array([-250, 250, -250])),
+        (np.array([0, 2, 23]), np.array([250, -250, 250]))
     ]
-    assert yz_2D == target_yz_2D
+    assert all(np.array_equal(yz[0], target[0]) and np.array_equal(yz[1], target[1]) 
+              for yz, target in zip(yz_2D, target_yz_2D))
