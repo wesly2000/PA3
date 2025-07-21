@@ -75,7 +75,7 @@ def capture_gen(request):
     cap.close()
 
 
-@pytest.mark.parametrize("capture_gen", [{'host': 'ai.zjnav.com', 'index': 0}], indirect=True)
+@pytest.mark.parametrize("capture_gen", [{'host': 'ai.zjnav.com', 'index': 0, 'display_filter': 'trojan'}], indirect=True)
 @skip_trojan
 def test_bytes_count(capture_gen):
     counter = TrojanByteCounter()
@@ -85,6 +85,6 @@ def test_bytes_count(capture_gen):
         byte_count += counter.packet_count(pkt)
         pkt_count += 1
 
-    byte_target, packet_target = 10920, 14
+    byte_target, packet_target = 554692, 73
 
     assert byte_target == byte_count and packet_target == pkt_count
