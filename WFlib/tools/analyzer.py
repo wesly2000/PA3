@@ -344,14 +344,16 @@ class TrojanByteCounter(ByteCounter):
         super().__init__(name)
 
     def layer_count(self, layer, extra_data = None) -> int:
-        cnt = layer.data_length
+        cnt = 0
+        for tdl in layer.trojan_data_length.all_fields:
+            cnt += int(tdl.showname_value)
 
         return cnt
     
     def packet_count(self, pkt) -> int:
         cnt = 0
         if "Trojan" in pkt:  
-            trojan_layers = filter(lambda layer: layer.layer_name == "trojan", pkt.layers)  # One packet may contain multiple TLS layers
+            trojan_layers = filter(lambda layer: layer.layer_showname == "trojan", pkt.layers)  # One packet may contain multiple TLS layers
             trojan_layer_lengths = map(self.layer_count, trojan_layers)
             cnt += sum(trojan_layer_lengths)
 
