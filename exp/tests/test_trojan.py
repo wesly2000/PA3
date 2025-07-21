@@ -151,3 +151,85 @@ def test_layer_extractor_1(capture_gen):
                     layers[4].layer_name == "http2" and \
                     PROTOCOL_REASSEMBLE_FIELD['tls'] in layers[0].field_names and \
                     PROTOCOL_REASSEMBLE_FIELD['tls'] in layers[3].field_names
+
+
+@pytest.mark.parametrize("capture_gen", [{'host': 'ai.zjnav.com', 'index': 0}], indirect=True)
+@skip_trojan
+def test_seq_filter_1(capture_gen):
+    """
+    This test covers seq_filter with more complex labeling functions.
+    """
+    for pkt in capture_gen:
+        if pkt.number == "361":  # This packet contains a DATA layer and multiple HTTP2 layers.
+            layers = layer_extractor(pkt, upper_protocol="http2", lower_protocol='tls')
+            result = seq_filter(layers, lower_protocol='tls')
+            layer_names = [layer.layer_name for layer in result]
+            expect_num_DATA_layer = 1
+            expect_num_HTTP2_layer = 3 
+            assert layer_names.count("DATA") == expect_num_DATA_layer and \
+                   layer_names.count("http2") == expect_num_HTTP2_layer
+            layers = layer_extractor(pkt, upper_protocol="tls", lower_protocol='trojan')
+            result = seq_filter(layers, lower_protocol='trojan')
+            layer_names = [layer.layer_name for layer in result]
+            expect_num_DATA_layer = 1
+            expect_num_TLS_layer = 1 
+            assert layer_names.count("DATA") == expect_num_DATA_layer and \
+                   layer_names.count("tls") == expect_num_TLS_layer
+            layers = layer_extractor(pkt, upper_protocol="trojan", lower_protocol='tcp')
+            result = seq_filter(layers, lower_protocol='tcp')
+            layer_names = [layer.layer_name for layer in result]
+            expect_num_DATA_layer = 1
+            expect_num_TROJAN_layer = 0 
+            assert layer_names.count("DATA") == expect_num_DATA_layer and \
+                   layer_names.count("trojan") == expect_num_TROJAN_layer
+
+
+@pytest.mark.parametrize("capture_gen", [{'host': 'ai.zjnav.com', 'index': 0}], indirect=True)
+@skip_trojan
+def test_line_rel_building_1(capture_gen):
+    """
+    This test covers building the lower relation of a line using MORE COMPLEX real-world data.
+    """    
+    line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="http2", lower_protocol="tls")
+    
+    counter = HTTP2ByteCounter()
+    cnt = 0
+
+    for pkt in capture_gen:
+        if "HTTP2" in pkt:
+            cnt += counter.packet_count(pkt)
+
+    byte_counter = 0
+    for covers in line.upper_abs_byte_map.values():
+        for cover in covers:
+            byte_counter += cover[1] - cover[0]
+
+    assert line.byte_counter == byte_counter and \
+           cnt == line.byte_counter
+    
+
+@pytest.mark.parametrize("capture_gen", [{'host': 'ai.zjnav.com', 'index': 0, 'display_filter': 'trojan'}], indirect=True)
+@skip_trojan
+def test_line_rel_building_2(capture_gen):
+    """
+    This test covers building the lower relation of a line using MORE COMPLEX real-world data, and
+    test TLS over Trojan line building.
+    """
+    
+    line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="tls", lower_protocol="trojan")
+    
+    counter = TLSByteCounter()
+    cnt = 0
+
+    for pkt in capture_gen:
+        layer_rename(pkt)
+        if "TLS" in pkt:
+            cnt += counter.packet_count(pkt)
+
+    byte_counter = 0
+    for covers in line.upper_abs_byte_map.values():
+        for cover in covers:
+            byte_counter += cover[1] - cover[0]
+
+    assert line.byte_counter == byte_counter and \
+           cnt == line.byte_counter
