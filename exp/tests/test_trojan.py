@@ -85,7 +85,7 @@ def test_bytes_count_1(capture_gen):
         byte_count += counter.packet_count(pkt)
         pkt_count += 1
 
-    byte_target, packet_target = 554692, 73
+    byte_target, packet_target = 555766, 73
 
     assert byte_target == byte_count and packet_target == pkt_count
 

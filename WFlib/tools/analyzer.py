@@ -340,13 +340,22 @@ class ShadowsocksByteCounter(ByteCounter):
 class TrojanByteCounter(ByteCounter):
     TYPE_TLS = '1'
     TYPE_HTTP = '2'
+
+    type_len = 1  # Trojan record type
+    ver_len = 2  # Trojan version
+    length_len = 2  # Trojan record length
+
     def __init__(self, name='trojan'):
         super().__init__(name)
 
     def layer_count(self, layer, extra_data = None) -> int:
         cnt = 0
-        for tdl in layer.trojan_data_length.all_fields:
-            cnt += int(tdl.showname_value)
+        try:
+            for rl in layer.record_length.all_fields:  
+                cnt += int(rl.showname_value) + self.type_len + self.ver_len + self.length_len
+        except AttributeError as _:
+            for rl in layer.tls_record_length.all_fields:
+                cnt += int(rl.showname_value) + self.type_len + self.ver_len + self.length_len
 
         return cnt
     
