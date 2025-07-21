@@ -77,7 +77,7 @@ def capture_gen(request):
 
 @pytest.mark.parametrize("capture_gen", [{'host': 'ai.zjnav.com', 'index': 0, 'display_filter': 'trojan'}], indirect=True)
 @skip_trojan
-def test_bytes_count(capture_gen):
+def test_bytes_count_1(capture_gen):
     counter = TrojanByteCounter()
 
     byte_count, pkt_count = 0, 0
@@ -117,3 +117,37 @@ def test_layer_extractor_1(capture_gen):
                     layers[0].layer_name == "DATA" and \
                     layers[1].layer_name == "trojan" and \
                     PROTOCOL_REASSEMBLE_FIELD['tcp'] in layers[0].field_names 
+        if pkt.number == "128": 
+            layers = layer_extractor(pkt, upper_protocol="http2", lower_protocol='tls')
+            assert len(layers) == 6 and \
+                    layers[0].layer_name == "http2" and \
+                    layers[1].layer_name == "http2" and \
+                    layers[2].layer_name == "DATA" and \
+                    layers[3].layer_name == "http2" and \
+                    layers[4].layer_name == "http2" and \
+                    layers[4].layer_name == "http2" and \
+                    PROTOCOL_REASSEMBLE_FIELD['tls'] in layers[2].field_names  
+            layers = layer_extractor(pkt, upper_protocol="tls", lower_protocol='trojan')
+            assert len(layers) == 5 and \
+                    layers[0].layer_name == "DATA" and \
+                    layers[1].layer_name == "tls" and \
+                    layers[2].layer_name == "tls" and \
+                    layers[3].layer_name == "DATA" and \
+                    layers[4].layer_name == "tls" and \
+                    PROTOCOL_REASSEMBLE_FIELD['trojan'] in layers[0].field_names  and \
+                    PROTOCOL_REASSEMBLE_FIELD['trojan'] in layers[3].field_names 
+            layers = layer_extractor(pkt, upper_protocol="trojan", lower_protocol='tcp')
+            assert len(layers) == 2 and \
+                    layers[0].layer_name == "DATA" and \
+                    layers[1].layer_name == "trojan" and \
+                    PROTOCOL_REASSEMBLE_FIELD['tcp'] in layers[0].field_names 
+        if pkt.number == "707": 
+            layers = layer_extractor(pkt, upper_protocol="http2", lower_protocol='tls')
+            assert len(layers) == 5 and \
+                    layers[0].layer_name == "DATA" and \
+                    layers[1].layer_name == "http2" and \
+                    layers[2].layer_name == "http2" and \
+                    layers[3].layer_name == "DATA" and \
+                    layers[4].layer_name == "http2" and \
+                    PROTOCOL_REASSEMBLE_FIELD['tls'] in layers[0].field_names and \
+                    PROTOCOL_REASSEMBLE_FIELD['tls'] in layers[3].field_names
