@@ -824,6 +824,12 @@ class Line():
         return span
     
 
+def layer_rename(pkt):
+    for i in range(len(pkt.layers)):
+        if pkt.layers[i].layer_showname == "trojan" or pkt.layers[i].layer_showname == "fake trojan":
+            pkt.layers[i].layer_name = pkt.layers[i].layer_showname
+
+
 def layer_extractor(pkt, upper_protocol, lower_protocol):
     """
     In PyShark, the reassembly information is wrapped in the DATA layer, which is a fake-field-wrapper. When there are multiple upper layers, multiple DATA layer might be used. For example, given a packet TCP/TLS/HTTP2, there are 3 possible cases, we list the corresponding layers for each of them:
@@ -856,16 +862,14 @@ def layer_extractor(pkt, upper_protocol, lower_protocol):
     
     layers = []
 
+    layer_rename(pkt)
+
     for layer in pkt.layers:
         # When upper_protocol == lower_protocol, no need to extract reassemble info
         if layer.layer_name == 'DATA' and upper_protocol != lower_protocol:
             if PROTOCOL_REASSEMBLE_FIELD[lower_protocol] in layer.field_names:
                 layers.append(layer)
-            continue
-        if layer.layer_showname == "trojan" or layer.layer_showname == "fake trojan":
-            layer.layer_name = layer.layer_showname
-
-        if layer.layer_name == upper_protocol:
+        elif layer.layer_name == upper_protocol:
             layers.append(layer)
 
     return layers
@@ -1088,6 +1092,9 @@ def get_adjacent_protocol_reassemble_info(cap: pyshark.FileCapture, upper_protoc
     lower_abs_frame_numbers = []
 
     for pkt in cap:
+
+        layer_rename(pkt)
+
         if upper_protocol in pkt:
             packet = Packet(PROCOCOL_CELL_EXTRACTOR[upper_protocol].extract(pkt, lower_protocol=lower_protocol))
             upper_packets.append(packet)
