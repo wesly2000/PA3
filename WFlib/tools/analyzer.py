@@ -578,6 +578,7 @@ PROCOCOL_CELL_EXTRACTOR = {
     "vmess": VMessCellExtractor(),
     "http2": HTTP2CellExtractor(),
     "shadowsocks": ShadowsocksCellExtractor(),
+    "trojan": TrojanCellExtractor(),
 }
                 
 class Packet():
@@ -837,7 +838,7 @@ def layer_extractor(pkt, upper_protocol, lower_protocol):
     upper_protocol = upper_protocol.lower()
     lower_protocol = lower_protocol.lower()
 
-    supported_protocols = ['tcp', 'tls', 'http2', 'vmess', 'shadowsocks']
+    supported_protocols = ['tcp', 'tls', 'http2', 'vmess', 'shadowsocks', 'trojan']
     if upper_protocol not in supported_protocols or lower_protocol not in supported_protocols:
         raise ValueError(f"Unsupported protocol: only the following protocols are supported: {supported_protocols}")
     # Assure the packet protocol stack contains both upper and lower protocols.
@@ -851,7 +852,11 @@ def layer_extractor(pkt, upper_protocol, lower_protocol):
         if layer.layer_name == 'DATA' and upper_protocol != lower_protocol:
             if PROTOCOL_REASSEMBLE_FIELD[lower_protocol] in layer.field_names:
                 layers.append(layer)
-        elif layer.layer_name == upper_protocol:
+            continue
+        if layer.layer_showname == "trojan" or layer.layer_showname == "fake trojan":
+            layer.layer_name = layer.layer_showname
+
+        if layer.layer_name == upper_protocol:
             layers.append(layer)
 
     return layers
