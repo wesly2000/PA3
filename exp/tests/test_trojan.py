@@ -208,7 +208,7 @@ def test_line_rel_building_1(capture_gen):
            cnt == line.byte_counter
     
 
-@pytest.mark.parametrize("capture_gen", [{'host': 'ai.zjnav.com', 'index': 0, 'display_filter': 'trojan'}], indirect=True)
+@pytest.mark.parametrize("capture_gen", [{'host': 'ai.zjnav.com', 'index': 0}], indirect=True)
 @skip_trojan
 def test_line_rel_building_2(capture_gen):
     """
@@ -233,3 +233,45 @@ def test_line_rel_building_2(capture_gen):
 
     assert line.byte_counter == byte_counter and \
            cnt == line.byte_counter
+
+
+@pytest.mark.parametrize("capture_gen", [{'host': 'ai.zjnav.com', 'index': 0}], indirect=True)
+@skip_trojan
+def test_line_rel_building_4(capture_gen):
+    """
+    This test covers building the lower relation of a line using MORE COMPLEX real-world data, and
+    test Trojan over TCP line building.
+    """
+    
+    line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="trojan", lower_protocol="tcp")
+    
+    counter = TrojanByteCounter()
+    cnt = 0
+
+    for pkt in capture_gen:
+        layer_rename(pkt)
+        if "Trojan" in pkt:
+            cnt += counter.packet_count(pkt)
+
+    byte_counter = 0
+    for covers in line.upper_abs_byte_map.values():
+        for cover in covers:
+            byte_counter += cover[1] - cover[0]
+
+    assert line.byte_counter == byte_counter and \
+           cnt == line.byte_counter
+    
+
+@pytest.mark.parametrize("capture_gen", [{'host': 'ai.zjnav.com', 'index': 0}], indirect=True)
+@skip_trojan
+def test_line_span_building_1(capture_gen):
+    """
+    This test covers building the lower relation of a line using MORE COMPLEX real-world data.
+    """    
+    line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="http2", lower_protocol="tls")
+    lower_span_bytes = 0
+    for span in line.lower_span_map.values():
+        for segment_size in span.values():
+            lower_span_bytes += segment_size
+
+    assert line.byte_counter == lower_span_bytes
