@@ -825,6 +825,14 @@ class Line():
     
 
 def layer_rename(pkt):
+    if "tls" in pkt and "trojan" not in pkt:
+        # This is a Trojan pre-handshake, which is a TLS handshake process, we mark these packets as Trojan packets.
+        for i in range(len(pkt.layers)):
+            if pkt.layers[i].layer_name == "tls":
+                pkt.layers[i].layer_name = "trojan"
+                pkt.layers[i].layer_showname = "trojan"
+        return 
+    
     for i in range(len(pkt.layers)):
         if pkt.layers[i].layer_showname == "trojan" or pkt.layers[i].layer_showname == "fake trojan":
             pkt.layers[i].layer_name = pkt.layers[i].layer_showname
