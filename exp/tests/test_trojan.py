@@ -85,7 +85,7 @@ def test_bytes_count_1(capture_gen):
         byte_count += counter.packet_count(pkt)
         pkt_count += 1
 
-    byte_target, packet_target = 555766, 73
+    byte_target, packet_target = 556474, 73
 
     assert byte_target == byte_count and packet_target == pkt_count
 
@@ -128,18 +128,18 @@ def test_layer_extractor_1(capture_gen):
                     layers[4].layer_name == "http2" and \
                     PROTOCOL_REASSEMBLE_FIELD['tls'] in layers[2].field_names  
             layers = layer_extractor(pkt, upper_protocol="tls", lower_protocol='trojan')
-            assert len(layers) == 5 and \
+            assert len(layers) == 4 and \
                     layers[0].layer_name == "DATA" and \
                     layers[1].layer_name == "tls" and \
-                    layers[2].layer_name == "tls" and \
-                    layers[3].layer_name == "DATA" and \
-                    layers[4].layer_name == "tls" and \
+                    layers[2].layer_name == "DATA" and \
+                    layers[3].layer_name == "tls" and \
                     PROTOCOL_REASSEMBLE_FIELD['trojan'] in layers[0].field_names  and \
-                    PROTOCOL_REASSEMBLE_FIELD['trojan'] in layers[3].field_names 
+                    PROTOCOL_REASSEMBLE_FIELD['trojan'] in layers[2].field_names 
             layers = layer_extractor(pkt, upper_protocol="trojan", lower_protocol='tcp')
-            assert len(layers) == 2 and \
+            assert len(layers) == 3 and \
                     layers[0].layer_name == "DATA" and \
                     layers[1].layer_name == "trojan" and \
+                    layers[2].layer_name == "trojan" and \
                     PROTOCOL_REASSEMBLE_FIELD['tcp'] in layers[0].field_names 
         if pkt.number == "707": 
             layers = layer_extractor(pkt, upper_protocol="http2", lower_protocol='tls')
@@ -275,3 +275,73 @@ def test_line_span_building_1(capture_gen):
             lower_span_bytes += segment_size
 
     assert line.byte_counter == lower_span_bytes
+
+
+@pytest.mark.parametrize("capture_gen", [{'host': 'ai.zjnav.com', 'index': 0}], indirect=True)
+@skip_trojan
+def test_generate_byte_segment_1(capture_gen):
+    """
+    This test covers generating byte segment map using real-world data
+    """
+    line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="http2", lower_protocol="tls")
+    result = generate_byte_segment([line])
+
+    counter = HTTP2ByteCounter()
+    cnt = 0
+
+    for pkt in capture_gen:
+        if "HTTP2" in pkt:
+            cnt += counter.packet_count(pkt)
+
+    byte_counter = 0
+    for covers in line.upper_abs_byte_map.values():
+        for cover in covers:
+            byte_counter += cover[1] - cover[0]
+
+    assert line.byte_counter == byte_counter and \
+           cnt == line.byte_counter
+
+    assert result[0][-1] == 56 and \
+            result[0][-18] == 55
+    
+
+@pytest.mark.parametrize("capture_gen", [{'host': 'ai.zjnav.com', 'index': 0}], indirect=True)
+@skip_trojan
+def test_line_merge_1(capture_gen):
+    """
+    This test covers Trojan data based line merging, which contains multiple streams.
+    """    
+    upper_line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="http2", lower_protocol="tls")
+    proxy_line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="tls", lower_protocol="trojan")
+    lower_line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="trojan", lower_protocol="tcp")
+
+    merged_line = line_merge(line_merge(upper_line, proxy_line), lower_line)
+
+    # Assert the total bytes in HTTP/2 layer is not changed by merging.
+    http2_byte_counter = 0
+    for span in upper_line.lower_span_map.values():
+        for segment_size in span.values():
+            http2_byte_counter += segment_size
+
+    assert merged_line.byte_counter == http2_byte_counter
+    # Check the continuity of the merged line.
+    assert merged_line.continunity_check()
+
+@pytest.mark.parametrize("capture_gen", [{'host': 'ai.zjnav.com', 'index': 0}], indirect=True)
+@skip_trojan
+def test_get_reassemble_info(capture_gen):
+    """
+    This test covers VMess data based line merging, which contains multiple streams.
+    """    
+    upper_line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="http2", lower_protocol="tls")
+    line = get_reassemble_info(capture_gen, protocol_stack=['http2', 'tls', 'trojan', 'tcp'])
+
+    # Assert the total bytes in HTTP/2 layer is not changed by merging.
+    http2_byte_counter = 0
+    for span in upper_line.lower_span_map.values():
+        for segment_size in span.values():
+            http2_byte_counter += segment_size
+
+    assert line.byte_counter == http2_byte_counter
+    # Check the continuity of the merged line.
+    assert line.continunity_check()
