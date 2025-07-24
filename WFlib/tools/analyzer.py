@@ -782,6 +782,7 @@ class Line():
     def seg(self, upper_abs_frame_number: int) -> dict:
         """
         Given the absolute frame number of a upper layer frame, return its segment and segment size list.
+        For example, an HTTP/2 frame, say Frame 25 might be reassembled by multiple TLS frames, say Frame 23, 24, 25, where TLS Frame 23 contributes 20 bytes, Frame 24 contributes 10 bytes, and Frame 25 contributes 26 bytes. Then the segments of the HTTP/2 frame are {23: 20, 24: 10, 25: 26}.
         """
         for packet in self._upper_packets:
             if packet.abs_frame_number == upper_abs_frame_number:
@@ -792,6 +793,7 @@ class Line():
     def span(self, lower_abs_frame_number: int) -> dict:
         """
         Given the absolute frame number of a lower layer frame, return the upper segment and segment size it spans.
+        Similar to seg, a lower frame might participate in multiple upper frames. For example, a TLS frame, say Frame 23, might reassemble HTTP/2 Frame 23 with 30 bytes, Frame 24 with 20 bytes. Then the span of the TLS frame are {23: 30, 24: 20}.
         """
         span = dict()
         # Note that the required segment may consist all packets with frame number larger or equal than its frame number.
@@ -1087,7 +1089,7 @@ def line_merge(upper_line: Line, lower_line: Line) -> Line:
         line_merge_single_packet(upper_line, lower_line, frame_number) for frame_number in upper_line.upper_packet_frame_numbers]
     
     return Line(upper_packets=merged_packets, lower_abs_frame_numbers=lower_line.lower_abs_frame_numbers)
-    
+
 def get_adjacent_protocol_reassemble_info(cap: pyshark.FileCapture, upper_protocol: str, lower_protocol: str) -> Line:
     """
     Extract the reassemble information for each packet given the adjacent upper_protocol and lower_protocol, e.g.,
