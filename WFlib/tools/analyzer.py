@@ -1163,3 +1163,16 @@ def sni_similarity(host: str, proto_a: str, proto_b: str, db: pd.DataFrame) -> f
     host_sni_a = db.query(f"host == '{host}' and protocol == '{proto_a}'")["sni"].tolist()
     host_sni_b = db.query(f"host == '{host}' and protocol == '{proto_b}'")["sni"].tolist()
     return jaccard_similarity(host_sni_a, host_sni_b) 
+
+
+def user_agent_fetch(cap: pyshark.FileCapture) -> str:
+    """
+    Fetch the browser version from a HTTP/2 Frame within the capture, if no HTTP/2 Frame is found, raise ValueError.
+    """
+    for pkt in cap:
+        if 'http2' in pkt:
+            for layer in pkt.layers:
+                if layer.layer_name == 'http2' and layer.get_field('headers_user_agent') is not None:
+                    return layer.get_field('headers_user_agent')
+                
+    raise ValueError("No User Agent Found")

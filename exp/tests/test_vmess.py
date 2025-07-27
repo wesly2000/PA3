@@ -464,3 +464,13 @@ def test_multi_pcap_extract_2(param_gen):
             df.iloc[0]['sni'] == 'fyb-2.cdn.bcebos.com' and \
             df.iloc[0]['timestamp'].shape == (94, ) and \
             df.iloc[0]['stream'] == '0'
+
+
+@pytest.mark.parametrize("capture_gen", [{'host': 's.weibo.com', 'display_filter': 'http2'}], indirect=True)
+@skip_vmess
+def test_user_agent_fetch(capture_gen):
+    """
+    This test covers fetching the user agent from a HTTP/2 Frame within the capture.
+    """
+    user_agent = user_agent_fetch(capture_gen)
+    assert user_agent == "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0"
