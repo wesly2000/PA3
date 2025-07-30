@@ -27,7 +27,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     formatter = DistriPcapFormatter(length=args.length, num_worker=args.num_worker)
-    src = ["58.206.207.126", "192.168.5.5", "10.4.0.3", "192.168.5.7", "2001:da8:283:c004:8177:495b:d038:d48a"]
+    src = COMMON_SOURCE_IP
     if args.feature == "direction":
         extractor = PcapDirExtractor(src=src)
     elif args.feature == "timestamp":
