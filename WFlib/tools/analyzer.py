@@ -1176,3 +1176,52 @@ def user_agent_fetch(cap: pyshark.FileCapture) -> str:
                     return layer.get_field('headers_user_agent')
                 
     raise ValueError("No User Agent Found")
+
+
+class SHSearcher():
+    """
+    The class to search for the TLS Server Hello frame.
+    """
+    def __init__(self, search_limit=30):
+        self.search_limit = search_limit
+
+    def search(self, cap: pyshark.FileCapture) -> int:
+        """
+        Search for the Server Hello frame in a given capture. If found, return the frame number. If the search_limit is reached or the capture is too short such that no SH is found, return -1.
+        """
+        for i, pkt in enumerate(cap):
+            if i >= self.search_limit:
+                break 
+            if 'tls' in pkt:
+                for layer in pkt.layers:
+                    if layer.layer_name == 'tls' and layer.get_field('handshake_type') == '2':
+                        return i
+
+        return -1
+    
+
+class VMessSHSearcher(SHSearcher):
+    def __init__(self, search_limit=30):
+        super().__init__(search_limit)
+
+
+class ShadowsocksSHSearcher(SHSearcher):
+    def __init__(self, search_limit=30):
+        super().__init__(search_limit)
+
+
+class TrojanSHSearcher(SHSearcher):
+    def __init__(self, search_limit=30):
+        super().__init__(search_limit)
+
+    def search(self, cap: pyshark.FileCapture) -> int:
+        for i, pkt in enumerate(cap):
+            if i >= self.search_limit:
+                break 
+            # Trojan contains tunneled TLS, we need the Server Hello in the tunneled TLS layer.
+            if 'trojan' in pkt:
+                for layer in pkt.layers:
+                    if layer.layer_name == 'tls' and layer.get_field('handshake_type') == '2':
+                        return i
+
+        return -1
