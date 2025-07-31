@@ -227,3 +227,13 @@ def test_pcap_to_dataframe_1():
     assert df.shape[0] == 117 and \
             df.shape[1] == 9 and \
             df.iloc[6]['tls.handshake.extensions_server_name'] == 't3.gstatic.cn'
+
+
+@pytest.mark.parametrize("capture_gen", [{'host': 'ai.zjnav.com', 'index': 1, 'display_filter': 'tcp.stream eq 4'}], indirect=True)
+@skip_shadowsocks
+def test_SHSearcher_1(capture_gen):
+    searcher = ShadowsocksSHSearcher()
+    target = 21
+    expect = searcher.search(capture_gen)
+
+    assert expect == target

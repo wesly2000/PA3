@@ -474,3 +474,13 @@ def test_user_agent_fetch(capture_gen):
     """
     user_agent = user_agent_fetch(capture_gen)
     assert user_agent == "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0"
+
+
+@pytest.mark.parametrize("capture_gen", [{'host': 'top.baidu.com', 'index': 0, 'display_filter': 'tcp.stream eq 0'}], indirect=True)
+@skip_vmess
+def test_SHSearcher_1(capture_gen):
+    searcher = VMessSHSearcher()
+    target = 14
+    expect = searcher.search(capture_gen)
+
+    assert expect == target

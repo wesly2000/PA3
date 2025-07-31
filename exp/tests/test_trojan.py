@@ -345,3 +345,13 @@ def test_get_reassemble_info(capture_gen):
     assert line.byte_counter == http2_byte_counter
     # Check the continuity of the merged line.
     assert line.continunity_check()
+
+
+@pytest.mark.parametrize("capture_gen", [{'host': 'ai.zjnav.com', 'index': 0}], indirect=True)
+@skip_trojan
+def test_SHSearcher_1(capture_gen):
+    searcher = TrojanSHSearcher()
+    target = 18
+    expect = searcher.search(capture_gen)
+
+    assert expect == target
