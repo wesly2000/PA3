@@ -515,18 +515,20 @@ def contains_SNI(SNIs, pkt):
     if SNIs is None or len(SNIs) == 0:
         return False
 
-    if 'TLS' in pkt:
-        tls_layer = pkt['TLS']
-        if hasattr(tls_layer, 'handshake_extensions_server_name'):
-            SNI = tls_layer.handshake_extensions_server_name
-            if SNI in SNIs:
-                return True
-    elif 'QUIC' in pkt:
-        quic_layer = pkt['QUIC']
-        if hasattr(quic_layer, 'tls_handshake_extensions_server_name'):
-            SNI = quic_layer.tls_handshake_extensions_server_name
-            if SNI in SNIs:
-                return True
+    if 'tls' in pkt:
+        tls_layers = filter(lambda layer: layer.layer_name == 'tls', pkt.layers)
+        for tls_layer in tls_layers:
+            if hasattr(tls_layer, 'handshake_extensions_server_name'):
+                SNI = tls_layer.handshake_extensions_server_name
+                if SNI in SNIs:
+                    return True
+    elif 'quic' in pkt:
+        quic_layers = filter(lambda layer: layer.layer_name == 'quic', pkt.layers)
+        for quic_layer in quic_layers:
+            if hasattr(quic_layer, 'tls_handshake_extensions_server_name'):
+                SNI = quic_layer.tls_handshake_extensions_server_name
+                if SNI in SNIs:
+                    return True
             
     return False
 
