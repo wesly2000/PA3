@@ -25,11 +25,12 @@ def extract_tcp_stream(pcap_file: Path, sni, keylog_file, custom_parameters, ove
     try:
         tcp_stream_numbers = h2data_SNI_intersect(pcap_file, [sni], keylog_file=keylog_file, 
                                             custom_parameters=custom_parameters, 
-                                            override_prefs=override_prefs)
+                                            override_prefs=override_prefs,
+                                            tshark_path=tshark_path)
     except Exception as e:
         print(f"Error in file {pcap_file}: {e}")
         return ""
-    tcp_stream_numbers = select_stream(pcap_file=pcap_file, stream_numbers=tcp_stream_numbers, mapper=packet_count, criteria=max)
+    tcp_stream_numbers = select_stream(pcap_file=pcap_file, stream_numbers=tcp_stream_numbers, mapper=packet_count, criteria=max, tshark_path=tshark_path)
     tcp_stream_filter = stream_extract_filter(tcp_stream_numbers, [])
     if tcp_stream_filter == "":
         print(f"Error in file {pcap_file}: No TCP stream found")
