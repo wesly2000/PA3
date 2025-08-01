@@ -28,7 +28,7 @@ def extract_tcp_stream(pcap_file: Path, sni, keylog_file, custom_parameters, ove
     except Exception as e:
         print(f"Error in file {pcap_file}: {e}")
         return ""
-    # tcp_stream_numbers = select_stream(pcap_file=pcap_file, stream_numbers=tcp_stream_numbers, mapper=packet_count, criteria=max)
+    tcp_stream_numbers = select_stream(pcap_file=pcap_file, stream_numbers=tcp_stream_numbers, mapper=packet_count, criteria=max)
     tcp_stream_filter = stream_extract_filter(tcp_stream_numbers, [])
     if tcp_stream_filter == "":
         print(f"Error in file {pcap_file}: No TCP stream found")
