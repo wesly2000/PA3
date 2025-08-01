@@ -11,13 +11,14 @@ from WFlib.tools.visualize import *
 from WFlib.tools.capture import *
 from WFlib.tools.analyzer import *
 
-from WFlib.utils.config import SUPPORTED_BASE, SUPPORTED_PROTOCOL, default_override_prefs
+from WFlib.utils.config import SUPPORTED_BASE, SUPPORTED_PROTOCOL, default_override_prefs, get_tshark_path
 
 DEBUG = False
 
 custom_parameters=["-2"]
+config_path = Path.cwd() / 'config.ini'
 
-def extract_tcp_stream(pcap_file: Path, sni, keylog_file, custom_parameters, override_prefs):
+def extract_tcp_stream(pcap_file: Path, sni, keylog_file, custom_parameters, override_prefs, tshark_path: str):
     """
     Extract the proper TCP stream from the pcap file given the SNIs. If any error occurs, return an empty string.
     """
@@ -44,12 +45,13 @@ def main(input_root, protocol, host, sni, base, output_root, dry_run=False):
     pcap_dir_path = Path(pcap_dir)
 
     override_prefs = default_override_prefs(protocol, os.path.abspath(keylog_file), os.path.abspath(proxy_keylog_file))
+    tshark_path = get_tshark_path(config_path, protocol)
 
     lines = []
     limit = 30
     for file in tqdm(sorted(pcap_dir_path.iterdir())[:limit]):
         if file.is_file() and file.suffix in ['.pcapng', '.pcap']:
-            tcp_stream_filter = extract_tcp_stream(file, sni, keylog_file, custom_parameters, override_prefs)
+            tcp_stream_filter = extract_tcp_stream(file, sni, keylog_file, custom_parameters, override_prefs, tshark_path)
             if tcp_stream_filter == "":
                 continue
 
@@ -59,7 +61,8 @@ def main(input_root, protocol, host, sni, base, output_root, dry_run=False):
 
             cap = pyshark.FileCapture(input_file=file, display_filter=tcp_stream_filter, 
                                         custom_parameters=custom_parameters,
-                                        override_prefs=override_prefs)
+                                        override_prefs=override_prefs,
+                                        tshark_path=tshark_path)
             
             if DEBUG:
                 cap.set_debug()
