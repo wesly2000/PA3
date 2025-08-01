@@ -70,11 +70,10 @@ def main(input_root, protocol, host, sni, base, output_root, dry_run=False):
             
             protocol_stack = ['http2', 'tls']
             if base == 'tcp':
-                if protocol == 'normal':
-                    protocol_stack.append('tcp')
-                elif protocol == 'vmess':
-                    protocol_stack.append('vmess')
-                    protocol_stack.append('tcp')
+                assert protocol in SUPPORTED_PROTOCOL, logger.error(f"Unsupported protocol: {protocol}. Supported protocols: {SUPPORTED_PROTOCOL}")
+                if protocol != 'normal':
+                    protocol_stack.append('protocol')    
+                protocol_stack.append('tcp')   
 
             try:
                 lines.append(get_reassemble_info(cap, protocol_stack=protocol_stack))

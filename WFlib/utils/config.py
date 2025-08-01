@@ -4,7 +4,7 @@ from configparser import ConfigParser
 import WFlib
 
 SUPPORTED_BASE = ['tcp', 'tls']
-SUPPORTED_PROTOCOL = ['normal', 'vmess', 'shadowsocks']
+SUPPORTED_PROTOCOL = ['normal', 'vmess', 'shadowsocks', 'trojan']
 
 DEFAULT_CONFIG_PATH = Path(WFlib.__file__).parent / 'config.ini'
 
