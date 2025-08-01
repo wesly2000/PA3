@@ -6,8 +6,8 @@ import os
 import argparse
 import seg_compute
 
-avg_color_map = {"Normal": "blue", "VMess": "green"}
-std_color_map = {"Normal": "yellow", "VMess": "purple"}
+avg_color_map = {"Normal": "blue", "VMess": "green", "Shadowsocks": "red", "Trojan": "orange"}
+std_color_map = {"Normal": "yellow", "VMess": "purple", "Shadowsocks": "red", "Trojan": "orange"}
 
 def draw_single_byte_segment(fig: plt.Figure, ax: plt.Axes, avg_byte_segments: np.ndarray, std_byte_segments: np.ndarray, proto: str):
     """
@@ -54,7 +54,7 @@ if __name__ == "__main__":
     # Flag argument
     parser.add_argument("-i", "--input_root", required=True, type=str, help="The root directory of the capture and keylog")
     parser.add_argument("-o", "--output_root", required=True, type=str, help="The root directory of the output")
-    parser.add_argument("-b", "--base", default="tls", type=str, help="The lowest layer protocol as the segment index")
+    parser.add_argument("-b", "--base", default="tcp", type=str, help="The lowest layer protocol as the segment index")
     parser.add_argument("--host", required=True, type=str, help="The host to analyze")
     parser.add_argument("-s", "--sni", required=True, type=str, help="The SNI to analyze")
     args = parser.parse_args()
