@@ -190,7 +190,7 @@ def test_line_rel_building_1(capture_gen):
     """
     This test covers building the lower relation of a line using MORE COMPLEX real-world data.
     """    
-    line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="http2", lower_protocol="tls")
+    line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="http2", lower_protocol="tls", tunnel_tls=True)
     
     counter = HTTP2ByteCounter()
     cnt = 0
@@ -216,7 +216,7 @@ def test_line_rel_building_2(capture_gen):
     test TLS over Trojan line building.
     """
     
-    line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="tls", lower_protocol="trojan")
+    line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="tls", lower_protocol="trojan", tunnel_tls=True)
     
     counter = TLSByteCounter()
     cnt = 0
@@ -243,7 +243,7 @@ def test_line_rel_building_4(capture_gen):
     test Trojan over TCP line building.
     """
     
-    line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="trojan", lower_protocol="tcp")
+    line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="trojan", lower_protocol="tcp", tunnel_tls=True)
     
     counter = TrojanByteCounter()
     cnt = 0
@@ -268,7 +268,7 @@ def test_line_span_building_1(capture_gen):
     """
     This test covers building the lower relation of a line using MORE COMPLEX real-world data.
     """    
-    line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="http2", lower_protocol="tls")
+    line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="http2", lower_protocol="tls", tunnel_tls=True)
     lower_span_bytes = 0
     for span in line.lower_span_map.values():
         for segment_size in span.values():
@@ -283,7 +283,7 @@ def test_generate_byte_segment_1(capture_gen):
     """
     This test covers generating byte segment map using real-world data
     """
-    line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="http2", lower_protocol="tls")
+    line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="http2", lower_protocol="tls", tunnel_tls=True)
     result = generate_byte_segment([line])
 
     counter = HTTP2ByteCounter()
@@ -311,9 +311,9 @@ def test_line_merge_1(capture_gen):
     """
     This test covers Trojan data based line merging, which contains multiple streams.
     """    
-    upper_line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="http2", lower_protocol="tls")
-    proxy_line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="tls", lower_protocol="trojan")
-    lower_line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="trojan", lower_protocol="tcp")
+    upper_line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="http2", lower_protocol="tls", tunnel_tls=True)
+    proxy_line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="tls", lower_protocol="trojan", tunnel_tls=True)
+    lower_line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="trojan", lower_protocol="tcp", tunnel_tls=True)
 
     merged_line = line_merge(line_merge(upper_line, proxy_line), lower_line)
 
@@ -333,8 +333,8 @@ def test_get_reassemble_info(capture_gen):
     """
     This test covers VMess data based line merging, which contains multiple streams.
     """    
-    upper_line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="http2", lower_protocol="tls")
-    line = get_reassemble_info(capture_gen, protocol_stack=['http2', 'tls', 'trojan', 'tcp'])
+    upper_line = get_adjacent_protocol_reassemble_info(cap=capture_gen, upper_protocol="http2", lower_protocol="tls", tunnel_tls=True)
+    line = get_reassemble_info(capture_gen, protocol_stack=['http2', 'tls', 'trojan', 'tcp'], tunnel_tls=True)
 
     # Assert the total bytes in HTTP/2 layer is not changed by merging.
     http2_byte_counter = 0
