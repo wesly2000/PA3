@@ -24,8 +24,8 @@ def draw_byte_segment(input_root: str, host: str, sni: str, base: str, output_ro
     fig, ax = plt.subplots(figsize=(12, 6))
     fig.suptitle('Byte Segment Map', fontdict={'size': 16})
     for protocol in avg_color_map:
-        avg_array_path = Path(f"{output_root}/seg_compute/{base}/{protocol}/avg_{host}_{sni}.npy")
-        std_array_path = Path(f"{output_root}/seg_compute/{base}/{protocol}/std_{host}_{sni}.npy")
+        avg_array_path = Path(f"{output_root}/seg_compute/{base}/{protocol.lower()}/avg_{host}_{sni}.npy")
+        std_array_path = Path(f"{output_root}/seg_compute/{base}/{protocol.lower()}/std_{host}_{sni}.npy")
         if avg_array_path.exists() and std_array_path.exists():
             print("Array exists, use stored array.")
             avg_byte_segments, std_byte_segments = np.load(avg_array_path), np.load(std_array_path)
