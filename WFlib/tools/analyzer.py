@@ -872,7 +872,8 @@ def layer_extractor(pkt, upper_protocol, lower_protocol):
     
     layers = []
 
-    layer_rename(pkt)
+    if upper_protocol == 'trojan' or lower_protocol == 'trojan': 
+        layer_rename(pkt)
 
     for layer in pkt.layers:
         # When upper_protocol == lower_protocol, no need to extract reassemble info
@@ -1090,7 +1091,7 @@ def line_merge(upper_line: Line, lower_line: Line) -> Line:
     
     return Line(upper_packets=merged_packets, lower_abs_frame_numbers=lower_line.lower_abs_frame_numbers)
 
-def get_adjacent_protocol_reassemble_info(cap: pyshark.FileCapture, upper_protocol: str, lower_protocol: str) -> Line:
+def get_adjacent_protocol_reassemble_info(cap: pyshark.FileCapture, upper_protocol: str, lower_protocol: str, tunnel_tls: bool=False) -> Line:
     """
     Extract the reassemble information for each packet given the adjacent upper_protocol and lower_protocol, e.g.,
     TLS over TCP, HTTP2 over TLS. This function is a component of get_reassemble_info.
@@ -1103,7 +1104,8 @@ def get_adjacent_protocol_reassemble_info(cap: pyshark.FileCapture, upper_protoc
 
     for pkt in cap:
 
-        layer_rename(pkt)
+        if tunnel_tls: 
+            layer_rename(pkt)
 
         if upper_protocol in pkt:
             packet = Packet(PROCOCOL_CELL_EXTRACTOR[upper_protocol].extract(pkt, lower_protocol=lower_protocol))
@@ -1119,7 +1121,7 @@ def get_adjacent_protocol_reassemble_info(cap: pyshark.FileCapture, upper_protoc
 
     return line
 
-def get_reassemble_info(cap: pyshark.FileCapture, protocol_stack: List[str] = ['http2', 'tls', 'tcp']) -> Line: 
+def get_reassemble_info(cap: pyshark.FileCapture, protocol_stack: List[str] = ['http2', 'tls', 'tcp'], tunnel_tls: bool=False) -> Line: 
     """
     Extract the reassemble information for each packet given the protocol stack, and return the line of reassemble info.
 
@@ -1147,7 +1149,7 @@ def get_reassemble_info(cap: pyshark.FileCapture, protocol_stack: List[str] = ['
     for i in range(len(protocol_stack) - 1):
         upper_protocol = protocol_stack[i]
         lower_protocol = protocol_stack[i + 1]
-        line = get_adjacent_protocol_reassemble_info(cap, upper_protocol, lower_protocol)
+        line = get_adjacent_protocol_reassemble_info(cap, upper_protocol, lower_protocol, tunnel_tls=tunnel_tls)
         if merged_line is None:
             merged_line = line
         else:
@@ -1225,3 +1227,65 @@ class TrojanSHSearcher(SHSearcher):
                         return i
 
         return -1
+    
+
+PROTOCOL_SH_SEARCHER = {
+    'vmess': VMessSHSearcher(),
+    'shadowsocks': ShadowsocksSHSearcher(),
+    'trojan': TrojanSHSearcher(),
+}
+
+class CHSearcher():
+    """
+    The class to search for the TLS Client Hello frame.
+    """
+    def __init__(self, search_limit=30):
+        self.search_limit = search_limit
+
+    def search(self, cap: pyshark.FileCapture) -> int:
+        """
+        Search for the Client Hello frame in a given capture. If found, return the frame number. If the search_limit is reached or the capture is too short such that no SH is found, return -1.
+        """
+        for i, pkt in enumerate(cap):
+            if i >= self.search_limit:
+                break 
+            if 'tls' in pkt:
+                for layer in pkt.layers:
+                    if layer.layer_name == 'tls' and layer.get_field('handshake_type') == '1':
+                        return i
+
+        return -1
+    
+
+class VMessCHSearcher(CHSearcher):
+    def __init__(self, search_limit=30):
+        super().__init__(search_limit)
+
+
+class ShadowsocksCHSearcher(CHSearcher):
+    def __init__(self, search_limit=30):
+        super().__init__(search_limit)
+
+
+class TrojanCHSearcher(CHSearcher):
+    def __init__(self, search_limit=30):
+        super().__init__(search_limit)
+
+    def search(self, cap: pyshark.FileCapture) -> int:
+        for i, pkt in enumerate(cap):
+            if i >= self.search_limit:
+                break 
+            # Trojan contains tunneled TLS, we need the Client Hello in the tunneled TLS layer.
+            if 'trojan' in pkt:
+                for layer in pkt.layers:
+                    if layer.layer_name == 'tls' and layer.get_field('handshake_type') == '1':
+                        return i
+
+        return -1
+    
+
+PROTOCOL_CH_SEARCHER = {
+    'vmess': VMessCHSearcher(),
+    'shadowsocks': ShadowsocksCHSearcher(),
+    'trojan': TrojanCHSearcher(),
+}
