@@ -6,6 +6,7 @@ from pathlib import Path
 import argparse
 from tqdm import tqdm
 import time
+import logging
 
 from WFlib.tools.visualize import *
 from WFlib.tools.capture import *
@@ -14,6 +15,8 @@ from WFlib.tools.analyzer import *
 from WFlib.utils.config import SUPPORTED_BASE, SUPPORTED_PROTOCOL, default_override_prefs, get_tshark_path
 
 DEBUG = False
+
+logger = logging.getLogger(__name__)
 
 custom_parameters=["-2"]
 config_path = Path.cwd() / 'config.ini'
@@ -28,12 +31,12 @@ def extract_tcp_stream(pcap_file: Path, sni, keylog_file, custom_parameters, ove
                                             override_prefs=override_prefs,
                                             tshark_path=tshark_path)
     except Exception as e:
-        print(f"Error in file {pcap_file}: {e}")
+        logger.error(f"Error in file {pcap_file}: {e}")
         return ""
     tcp_stream_numbers = select_stream(pcap_file=pcap_file, stream_numbers=tcp_stream_numbers, mapper=packet_count, criteria=max, tshark_path=tshark_path)
     tcp_stream_filter = stream_extract_filter(tcp_stream_numbers, [])
     if tcp_stream_filter == "":
-        print(f"Error in file {pcap_file}: No TCP stream found")
+        logger.error(f"Error in file {pcap_file}: No TCP stream found")
         return ""
     
     return tcp_stream_filter
@@ -57,7 +60,7 @@ def main(input_root, protocol, host, sni, base, output_root, dry_run=False):
                 continue
 
             if dry_run:
-                print(f"File {file.name} TCP filter: {tcp_stream_filter}")
+                logger.info(f"File {file.name} TCP filter: {tcp_stream_filter}")
                 continue  # No actual computing in dry run mode
 
             cap = pyshark.FileCapture(input_file=file, display_filter=tcp_stream_filter, 
@@ -78,11 +81,11 @@ def main(input_root, protocol, host, sni, base, output_root, dry_run=False):
             try:
                 lines.append(get_reassemble_info(cap, protocol_stack=protocol_stack))
             except Exception as e:
-                print(f"Error in file {file.name}: {e}")
+                logger.error(f"Error in file {file.name}: {e}")
             try:
                 cap.close()
             except Exception as e:
-                print(f"Error in file {file.name}: {e}")
+                logger.error(f"Error in file {file.name}: {e}")
 
     if not dry_run:
         byte_segments = generate_byte_segment(lines)
