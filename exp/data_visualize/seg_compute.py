@@ -55,6 +55,7 @@ def main(input_root, protocol, host, sni, base, output_root, dry_run=False):
     limit = 30
     for file in tqdm(sorted(pcap_dir_path.iterdir())[:limit]):
         if file.is_file() and file.suffix in ['.pcapng', '.pcap']:
+            logger.info(f"Processing {file}...")
             tcp_stream_filter = extract_tcp_stream(file, sni, keylog_file, custom_parameters, override_prefs, tshark_path)
             if tcp_stream_filter == "":
                 continue
@@ -132,4 +133,6 @@ if __name__ == '__main__':
     if args.protocol not in SUPPORTED_PROTOCOL:
         raise ValueError(f"Unsupported protocol: {args.protocol}. Supported protocols: {SUPPORTED_PROTOCOL}")
 
+    logger.info("Task seg_compute started")
     main(args.input_root, args.protocol, args.host, args.sni, args.base, args.output_root, args.dry_run)
+    logger.info("Task seg_compute completed")

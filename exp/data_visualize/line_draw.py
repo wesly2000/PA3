@@ -5,6 +5,9 @@ from pathlib import Path
 import os
 import argparse
 import seg_compute
+import logging
+
+logger = logging.getLogger(__name__)
 
 avg_color_map = {"Normal": "blue", "VMess": "green", "Shadowsocks": "red", "Trojan": "orange"}
 std_color_map = {"Normal": "yellow", "VMess": "purple", "Shadowsocks": "red", "Trojan": "orange"}
@@ -27,10 +30,10 @@ def draw_byte_segment(input_root: str, host: str, sni: str, base: str, output_ro
         avg_array_path = Path(f"{output_root}/seg_compute/{base}/{protocol.lower()}/avg_{host}_{sni}.npy")
         std_array_path = Path(f"{output_root}/seg_compute/{base}/{protocol.lower()}/std_{host}_{sni}.npy")
         if avg_array_path.exists() and std_array_path.exists():
-            print("Array exists, use stored array.")
+            logger.info("Array exists, use stored array.")
             avg_byte_segments, std_byte_segments = np.load(avg_array_path), np.load(std_array_path)
         else:
-            print("Array does not exist, start computing...")
+            logger.info("Array does not exist, start computing...")
             seg_compute.main(input_root, protocol.lower(), host, sni, base, output_root)
 
             avg_byte_segments, std_byte_segments = np.load(avg_array_path), np.load(std_array_path)
@@ -59,4 +62,6 @@ if __name__ == "__main__":
     parser.add_argument("-s", "--sni", required=True, type=str, help="The SNI to analyze")
     args = parser.parse_args()
 
+    logger.info("Task line_draw started")
     draw_byte_segment(args.input_root, args.host, args.sni, args.base, args.output_root)
+    logger.info("Task line_draw completed")
