@@ -52,8 +52,8 @@ def main(input_root, protocol, host, sni, base, output_root, dry_run=False):
     tshark_path = get_tshark_path(config_path, protocol)
 
     lines = []
-    limit = 30
-    for file in tqdm(sorted(pcap_dir_path.iterdir())[:limit]):
+    limit = 15
+    for file in sorted(pcap_dir_path.iterdir())[:limit]:
         if file.is_file() and file.suffix in ['.pcapng', '.pcap']:
             logger.info(f"Processing {file}...")
             tcp_stream_filter = extract_tcp_stream(file, sni, keylog_file, custom_parameters, override_prefs, tshark_path)
@@ -76,11 +76,11 @@ def main(input_root, protocol, host, sni, base, output_root, dry_run=False):
             if base == 'tcp':
                 assert protocol in SUPPORTED_PROTOCOL, logger.error(f"Unsupported protocol: {protocol}. Supported protocols: {SUPPORTED_PROTOCOL}")
                 if protocol != 'normal':
-                    protocol_stack.append('protocol')    
+                    protocol_stack.append(f'{protocol}')    
                 protocol_stack.append('tcp')   
 
             try:
-                lines.append(get_reassemble_info(cap, protocol_stack=protocol_stack))
+                lines.append(get_reassemble_info(cap, protocol_stack=protocol_stack, tunnel_tls=True if protocol == 'trojan' else False))
             except Exception as e:
                 logger.error(f"Error in file {file.name}: {e}")
             try:
