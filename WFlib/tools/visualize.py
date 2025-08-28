@@ -80,64 +80,6 @@ def get_activations(model: nn.Module, input_data: torch.Tensor, layer_names: Lis
 
     return activation
 
-def greedy_mass_covering(arr, bin_size, coverage_threshold):
-    # Step 1: Bin the array
-    arr = np.array(arr)
-    min_val = arr.min()
-    max_val = arr.max()
-    bin_edges = np.arange(min_val, max_val + bin_size, bin_size)
-    hist, edges = np.histogram(arr, bins=bin_edges)
-    
-    total_mass = hist.sum()
-    target_mass = coverage_threshold * total_mass
-    n_bins = len(hist)
-    
-    # Step 2: Create all possible intervals (i, j)
-    intervals = []
-    for i in range(n_bins):
-        mass = 0
-        for j in range(i, n_bins):
-            mass += hist[j]
-            width = edges[j+1] - edges[i]
-            if mass > 0:
-                density = mass / width
-                intervals.append((-density, mass, i, j))  # max-heap with negative density
-    
-    # Step 3: Greedy selection of non-overlapping intervals
-    intervals.sort()
-    selected = []
-    covered_bins = set()
-    collected_mass = 0
-    
-    for _, mass, i, j in intervals:
-        if collected_mass >= target_mass:
-            break
-        if any(k in covered_bins for k in range(i, j+1)):
-            continue
-        selected.append((i, j))
-        collected_mass += mass
-        covered_bins.update(range(i, j+1))
-    
-    # Step 4: Merge overlapping/adjacent intervals into ranges
-    selected.sort()
-    merged_ranges = []
-    for i, j in selected:
-        start = edges[i]
-        end = edges[j+1]
-        if not merged_ranges:
-            merged_ranges.append([start, end])
-        else:
-            last_start, last_end = merged_ranges[-1]
-            if start <= last_end:
-                merged_ranges[-1][1] = max(last_end, end)
-            else:
-                merged_ranges.append([start, end])
-    
-    # Final actual coverage
-    actual_coverage = collected_mass / total_mass
-    
-    return merged_ranges, actual_coverage
-
 
 def stream_feature_3D(host: str, SNIs: Union[Set[str], str], base_dir: str, protocol: str, extractor: NpzExtractor, db: pd.DataFrame):
     """
