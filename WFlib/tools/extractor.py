@@ -928,3 +928,31 @@ class NpzRawExtractor(NpzExtractor):
 
         raw_features.sort(key=lambda x: x[0])
         target += [feature for _, feature in raw_features]
+
+
+SNI_BIN_SIZE = {
+    'firefox-settings-attachments.cdn.mozilla.net': 20000, 
+    'firefox.settings.services.mozilla.com': 500, 
+    'content-signature-2.cdn.mozilla.net': 1000
+}
+
+def sni_cover(statistic_root: Union[str, Path], protocol: str, sni: str, coverage: float):
+    """
+    Compute the cover of stream size for an SNI to achieve the given coverage.
+
+    Params
+    ----------
+    statistic_root : str | Path
+        Root dir to store the stream size statistics, the corresponding statistics file MUST be .csv files.
+    protocol : str
+        The proxy protocol used 
+    sni : str
+        The target SNI, which decides the bin size in use. Note that the macro SNI_BIN_SIZE is a empirical value, which MAY change later
+    coverage : float
+        Threshold that the resulting cover occupies the whole spanning range of the arr
+    """
+    df = pd.read_csv(f"{statistic_root}/{sni}.csv")
+    array = df[protocol].dropna().to_numpy().astype(np.int64)
+    cover, actual_coverage = greedy_mass_covering(array, SNI_BIN_SIZE[sni], coverage)
+
+    return cover, actual_coverage
