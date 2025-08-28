@@ -58,12 +58,22 @@ def test_generate_byte_segment_01():
 
 
 def test_greedy_mass_covering_01():
-    data = np.array(list(range(100)) + [50] * 40 + [0] * 40 + [99] * 20)
-    ranges, coverage = greedy_mass_covering(data, bin_size=5, coverage_threshold=0.3)
-
+    data = np.array([50] * 40 + [0] * 40 + [99] * 20)
+    ranges, coverage = greedy_mass_covering(data, bin_size=5, coverage_threshold=0.45)
     expect_ranges = [[0, 5], [50, 55]]
-    expect_coverage = .45
+    expect_coverage = .8
+    assert ranges == expect_ranges and math.isclose(coverage, expect_coverage)
 
+    data = np.array([50] * 5 + [79] * 15 + [89] * 40 + [99] * 40)
+    ranges, coverage = greedy_mass_covering(data, bin_size=10, coverage_threshold=0.9)
+    expect_ranges = [[70, 100]]
+    expect_coverage = .95
+    assert ranges == expect_ranges and math.isclose(coverage, expect_coverage)
+
+    data = np.array([10] * 15 + [25] * 15 + [45] * 15 + [55] * 15 + [75] * 15 + [85] * 14 + [95] * 11)
+    ranges, coverage = greedy_mass_covering(data, bin_size=10, coverage_threshold=0.7)
+    expect_ranges = [[10, 30], [40, 60], [70, 80]]
+    expect_coverage = .75
     assert ranges == expect_ranges and math.isclose(coverage, expect_coverage)
     
 
