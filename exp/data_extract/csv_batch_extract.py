@@ -4,13 +4,14 @@ This file is used to extract the csv files from the database and related array s
 
 import argparse
 import numpy as np
-from WFlib.tools.formatter import CsvFormatter
-from WFlib.tools.extractor import NpzHSDBSExtractor, HSDBSCriterion, NpzDirExtractor, VmessStripper, BSExcludeCriterion, LengthExcludeCriterion, make_split_weight_generator, LengthCriterion
-from WFlib.tools.capture import read_host_list
 
-TROJAN_RANGES = [(2200000, 2400000), (10400, 11200), (12800, 13600), (15200, 16800), (80000, 120000)]
-VMESS_RANGES = [(2240000, 2272000), (6500, 7500), (12000, 12500), (72000, 74000), (84000, 86000)]
-SHADOWSOCKS_RANGES = [(2280000, 2336000), (7500, 8000), (12500, 13000), (84000, 90000), (105000, 108000)]
+from WFlib.tools.formatter import CsvFormatter
+from WFlib.tools.extractor import NpzDirExtractor, HSDBSExcludeCriterion
+from WFlib.tools.capture import read_host_list
+from WFlib.tools.extractor import sni_cover, PROTOCOL_STRIPPER
+
+INTRINSIC_SNIS = ['firefox-settings-attachments.cdn.mozilla.net', 'firefox.settings.services.mozilla.com', 'content-signature-2.cdn.mozilla.net']
+STAT_ROOT = "exp/data_extract"
 
 def bound_gen(*ranges: tuple):
     lower_bounds = np.array([r[0] for r in ranges])
@@ -28,56 +29,42 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--output_file', type=str, help="The path to the files to hold the output file")
     parser.add_argument('-p', '--protocol', default='normal', type=str, help="The protocol considered in the extraction")
     parser.add_argument('-f', '--filter_file', default=None, type=str, help="The SNI filter file")
-    parser.add_argument('--bs_filter', default=False, type=bool, help="The BS filter file")
+    parser.add_argument('--bs_filter', action='store_true', help="The BS filter file")
+    parser.add_argument('--coverage', default=0.8, type=float, help="BS coverage to filter")
+    parser.add_argument('--strip', action='store_true', help="Strip the handshake packets")
     args = parser.parse_args()
 
-    normal_filter_file = None
-
+    stripper = None
+    criteria = None
+    SNI_filter = None
+    lower_bounds, upper_bounds = None, None
     regenerate = 1
-    if args.bs_filter:
-        if args.protocol == 'vmess':
-            lower_bounds, upper_bounds = bound_gen(*VMESS_RANGES)
-            criteria = [
-                BSExcludeCriterion(lower_bounds=lower_bounds, upper_bounds=upper_bounds, threshold=0),
-                ]
-            extractor = NpzDirExtractor(criteria=criteria)
-        elif args.protocol == 'shadowsocks':
-            lower_bounds, upper_bounds = bound_gen(*SHADOWSOCKS_RANGES)
-            criteria = [
-                BSExcludeCriterion(lower_bounds=lower_bounds, upper_bounds=upper_bounds, threshold=0), 
-                ]
-            extractor = NpzDirExtractor(criteria=criteria)
-        elif args.protocol == 'trojan':
-            lower_bounds, upper_bounds = bound_gen(*TROJAN_RANGES)
-            criteria = [
-                BSExcludeCriterion(lower_bounds=lower_bounds, upper_bounds=upper_bounds, threshold=0),
-                ]
-            extractor = NpzDirExtractor(criteria=criteria)
-        elif args.protocol == 'normal':
-            normal_filter_file = "exp/data_extract/tmp_filter.txt"
-            extractor = NpzDirExtractor()
-        else:
-            raise ValueError(f"Invalid protocol: {args.protocol}")
-        
-    if not args.bs_filter:
-        # extractor = NpzHSDBSExtractor(threshold=40, ignore_control_packets=True)
-        if args.protocol == 'vmess':
-            extractor = NpzDirExtractor(stripper=VMessStripper())
-        elif args.protocol == 'shadowsocks':
-            extractor = NpzDirExtractor(stripper=ShadowsocksStripper())
-        elif args.protocol == 'trojan':
-            extractor = NpzDirExtractor()
-        else:
-            extractor = NpzDirExtractor()
 
+    if args.protocol.lower() in ['vmess', 'shadowsocks', 'trojan']:
+        if args.bs_filter:
+            total_cover = []
+            for sni in INTRINSIC_SNIS:
+                cover, _ = sni_cover(STAT_ROOT, args.protocol, sni, args.coverage, mode='size')
+                total_cover += cover
+            lower_bounds, upper_bounds = bound_gen(*total_cover)
+            
+        if args.strip:
+            stripper = PROTOCOL_STRIPPER[args.protocol.lower()]
+    elif args.protocol == 'normal':
+        # When needed, Normal could always leverage SNI filter
+        if args.bs_filter:
+            SNI_filter = read_host_list("exp/data_extract/tmp_filter.txt")
+    else:
+        raise ValueError(f"Invalid protocol: {args.protocol}")
+    
+    if lower_bounds is not None and upper_bounds is not None:
+        criteria = HSDBSExcludeCriterion(lower_bounds=lower_bounds, upper_bounds=upper_bounds, threshold=0)
+
+    extractor = NpzDirExtractor(criteria=criteria, stripper=stripper)
     formatter = CsvFormatter(length=args.length)
 
-    if args.filter_file:
+    if args.filter_file is not None:
         SNI_filter = read_host_list(args.filter_file)
-    elif normal_filter_file:
-        SNI_filter = read_host_list(normal_filter_file)
-    else:
-        SNI_filter = None   
 
     array_dir = f'{args.dir}/arrays'
     db_file = f'{args.dir}/database.csv'
