@@ -5,7 +5,7 @@ import numpy as np
 import pyshark 
 from pathlib import Path
 import re
-from typing import List, Tuple
+from typing import List, Tuple, Union
 import pandas as pd
 from WFlib.utils.statistics import jaccard_similarity
 
@@ -1230,6 +1230,7 @@ class TrojanSHSearcher(SHSearcher):
     
 
 PROTOCOL_SH_SEARCHER = {
+    'normal': SHSearcher(),
     'vmess': VMessSHSearcher(),
     'shadowsocks': ShadowsocksSHSearcher(),
     'trojan': TrojanSHSearcher(),
@@ -1285,6 +1286,7 @@ class TrojanCHSearcher(CHSearcher):
     
 
 PROTOCOL_CH_SEARCHER = {
+    'normal': CHSearcher(),
     'vmess': VMessCHSearcher(),
     'shadowsocks': ShadowsocksCHSearcher(),
     'trojan': TrojanCHSearcher(),
