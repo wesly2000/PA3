@@ -69,5 +69,7 @@ def default_override_prefs(protocol: str = 'normal', keylog_file: Optional[str] 
                             f.write(f2.read())
 
                 DEFAULT_OVERRIDE_PREFS['tls.keylog_file'] = merge_keylog_file
+        elif protocol == 'normal':
+            pass  # Ignore the proxy keylog file for normal protocol
 
     return DEFAULT_OVERRIDE_PREFS
