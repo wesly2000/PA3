@@ -290,9 +290,9 @@ def model_eval(
         raise ValueError(f"Evaluation method {eval_method} is not matched.")
     
     result = measurement(y_true, y_pred, eval_metrics, num_tabs)
-    print(result)
+    # print(result)
 
-    with open(out_file, "w") as fp:
+    with open(out_file, "a") as fp:
         json.dump(result, fp, indent=4)
 
 def info_nce_loss(features, batch_size, device):
