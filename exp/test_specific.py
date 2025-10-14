@@ -35,7 +35,7 @@ parser.add_argument("--scenario", type=str, default="Closed-world",
 
 # Input parameters
 parser.add_argument("--valid_file", type=str, default="valid", help="Valid file")
-parser.add_argument("--test_file", type=str, default="test", help="Test file")
+parser.add_argument("--test_file", type=str, default="train", help="Test file")
 parser.add_argument("--feature", type=str, default="DIR", help="Feature type, options=[DIR, DT, DT2, TAM, TAF]")
 parser.add_argument("--seq_len", type=int, default=5000, help="Input sequence length")
 
