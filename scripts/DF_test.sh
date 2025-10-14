@@ -1,9 +1,9 @@
-dataset=${1:-CW}
-device=${2:-"cuda:1"}
-checkpoints=${3:-normal}
+checkpoints=${1:-normal}
+dataset=${2:-CW}
+device=${3:-"cuda:1"}
 
 seq_len=5000
-feature=hsdbs_bin
+feature=size_bin
 
 python -u exp/test_specific.py \
   --dataset ${dataset} \

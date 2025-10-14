@@ -3,7 +3,7 @@ device=${2:-"cuda:1"}
 batch_size=${3:-128}
 
 seq_len=5000
-feature=hsdbs_bin
+feature=size_bin
 
 python -u exp/train.py \
   --dataset ${dataset} \
