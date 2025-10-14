@@ -13,7 +13,7 @@ from WFlib.utils.config import default_override_prefs, get_tshark_path
 
 logger = logging.getLogger(__name__)
 
-PROTOCOLS = ['normal', 'vmess']
+PROTOCOLS = ['normal', 'vmess', 'shadowsocks', 'trojan']
 custom_parameters=["-2"]
 config_path = Path.cwd() / 'config.ini'
 
@@ -76,7 +76,7 @@ def h2_stream_analysis_per_host(root: str, protocol: str, host: str, host_filter
     override_prefs = default_override_prefs(protocol, os.path.abspath(keylog_file), os.path.abspath(proxy_keylog_file))
     
     stats = dict()
-    limit = 30
+    limit = 20
     for file in sorted([f for f in pcap_dir_path.iterdir() 
                         if f.is_file() and f.suffix in ['.pcapng', '.pcap']])[:limit]:
             logger.info(f"Processing {file}")
