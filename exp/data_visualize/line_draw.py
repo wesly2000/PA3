@@ -45,7 +45,7 @@ def draw_byte_segment(input_root: str, host: str, sni: str, base: str, output_ro
     ax.set_ylabel('Relative Segment Index')
     ax.set_title(f'Host: {host}, SNI: {sni}', fontsize=12)
 
-    output_path = f"{args.output_root}/line_draw/{base}/{args.host}_{args.sni}.pdf"
+    output_path = f"{output_root}/line_draw/{base}/{host}_{sni}.pdf"
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
     fig_format = output_path.split('.')[-1]

@@ -1,5 +1,6 @@
 from WFlib.tools.analyzer import Cell, Line, Packet
 from WFlib.tools.visualize import *
+from WFlib.utils.statistics import *
 from WFlib.tools.extractor import NpzHSDBSExtractor
 from exp.tests.fixture import npz_buffers
 

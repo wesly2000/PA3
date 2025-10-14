@@ -7,6 +7,7 @@ NOTE: The extractors are now hard-coded into the script. Passing extractors as f
 from WFlib.tools.formatter import DistriPcapFormatter
 from WFlib.tools.extractor import PcapDirExtractor, PcapTsExtractor
 from WFlib.tools.capture import read_host_list
+from WFlib.utils.config import COMMON_SOURCE_IP
 import argparse
 import asyncio
 import nest_asyncio

@@ -44,7 +44,7 @@ if __name__ == '__main__':
         if args.bs_filter:
             total_cover = []
             for sni in INTRINSIC_SNIS:
-                cover, _ = sni_cover(STAT_ROOT, args.protocol, sni, args.coverage, mode='size')
+                cover, _ = sni_cover(STAT_ROOT, args.protocol, sni, args.coverage)
                 total_cover += cover
             lower_bounds, upper_bounds = bound_gen(*total_cover)
             

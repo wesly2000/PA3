@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 config_path = Path.cwd() / 'config.ini'
 
 src = COMMON_SOURCE_IP
-PROTOCOLS = ['vmess']
+PROTOCOLS = ['vmess', 'shadowsocks', 'trojan']
 
 def extract_csv_db_per_host_per_protocol(root: str, protocol: str, host: str, host_filter: Set[str], display_filter: str='tcp', db: Optional[pd.DataFrame]=None, tshark_path: str='tshark'):
     pcap_dir = f"{root}/{protocol}_capture/{host}"
