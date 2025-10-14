@@ -47,7 +47,7 @@ def load_data(data_path, feature_type, seq_len, num_tab=1):
         X = torch.tensor(X[:,np.newaxis], dtype=torch.float32)
     elif feature_type == "size_bin":
         BIN_RANGE = 1500
-        BIN_STEP = 1000
+        BIN_STEP = 800
         BINS = np.arange(-BIN_RANGE, BIN_RANGE + BIN_STEP, BIN_STEP)
         X = length_align(X, seq_len)
         # Create a mask for non-zero elements

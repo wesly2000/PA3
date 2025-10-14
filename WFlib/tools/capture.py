@@ -400,7 +400,7 @@ def SNI_extract(capture : Capture) -> set:
 
 def stream_number_extract(capture : Capture, check) -> Tuple[set, set]:
     """
-    Extract all TCP stream numbers for the streams where at least one packet within satisfies
+    Extract all TCP/UDP stream numbers for the streams where at least one packet within satisfies
     the condition required by the check. This could be seen as a complementaty for display filter,
     which only supports relatively simple rules.
 

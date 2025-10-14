@@ -8,6 +8,8 @@ import io
 from pathlib import Path
 import math
 
+from WFlib.utils.statistics import greedy_mass_covering
+
 
 class StreamProcessingError(Exception):
     """Exception raised when stream processing fails with index information."""
@@ -808,12 +810,79 @@ class NpzHSDBSExtractor(NpzExtractor):
         return directions, starts, ends
     
 
+PROTOCOL_ANCHOR = {'vmess': [5], 'shadowsocks': [6], 'trojan': [14, 16]}
+
+def extra_handshake_packets(stream: Union[np.ndarray, List[int]], protocol: str, lower_bound: int, upper_bound: int, prologue_length=3):
+    """
+    Given a stream of directional packet sizes, search for the anchor point, and erase the redundant handshake packets.
+
+    The sequence of the stream is as follows:
+
+    SYN-SYN+ACK-ACK---X---CH_1---[CH_2]---ACKs---remaining packets
+    """
+    possible_anchors = PROTOCOL_ANCHOR[protocol.lower()]
+
+    LEAST_PACKETS = 20  # The stream should contain a minimum number of packets.
+    if len(stream) < LEAST_PACKETS:
+        return [] 
+
+    anchor = 0
+
+    # Searching for the anchor point
+    for possible_anchor in possible_anchors:
+        # There are 4 heuristic standard to check if current frame is not a Client Hello:
+        # 1. This frame is negative (send by Server);
+        # 2. The next frame is not an ACK frame;
+        # 3. The current frame exceeds upper_bound (a value bit smaller than MSS) in size;
+        # 4. The current frame is smaller than lower_bound (a TCP control frame)
+        # If not a Client Hello, continue searching
+        if  stream[possible_anchor] < 0 or \
+            abs(stream[possible_anchor + 1]) > lower_bound or \
+            abs(stream[possible_anchor]) > upper_bound or \
+            abs(stream[possible_anchor]) < lower_bound:  
+            continue
+
+        # This is a Client Hello, get the anchor.
+        anchor = possible_anchor
+        break
+
+    if anchor == 0:
+        return []
+    
+    redundant_indices = []
+    # It is possible that a Client Hello is split into multiple packets (a common case is 2 according to our research).
+    first_segment = last_segment = anchor
+    if abs(stream[first_segment - 1]) >= upper_bound:  # The Client Hello is split into two packets.
+        first_segment -= 1
+
+    ack = 0
+    data = 0
+    for i in range(prologue_length, first_segment):
+        if abs(stream[i]) <= lower_bound:  # This is an ACK packet
+            ack += 1
+        else:
+            data += 1
+
+        redundant_indices.append(i)
+
+    if ack > data:
+        return []
+    
+    for i in range(data - ack):
+        redundant_indices.append(i + last_segment + 1)
+
+    return redundant_indices
+
+
 class Stripper():
     """
     The class that strips some elements from the original features. 
 
     WARNING: Stripper could only be used for packet-wise features, e.g., direction, packet length, packet timestamp, etc.. Moreover, the caller MUST not filter out the packets according to some criterion. For instance, please do NOT use Stripper when extracting threshold > 0. Future versions might support such cases.
     """
+    LOWER_BOUND = 70
+    UPPER_BOUND = 1400
+
     def __init__(self, protocol: str='abstract'):
         self.protocol = protocol
 
@@ -821,7 +890,7 @@ class Stripper():
         """
         The method that decide the proper indices to be stripped.
         """
-        raise NotImplementedError
+        return extra_handshake_packets(stream=feature, protocol=self.protocol, lower_bound=self.LOWER_BOUND, upper_bound=self.UPPER_BOUND)
 
     def strip(self, feature: np.ndarray) -> np.ndarray:
         exclude_indices = self.searching(feature)
@@ -847,6 +916,23 @@ class ShadowsocksStripper(Stripper):
 
     def searching(self, feature: np.ndarray) -> Iterable:
         return [3, 4, 7, 8]
+
+class TrojanStripper(Stripper):
+    """
+    The class that strips the Trojan feature from the original features.
+    """
+    def __init__(self):
+        super().__init__(protocol='trojan')
+
+    def searching(self, feature: np.ndarray) -> Iterable:
+        if len(feature) < 13:
+            return []
+        else:
+            return [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+
+
+PROTOCOL_STRIPPER = {'vmess': VMessStripper(), 'shadowsocks': ShadowsocksStripper(), 'trojan': TrojanStripper()}
+
 
 class NpzDirExtractor(NpzExtractor):
     """
@@ -936,7 +1022,7 @@ SNI_BIN_SIZE = {
     'content-signature-2.cdn.mozilla.net': 1000
 }
 
-def sni_cover(statistic_root: Union[str, Path], protocol: str, sni: str, coverage: float):
+def sni_cover(statistic_root: Union[str, Path], protocol: str, sni: str, coverage: float, mode='density'):
     """
     Compute the cover of stream size for an SNI to achieve the given coverage.
 
@@ -953,6 +1039,6 @@ def sni_cover(statistic_root: Union[str, Path], protocol: str, sni: str, coverag
     """
     df = pd.read_csv(f"{statistic_root}/{sni}.csv")
     array = df[protocol].dropna().to_numpy().astype(np.int64)
-    cover, actual_coverage = greedy_mass_covering(array, SNI_BIN_SIZE[sni], coverage)
+    cover, actual_coverage = greedy_mass_covering(array, SNI_BIN_SIZE[sni], coverage, mode=mode)
 
     return cover, actual_coverage
