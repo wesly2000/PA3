@@ -532,3 +532,24 @@ def test_NpzRawExtractor_2(npz_buffers):
     
     assert result == target
     
+
+def test_NpzRawExtractor_3(npz_buffers):
+    """
+    Test the NpzRawExtractor class extract method with VMessStripper.
+    """
+    extractor = NpzRawExtractor(features=['direction', 'length', 'timestamp'], stripper=VMessStripper(), criteria=LengthCriterion(k=2))
+    result = []
+    npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
+    extractor.extract(result, npz_files)
+    target = []
+    for i, stream in enumerate(npz_files):
+        if i == 1:
+            continue
+        tmp_list = list(zip(stream["timestamp"], stream["direction"], stream["length"]))
+        for index in sorted([3, 6], reverse=True):
+            del tmp_list[index]
+        target += tmp_list
+
+    target.sort(key=lambda x: x[0])
+
+    assert result == target
