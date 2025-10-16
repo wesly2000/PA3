@@ -989,8 +989,9 @@ class NpzRawExtractor(NpzExtractor):
     """
     supported_features = {'direction', 'length', 'timestamp'}
 
-    def __init__(self, features: Union[Set[str], List[str]], name: str='raw', criteria: Optional[Union[List[Criterion], Criterion]]=None):
+    def __init__(self, features: Union[Set[str], List[str]], name: str='raw', stripper: Optional[Stripper]=None, criteria: Optional[Union[List[Criterion], Criterion]]=None):
         super().__init__(name=name, criteria=criteria)
+        self.stripper = stripper
         features = set(features)
         assert features.issubset(self.supported_features), f"Unsupported features: {features - self.supported_features}"
         features = list(features)
@@ -1000,7 +1001,14 @@ class NpzRawExtractor(NpzExtractor):
 
     def single_stream_extract(self, stream: Dict[str, np.ndarray]) -> List[tuple]:
         timestamp_arr, feature_arrs = stream['timestamp'], [stream[feature] for feature in self.features]
-        return [(timestamp, tuple(features)) for timestamp, *features in zip(timestamp_arr, *feature_arrs)]
+        raw_arr = [(timestamp, tuple(features)) for timestamp, *features in zip(timestamp_arr, *feature_arrs)]
+        if self.stripper:
+            try:
+                raw_arr = self.stripper.strip(raw_arr)
+            except IndexError as e:
+                pass
+
+        return raw_arr
 
     def extract(self, target: list, npz_file_list: List[NpzFile]):
         streams = self.load_streams(npz_file_list)
