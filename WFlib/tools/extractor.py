@@ -224,6 +224,69 @@ def array_path(host: str, id: Union[int, str], transport: str, stream: int, prot
     return f"{host}_{id}_{transport}_{stream}_{protocol}.npz"
 
 
+class Stripper():
+    """
+    The class that strips some elements from the original features. 
+
+    WARNING: Stripper could only be used for packet-wise features, e.g., direction, packet length, packet timestamp, etc.. Moreover, the caller MUST not filter out the packets according to some criterion. For instance, please do NOT use Stripper when extracting threshold > 0. Future versions might support such cases.
+    """
+    LOWER_BOUND = 70
+    UPPER_BOUND = 1400
+
+    def __init__(self, protocol: str='abstract'):
+        self.protocol = protocol
+
+    def searching(self, feature: np.ndarray) -> Iterable:
+        """
+        The method that decide the proper indices to be stripped.
+        """
+        return extra_handshake_packets(stream=feature, protocol=self.protocol, lower_bound=self.LOWER_BOUND, upper_bound=self.UPPER_BOUND)
+
+    def strip(self, feature: Union[np.ndarray, Iterable]) -> np.ndarray:
+        exclude_indices = self.searching(feature)
+        if isinstance(feature, np.ndarray):
+            return np.delete(feature, exclude_indices)
+        else:
+            return [feature[i] for i in range(len(feature)) if i not in exclude_indices]
+    
+class VMessStripper(Stripper):
+    """
+    The class that strips the VMess feature from the original features.
+    """
+    def __init__(self):
+        super().__init__(protocol='vmess')
+
+    def searching(self, feature: np.ndarray) -> Iterable:
+        return [3, 6]
+    
+
+class ShadowsocksStripper(Stripper):
+    """
+    The class that strips the Shadowsocks feature from the original features.
+    """
+    def __init__(self):
+        super().__init__(protocol='shadowsocks')
+
+    def searching(self, feature: np.ndarray) -> Iterable:
+        return [3, 4, 7, 8]
+
+class TrojanStripper(Stripper):
+    """
+    The class that strips the Trojan feature from the original features.
+    """
+    def __init__(self):
+        super().__init__(protocol='trojan')
+
+    def searching(self, feature: np.ndarray) -> Iterable:
+        if len(feature) < 13:
+            return []
+        else:
+            return [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+
+
+PROTOCOL_STRIPPER = {'vmess': VMessStripper(), 'shadowsocks': ShadowsocksStripper(), 'trojan': TrojanStripper()}
+
+
 class Extractor(object):
     """
     The class provides methods for the actual feature extraction work. This is some abstract class, and the
@@ -477,7 +540,7 @@ class NpzExtractor(Extractor):
     Therefore, for extracting the feature of an entire capture, the caller is responsible to pass a group of .npz file paths which 
     the caller considers enough to represent the capture.
     """
-    def __init__(self, name: str, criteria: Optional[Union[List[Criterion], Criterion]]=None):
+    def __init__(self, name: str, stripper: Optional[Stripper]=None, criteria: Optional[Union[List[Criterion], Criterion]]=None, ):
         super().__init__(name=name)
         if criteria is None:
             self.criteria = []
@@ -872,66 +935,6 @@ def extra_handshake_packets(stream: Union[np.ndarray, List[int]], protocol: str,
         redundant_indices.append(i + last_segment + 1)
 
     return redundant_indices
-
-
-class Stripper():
-    """
-    The class that strips some elements from the original features. 
-
-    WARNING: Stripper could only be used for packet-wise features, e.g., direction, packet length, packet timestamp, etc.. Moreover, the caller MUST not filter out the packets according to some criterion. For instance, please do NOT use Stripper when extracting threshold > 0. Future versions might support such cases.
-    """
-    LOWER_BOUND = 70
-    UPPER_BOUND = 1400
-
-    def __init__(self, protocol: str='abstract'):
-        self.protocol = protocol
-
-    def searching(self, feature: np.ndarray) -> Iterable:
-        """
-        The method that decide the proper indices to be stripped.
-        """
-        return extra_handshake_packets(stream=feature, protocol=self.protocol, lower_bound=self.LOWER_BOUND, upper_bound=self.UPPER_BOUND)
-
-    def strip(self, feature: np.ndarray) -> np.ndarray:
-        exclude_indices = self.searching(feature)
-        return np.delete(feature, exclude_indices)
-    
-class VMessStripper(Stripper):
-    """
-    The class that strips the VMess feature from the original features.
-    """
-    def __init__(self):
-        super().__init__(protocol='vmess')
-
-    def searching(self, feature: np.ndarray) -> Iterable:
-        return [3, 6]
-    
-
-class ShadowsocksStripper(Stripper):
-    """
-    The class that strips the Shadowsocks feature from the original features.
-    """
-    def __init__(self):
-        super().__init__(protocol='shadowsocks')
-
-    def searching(self, feature: np.ndarray) -> Iterable:
-        return [3, 4, 7, 8]
-
-class TrojanStripper(Stripper):
-    """
-    The class that strips the Trojan feature from the original features.
-    """
-    def __init__(self):
-        super().__init__(protocol='trojan')
-
-    def searching(self, feature: np.ndarray) -> Iterable:
-        if len(feature) < 13:
-            return []
-        else:
-            return [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-
-
-PROTOCOL_STRIPPER = {'vmess': VMessStripper(), 'shadowsocks': ShadowsocksStripper(), 'trojan': TrojanStripper()}
 
 
 class NpzDirExtractor(NpzExtractor):
