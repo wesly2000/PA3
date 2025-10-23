@@ -6,7 +6,7 @@ import argparse
 import numpy as np
 
 from WFlib.tools.formatter import CsvFormatter
-from WFlib.tools.extractor import NpzDirExtractor, HSDBSExcludeCriterion
+from WFlib.tools.extractor import NpzDirExtractor, HSDBSExcludeCriterion, NpzRawExtractor
 from WFlib.tools.capture import read_host_list
 from WFlib.tools.extractor import sni_cover, PROTOCOL_STRIPPER
 
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--dir', type=str, help="The base dir of the array and db files")
-    parser.add_argument('-l', '--length', type=int, default=5000, help="The length of the expect feature vectors")
+    parser.add_argument('-l', '--length', type=int, default=10000, help="The length of the expect feature vectors")
     parser.add_argument('-k', '--k', type=int, default=1, help="The k value for the HSDBS criterion")
     parser.add_argument('-o', '--output_file', type=str, help="The path to the files to hold the output file")
     parser.add_argument('-p', '--protocol', default='normal', type=str, help="The protocol considered in the extraction")
@@ -32,6 +32,7 @@ if __name__ == '__main__':
     parser.add_argument('--bs_filter', action='store_true', help="The BS filter file")
     parser.add_argument('--coverage', default=0.8, type=float, help="BS coverage to filter")
     parser.add_argument('--strip', action='store_true', help="Strip the handshake packets")
+    parser.add_argument('--feature', type=str, default="size", help="Feature type, options=[dir, size, raw]")
     args = parser.parse_args()
 
     stripper = None
@@ -60,7 +61,13 @@ if __name__ == '__main__':
     if lower_bounds is not None and upper_bounds is not None:
         criteria = HSDBSExcludeCriterion(lower_bounds=lower_bounds, upper_bounds=upper_bounds, threshold=0)
 
-    extractor = NpzDirExtractor(criteria=criteria, stripper=stripper)
+    if args.feature.lower() in ['size', 'dir']:
+        extractor = NpzDirExtractor(criteria=criteria, stripper=stripper)
+    elif args.feature.lower() in ['raw']:
+        extractor = NpzRawExtractor(features={'direction', 'length', 'timestamp'}, criteria=criteria, stripper=stripper)
+    else:
+        raise NotImplementedError
+    
     formatter = CsvFormatter(length=args.length)
 
     if args.filter_file is not None:
