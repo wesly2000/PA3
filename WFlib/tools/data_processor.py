@@ -3,6 +3,8 @@ import numpy as np
 from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
+DISABLE_TQDM = True  # Turn off the progress bar
+
 def length_align(X, seq_len):
     """
     Align the length of the sequences to the specified sequence length.
@@ -38,7 +40,9 @@ def load_data(data_path, feature_type, seq_len, num_tab=1):
     X = data["X"]
     y = data["y"]
 
-    if feature_type == "DIR":
+    feature_type = feature_type.lower()
+
+    if feature_type == "dir":
         X = np.sign(X)  # Directional feature
         X = length_align(X, seq_len)
         X = torch.tensor(X[:,np.newaxis], dtype=torch.float32)
@@ -60,10 +64,10 @@ def load_data(data_path, feature_type, seq_len, num_tab=1):
             bin_idx = np.clip(bin_idx, 0, len(BINS) - 2)
             binned_X[non_zero_mask] = (BINS[bin_idx] + BINS[bin_idx + 1]) / 2
         X = torch.tensor(binned_X[:,np.newaxis], dtype=torch.float32)
-    elif feature_type == "DT":
+    elif feature_type == "dt":
         X = length_align(X, seq_len)
         X = torch.tensor(X[:,np.newaxis], dtype=torch.float32)
-    elif feature_type == "DT2":
+    elif feature_type == "dt2":
         X_dir = np.sign(X)
         X_time = np.abs(X)
         X_time = np.diff(X_time)
@@ -72,13 +76,13 @@ def load_data(data_path, feature_type, seq_len, num_tab=1):
         X_time = length_align(X_time, seq_len)[:, np.newaxis]
         X = np.concatenate([X_dir, X_time], axis=1)
         X = torch.tensor(X, dtype=torch.float32)
-    elif feature_type == "TAM":
+    elif feature_type in ["tam", "tsam"]:
         X = length_align(X, seq_len)
         X = torch.tensor(X[:,np.newaxis], dtype=torch.float32)
-    elif feature_type in ["TAF", "MTAF"]:
+    elif feature_type in ["taf", "mtaf"]:
         X = length_align(X, seq_len)
         X = torch.tensor(X, dtype=torch.float32)
-    elif feature_type == "Origin":
+    elif feature_type == "origin":
         X = length_align(X, seq_len)
         return X, y
     elif feature_type == "hsdbs":
@@ -99,9 +103,6 @@ def load_data(data_path, feature_type, seq_len, num_tab=1):
             bin_idx = np.clip(bin_idx, 0, len(BINS) - 2)
             binned_X[non_zero_mask] = (BINS[bin_idx] + BINS[bin_idx + 1]) / 2
         X = torch.tensor(binned_X[:,np.newaxis], dtype=torch.float32)
-    elif feature_type == "tsam":
-        X = length_align(X, seq_len)
-        X = torch.tensor(X[:,np.newaxis], dtype=torch.float32)
     else:
         raise ValueError(f"Feature type {feature_type} is not matched.")
     
@@ -329,8 +330,10 @@ def extract_TAF(sequences, num_workers=30):
 def process_TAM(index, sequence, maximum_load_time, max_matrix_len):
     feature = np.zeros((2, max_matrix_len))  # Initialize feature matrix
 
-    for pack in sequence:
-        if pack == 0:
+    for time, direction, _ in sequence:
+        pack = time * direction
+
+        if direction == 0:
             break  # End of sequence
         elif pack > 0:
             if pack >= maximum_load_time:
@@ -347,7 +350,7 @@ def process_TAM(index, sequence, maximum_load_time, max_matrix_len):
                 feature[1, idx] += 1
     return index, feature
 
-def extract_TAM(sequences, num_workers=30):
+def extract_TAM(sequences, maximum_load_time=80, max_matrix_len=1800, num_workers=30):
     """
     Extract the Traffic Analysis Matrix (TAM) from sequences.
 
@@ -357,14 +360,12 @@ def extract_TAM(sequences, num_workers=30):
     Returns:
     ndarray: Extracted TAM features.
     """
-    maximum_load_time = 80  # Maximum load time for packets
-    max_matrix_len = 1800  # Maximum length of the matrix
     num_sequences = sequences.shape[0]
     TAM = np.zeros((num_sequences, 2, max_matrix_len))
 
     with ProcessPoolExecutor(max_workers=min(num_workers, num_sequences)) as executor:
         futures = [executor.submit(process_TAM, index, sequences[index], maximum_load_time, max_matrix_len) for index in range(num_sequences)]
-        with tqdm(total=num_sequences) as pbar:
+        with tqdm(total=num_sequences, disable=DISABLE_TQDM) as pbar:
             for future in as_completed(futures):
                 index, result = future.result()
                 TAM[index] = result
@@ -372,3 +373,47 @@ def extract_TAM(sequences, num_workers=30):
 
     return TAM
 
+
+def process_TSAM(index, sequence, maximum_load_time, max_matrix_len):
+    TSAM = np.zeros((2, max_matrix_len))
+    for time, direction, size in sequence:
+        if time == -2:
+            break
+        if direction > 0:
+            if time >= maximum_load_time:
+                TSAM[0][-1] += size
+            else:
+                idx = int(time * (max_matrix_len - 1) / maximum_load_time)
+                TSAM[0][idx] += size
+        if direction < 0:
+            if time >= maximum_load_time:
+                TSAM[1][-1] += size
+            else:
+                idx = int(time * (max_matrix_len - 1) / maximum_load_time)
+                TSAM[1][idx] += size
+    TSAM = TSAM / 1500.0
+    return index, TSAM
+
+
+def extract_TSAM(sequences, maximum_load_time=80, max_matrix_len=1800, num_workers=30):
+    """
+    Extract the Traffic Size Analysis Matrix (TSAM) from sequences.
+
+    Parameters:
+    sequences (ndarray): Input sequences.
+
+    Returns:
+    ndarray: Extracted TSAM features.
+    """
+    num_sequences = sequences.shape[0]
+    TSAM = np.zeros((num_sequences, 2, max_matrix_len))
+
+    with ProcessPoolExecutor(max_workers=min(num_workers, num_sequences)) as executor:
+        futures = [executor.submit(process_TSAM, index, sequences[index], maximum_load_time, max_matrix_len) for index in range(num_sequences)]
+        with tqdm(total=num_sequences, disable=DISABLE_TQDM) as pbar:
+            for future in as_completed(futures):
+                index, result = future.result()
+                TSAM[index] = result
+                pbar.update(1)
+
+    return TSAM
