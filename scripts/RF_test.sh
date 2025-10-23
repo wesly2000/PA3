@@ -1,8 +1,8 @@
-dataset=${1:-CW}
-device=${2:-"cuda:0"}
-checkpoints=${3:-normal}
+checkpoints=${1:-normal}
+dataset=${2:-CW}
+feature=${3:-"tam"}
+device=${4:-"cuda:1"}
 
-feature=tsam
 seq_len=1800
 
 python -u exp/test_specific.py \
@@ -13,6 +13,6 @@ python -u exp/test_specific.py \
   --feature ${feature} \
   --seq_len ${seq_len} \
   --batch_size 256 \
-  --eval_metrics Accuracy Precision Recall F1-score \
+  --eval_metrics F1-score \
   --load_name max_f1 \
   --result_file ${checkpoints} 
