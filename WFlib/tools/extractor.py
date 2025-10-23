@@ -1033,7 +1033,7 @@ SNI_BIN_SIZE = {
     'content-signature-2.cdn.mozilla.net': 1000
 }
 
-def sni_cover(statistic_root: Union[str, Path], protocol: str, sni: str, coverage: float, mode='density'):
+def sni_cover(statistic_root: Union[str, Path], protocol: str, sni: str, coverage: float):
     """
     Compute the cover of stream size for an SNI to achieve the given coverage.
 
@@ -1050,6 +1050,6 @@ def sni_cover(statistic_root: Union[str, Path], protocol: str, sni: str, coverag
     """
     df = pd.read_csv(f"{statistic_root}/{sni}.csv")
     array = df[protocol].dropna().to_numpy().astype(np.int64)
-    cover, actual_coverage = greedy_mass_covering(array, SNI_BIN_SIZE[sni], coverage, mode=mode)
+    cover, actual_coverage = greedy_mass_covering(array, SNI_BIN_SIZE[sni], coverage)
 
     return cover, actual_coverage
