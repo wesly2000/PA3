@@ -89,7 +89,7 @@ class Formatter(object):
             if k not in ['hosts', 'labels']:
                 self._buf[k] = np.stack(self._buf[k])
 
-        np.savez(file=file, **self._buf)
+        np.savez_compressed(file=file, **self._buf)
 
 class PcapFormatter(Formatter):
     """
@@ -523,7 +523,7 @@ class CsvFormatter(Formatter):
                 self._buf[extractor.name].append(np.array(tmp_buf[extractor.name][:self._length]))
             else:
                 if extractor.name == 'raw':
-                    padding = tuple([-2] * len(extractor.features))  # Awkward padding, but should be useful
+                    padding = tuple([0] * len(extractor.features))  # Awkward padding, but should be useful
                 else:
                     padding = 0
                 padding_len = self._length - len(tmp_buf[extractor.name])
