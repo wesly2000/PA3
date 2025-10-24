@@ -35,16 +35,14 @@ feature = args.feature.lower()
 if not os.path.exists(args.output_file):
     data = np.load(args.input_file, allow_pickle=True)
     X = data["raw"]
+
     # Data alignment
-    if feature in ['tam', 'tsam']:
-        if X.shape[1] > args.seq_len:  # Truncate along axis 1
-            X = X[:,:args.seq_len,:]
-        else:
-            padding_num = args.seq_len - X.shape[1]
-            pad_width = [(0, 0), (0, padding_num), (0, 0)]
-            X = np.pad(X, pad_width=pad_width, mode="constant", constant_values=0)  # Pad the sequence with zeros
+    if X.shape[1] > args.seq_len:  # Truncate along axis 1
+        X = X[:,:args.seq_len,:]
     else:
-        X = data_processor.length_align(X, args.seq_len)
+        padding_num = args.seq_len - X.shape[1]
+        pad_width = [(0, 0), (0, padding_num), (0, 0)]
+        X = np.pad(X, pad_width=pad_width, mode="constant", constant_values=0)  # Pad the sequence with zeros
 
     transformed = {'labels': data["labels"], 'hosts': data["hosts"]}
     
@@ -52,5 +50,19 @@ if not os.path.exists(args.output_file):
         transformed[feature] = data_processor.extract_TAM(X, args.t, args.l)
     elif feature == 'tsam':
         transformed[feature] = data_processor.extract_TSAM(X, args.t, args.l)
+    elif feature == 'mtaf':
+        transformed[feature] = data_processor.extract_MTAF(X)
+    elif feature == 'mtsaf':
+        transformed[feature] = data_processor.extract_MTAF(X, ignore_size=False)
+    elif feature == 'taf':
+        transformed[feature] = data_processor.extract_TAF(X)   
+    elif feature == 'tsaf':
+        transformed[feature] = data_processor.extract_TAF(X, ignore_size=False)  
+    elif feature == 'dir':
+        transformed[feature] = data_processor.extract_DIR(X, args.seq_len)  
+    elif feature == 'ts':
+        transformed[feature] = data_processor.extract_TS(X, args.seq_len)  
     
     np.savez_compressed(args.output_file, **transformed)
+else:
+    print(f"File {args.output_file} already exists")
