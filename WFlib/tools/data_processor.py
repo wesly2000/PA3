@@ -167,24 +167,32 @@ def extract_temporal_feature(X, feat_length=1000):
     new_X = np.array(new_X)
     return new_X
 
-def fast_count_burst(arr):
-    diff = np.diff(arr)
-    change_indices = np.nonzero(diff)[0]
-    segment_starts = np.insert(change_indices + 1, 0, 0)
-    segment_ends = np.append(change_indices, len(arr) - 1)
-    segment_lengths = segment_ends - segment_starts + 1
-    segment_signs = np.sign(arr[segment_starts])
-    adjusted_lengths = segment_lengths * segment_signs
+def fast_count_burst(arr, ignore_size=True):
+    """
+    Compute the size of bursts within the traffic. If ignore the packet sizes, the burst size refers to the number of packet within. Otherwise, it is the sum of packet size within.
+    """
+    dirs = np.sign(arr)
+    assert not np.any(dirs == 0), "Array contains zero!"
 
-    return adjusted_lengths
+    diff = np.diff(dirs)
+    change_indices = np.nonzero(diff)[0]
+    burst_starts = np.insert(change_indices + 1, 0, 0)
+    burst_ends = np.append(change_indices, len(arr) - 1)
+
+    if ignore_size:
+        burst_lengths = burst_ends - burst_starts + 1
+        burst_signs = np.sign(arr[burst_starts])
+        burst_sizes = burst_lengths * burst_signs
+    else:
+        burst_sizes = np.array([np.sum(arr[burst_start:burst_end+1]) for burst_start, burst_end in zip(burst_starts, burst_ends)])
+
+    return burst_sizes
 
 def agg_interval(packets):
     features = []
     features.append([np.sum(packets>0), np.sum(packets<0)])
 
-    dirs = np.sign(packets)
-    assert not np.any(dir == 0), "Array contains zero!"
-    bursts = fast_count_burst(dirs)
+    bursts = fast_count_burst(packets)
     features.append([np.sum(bursts>0), np.sum(bursts<0)])
 
     pos_bursts = bursts[bursts>0]
@@ -212,9 +220,7 @@ def agg_interval2(packets):
     features.append(np.sum(np.diff(pos_packets)))
     features.append(np.sum(np.diff(neg_packets)))
 
-    dirs = np.sign(packets)
-    assert not np.any(dir == 0), "Array contains zero!"
-    bursts = fast_count_burst(dirs)
+    bursts = fast_count_burst(packets)
     features.append(np.sum(bursts>0))
     features.append(np.sum(bursts<0))
 
@@ -231,8 +237,12 @@ def agg_interval2(packets):
 
     return np.array(features, dtype=np.float32)
 
-def process_MTAF(index, sequence, interval, max_len):
-    packets = np.trim_zeros(sequence, "fb")
+def process_MTAF(index, sequence, interval, max_len, ignore_size=True):
+    packets = np.array([direction * size for _, direction, size in sequence])
+    if ignore_size:
+        packets = np.sign(packets)
+
+    packets = np.trim_zeros(packets, "fb")
     abs_packets = np.abs(packets)
     st_time = abs_packets[0]
     st_pos = 0
@@ -253,7 +263,7 @@ def process_MTAF(index, sequence, interval, max_len):
     
     return index, TAF
 
-def extract_MTAF(sequences, num_workers=30):
+def extract_MTAF(sequences, interval = 20, max_len = 8000, num_workers=30, ignore_size=True):
     """
     Extract the TAF from sequences.
 
@@ -263,15 +273,13 @@ def extract_MTAF(sequences, num_workers=30):
     Returns:
     ndarray: Extracted TAF.
     """
-    interval = 20
-    max_len = 8000
     sequences *= 1000
     num_sequences = sequences.shape[0]
     TAF = np.zeros((num_sequences, 8, max_len))
 
     with ProcessPoolExecutor(max_workers=min(num_workers, num_sequences)) as executor:
-        futures = [executor.submit(process_MTAF, index, sequences[index], interval, max_len) for index in range(num_sequences)]
-        with tqdm(total=num_sequences) as pbar:
+        futures = [executor.submit(process_MTAF, index, sequences[index], interval, max_len, ignore_size) for index in range(num_sequences)]
+        with tqdm(total=num_sequences, disable=DISABLE_TQDM) as pbar:
             for future in as_completed(futures):
                 index, result = future.result()
                 TAF[index] = result
@@ -279,8 +287,12 @@ def extract_MTAF(sequences, num_workers=30):
 
     return TAF
 
-def process_TAF(index, sequence, interval, max_len):
-    packets = np.trim_zeros(sequence, "fb")
+def process_TAF(index, sequence, interval, max_len, ignore_size=True):
+    packets = np.array([direction * size for _, direction, size in sequence])
+    if ignore_size:
+        packets = np.sign(packets)
+
+    packets = np.trim_zeros(packets, "fb")
     abs_packets = np.abs(packets)
     st_time = abs_packets[0]
     st_pos = 0
@@ -301,7 +313,7 @@ def process_TAF(index, sequence, interval, max_len):
     
     return index, TAF
 
-def extract_TAF(sequences, num_workers=30):
+def extract_TAF(sequences, interval = 40, max_len = 2000, num_workers=30, ignore_size=True):
     """
     Extract the TAF from sequences.
 
@@ -311,15 +323,13 @@ def extract_TAF(sequences, num_workers=30):
     Returns:
     ndarray: Extracted TAF.
     """
-    interval = 40
-    max_len = 2000
     sequences *= 1000
     num_sequences = sequences.shape[0]
     TAF = np.zeros((num_sequences, 3, 2, max_len))
 
     with ProcessPoolExecutor(max_workers=min(num_workers, num_sequences)) as executor:
-        futures = [executor.submit(process_TAF, index, sequences[index], interval, max_len) for index in range(num_sequences)]
-        with tqdm(total=num_sequences) as pbar:
+        futures = [executor.submit(process_TAF, index, sequences[index], interval, max_len, ignore_size) for index in range(num_sequences)]
+        with tqdm(total=num_sequences, disable=DISABLE_TQDM) as pbar:
             for future in as_completed(futures):
                 index, result = future.result()
                 TAF[index] = result
