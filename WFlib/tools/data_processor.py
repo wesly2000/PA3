@@ -238,10 +238,7 @@ def agg_interval2(packets):
     return np.array(features, dtype=np.float32)
 
 def process_MTAF(index, sequence, interval, max_len, ignore_size=True):
-    packets = np.array([direction * size for _, direction, size in sequence])
-    if ignore_size:
-        packets = np.sign(packets)
-
+    packets = np.array([timestamp * direction for timestamp, direction, _ in sequence])
     packets = np.trim_zeros(packets, "fb")
     abs_packets = np.abs(packets)
     st_time = abs_packets[0]
@@ -427,3 +424,46 @@ def extract_TSAM(sequences, maximum_load_time=80, max_matrix_len=1800, num_worke
                 pbar.update(1)
 
     return TSAM
+
+
+
+
+def process_DIR(index, sequence):
+    DIR = np.array([direction * size for _, direction, size in sequence])
+    DIR = np.sign(DIR)
+    
+    return index, DIR
+
+def extract_DIR(sequences, seq_len, num_workers=30):
+    num_sequences = sequences.shape[0]
+    DIR = np.zeros((num_sequences, seq_len))
+
+    with ProcessPoolExecutor(max_workers=min(num_workers, num_sequences)) as executor:
+        futures = [executor.submit(process_DIR, index, sequences[index]) for index in range(num_sequences)]
+        with tqdm(total=num_sequences, disable=DISABLE_TQDM) as pbar:
+            for future in as_completed(futures):
+                index, result = future.result()
+                DIR[index] = result
+                pbar.update(1)
+
+    return DIR
+
+
+def process_TS(index, sequence):
+    TS = np.array([direction * timestamp for timestamp, direction, _ in sequence])
+    
+    return index, TS
+
+def extract_TS(sequences, seq_len, num_workers=30):
+    num_sequences = sequences.shape[0]
+    TS = np.zeros((num_sequences, seq_len))
+
+    with ProcessPoolExecutor(max_workers=min(num_workers, num_sequences)) as executor:
+        futures = [executor.submit(process_TS, index, sequences[index]) for index in range(num_sequences)]
+        with tqdm(total=num_sequences, disable=DISABLE_TQDM) as pbar:
+            for future in as_completed(futures):
+                index, result = future.result()
+                TS[index] = result
+                pbar.update(1)
+
+    return TS
