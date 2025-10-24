@@ -1,23 +1,18 @@
-dataset=CW
+dataset=${1:-CW}
+feature=${2:-"mtaf"}
+device=${3:-"cuda:0"}
+batch_size=${4:-200}
 
-for filename in train valid test
-  do 
-      python -u exp/dataset_process/gen_mtaf.py \
-        --dataset ${dataset} \
-        --seq_len 10000 \
-        --in_file ${filename}
-  done
+seq_len=8000
 
 python -u exp/train.py \
   --dataset ${dataset} \
   --model ARES \
-  --device cuda:7 \
-  --train_file mtaf_train \
-  --valid_file mtaf_valid \
-  --feature MTAF \
-  --seq_len 8000 \
-  --train_epochs 300 \
-  --batch_size 512 \
+  --device ${device} \
+  --feature ${feature} \
+  --seq_len ${seq_len} \
+  --train_epochs 30 \
+  --batch_size ${batch_size} \
   --learning_rate 2e-3 \
   --optimizer AdamW \
   --lradj StepLR \
@@ -28,11 +23,9 @@ python -u exp/train.py \
 python -u exp/test.py \
   --dataset ${dataset} \
   --model ARES \
-  --device cuda:7 \
-  --valid_file mtaf_valid \
-  --test_file mtaf_test  \
-  --feature MTAF \
-  --seq_len 8000 \
-  --batch_size 512 \
+  --device ${device} \
+  --feature ${feature} \
+  --seq_len ${seq_len} \
+  --batch_size 256 \
   --eval_metrics Accuracy Precision Recall F1-score \
   --load_name max_f1
