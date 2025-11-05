@@ -1,5 +1,5 @@
 dataset=${1:-CW}
-device=${2:-"cuda:1"}
+device=${2:-"cuda:0"}
 batch_size=${3:-128}
 
 seq_len=5000
