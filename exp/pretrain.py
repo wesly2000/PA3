@@ -18,6 +18,8 @@ np.random.seed(fix_seed)
 parser = argparse.ArgumentParser(description="WFlib")
 parser.add_argument("--dataset", type=str, required=True, default="Undefended", help="Dataset name")
 parser.add_argument("--model", type=str, required=True, default="DF", help="Model name")
+parser.add_argument("--feature", type=str, default="DIR", help="Feature type, options=[DIR, DT, DT2, TAM, TAF]")
+parser.add_argument("--seq_len", type=int, default=5000, help="Input sequence length")
 parser.add_argument("--device", type=str, default="cpu", help="Device, options=[cpu, cuda, cuda:x]")
 parser.add_argument("--train_file", type=str, default="train", help="Train file")
 
