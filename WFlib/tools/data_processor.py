@@ -145,7 +145,7 @@ def extract_temporal_feature(X, feat_length=1000):
     abs_X = np.absolute(X)
     new_X = []
 
-    for idx in tqdm(range(X.shape[0])):
+    for idx in tqdm(range(X.shape[0]), disable=DISABLE_TQDM):
         temporal_array = np.zeros((2,feat_length))
         loading_time =  abs_X[idx].max()
         interval = 1.0 * loading_time / feat_length
@@ -285,13 +285,20 @@ def extract_MTAF(sequences, interval = 20, max_len = 8000, num_workers=30, ignor
     return TAF
 
 def process_TAF(index, sequence, interval, max_len, ignore_size=True):
-    packets = np.array([direction * size for _, direction, size in sequence])
-    if ignore_size:
-        packets = np.sign(packets)
+    try:
+        packets = np.array([direction * timestamp for timestamp, direction in sequence])
+    except TypeError:
+        packets = sequence
+    # if ignore_size:
+    #     packets = np.sign(packets)
 
     packets = np.trim_zeros(packets, "fb")
     abs_packets = np.abs(packets)
-    st_time = abs_packets[0]
+    try:
+        st_time = abs_packets[0]
+    except IndexError:
+        print(f"Index Error in sample {index}.")
+        return -1, None
     st_pos = 0
     TAF = np.zeros((3, 2, max_len))
 
@@ -329,7 +336,8 @@ def extract_TAF(sequences, interval = 40, max_len = 2000, num_workers=30, ignore
         with tqdm(total=num_sequences, disable=DISABLE_TQDM) as pbar:
             for future in as_completed(futures):
                 index, result = future.result()
-                TAF[index] = result
+                if index >= 0:
+                    TAF[index] = result
                 pbar.update(1)
 
     return TAF
@@ -425,45 +433,41 @@ def extract_TSAM(sequences, maximum_load_time=80, max_matrix_len=1800, num_worke
 
     return TSAM
 
-
-
-
-def process_DIR(index, sequence):
-    DIR = np.array([direction * size for _, direction, size in sequence])
-    DIR = np.sign(DIR)
+def process_SIZE(index, sequence):
+    SIZE = np.array([direction * size for _, direction, size in sequence])
     
-    return index, DIR
+    return index, SIZE
 
-def extract_DIR(sequences, seq_len, num_workers=30):
+def extract_SIZE(sequences, seq_len, num_workers=30):
     num_sequences = sequences.shape[0]
-    DIR = np.zeros((num_sequences, seq_len))
+    SIZE = np.zeros((num_sequences, seq_len))
 
     with ProcessPoolExecutor(max_workers=min(num_workers, num_sequences)) as executor:
-        futures = [executor.submit(process_DIR, index, sequences[index]) for index in range(num_sequences)]
+        futures = [executor.submit(process_SIZE, index, sequences[index]) for index in range(num_sequences)]
         with tqdm(total=num_sequences, disable=DISABLE_TQDM) as pbar:
             for future in as_completed(futures):
                 index, result = future.result()
-                DIR[index] = result
+                SIZE[index] = result
                 pbar.update(1)
 
-    return DIR
+    return SIZE
 
 
-def process_TS(index, sequence):
-    TS = np.array([direction * timestamp for timestamp, direction, _ in sequence])
+def process_DT(index, sequence):
+    DT = np.array([direction * timestamp for timestamp, direction, _ in sequence])
     
-    return index, TS
+    return index, DT
 
-def extract_TS(sequences, seq_len, num_workers=30):
+def extract_DT(sequences, seq_len, num_workers=30):
     num_sequences = sequences.shape[0]
-    TS = np.zeros((num_sequences, seq_len))
+    DT = np.zeros((num_sequences, seq_len))
 
     with ProcessPoolExecutor(max_workers=min(num_workers, num_sequences)) as executor:
-        futures = [executor.submit(process_TS, index, sequences[index]) for index in range(num_sequences)]
+        futures = [executor.submit(process_DT, index, sequences[index]) for index in range(num_sequences)]
         with tqdm(total=num_sequences, disable=DISABLE_TQDM) as pbar:
             for future in as_completed(futures):
                 index, result = future.result()
-                TS[index] = result
+                DT[index] = result
                 pbar.update(1)
 
-    return TS
+    return DT
