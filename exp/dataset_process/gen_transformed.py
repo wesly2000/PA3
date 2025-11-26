@@ -61,10 +61,12 @@ if not os.path.exists(args.output_file):
         transformed[feature] = data_processor.extract_TAF(X)   
     elif feature == 'tsaf':
         transformed[feature] = data_processor.extract_TAF(X, ignore_size=False)  
-    elif feature == 'dir':
-        transformed[feature] = data_processor.extract_DIR(X, args.seq_len)  
-    elif feature == 'ts':
-        transformed[feature] = data_processor.extract_TS(X, args.seq_len)  
+    elif feature == 'size':
+        transformed[feature] = data_processor.extract_SIZE(X, args.seq_len)  
+    elif feature == 'dt':
+        transformed[feature] = data_processor.extract_DT(X, args.seq_len)  
+    else:
+        raise NotImplementedError("Feature not implemented")
     
     np.savez_compressed(args.output_file, **transformed)
 else:
