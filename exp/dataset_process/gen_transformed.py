@@ -34,15 +34,18 @@ feature = args.feature.lower()
 
 if not os.path.exists(args.output_file):
     data = np.load(args.input_file, allow_pickle=True)
-    X = data["raw"]
+    X = data[args.in_feature]
 
     # Data alignment
-    if X.shape[1] > args.seq_len:  # Truncate along axis 1
-        X = X[:,:args.seq_len,:]
+    if args.in_feature == 'raw':
+        if X.shape[1] > args.seq_len:  # Truncate along axis 1
+            X = X[:,:args.seq_len,:]
+        else:
+            padding_num = args.seq_len - X.shape[1]
+            pad_width = [(0, 0), (0, padding_num), (0, 0)]
+            X = np.pad(X, pad_width=pad_width, mode="constant", constant_values=0)  # Pad the sequence with zeros
     else:
-        padding_num = args.seq_len - X.shape[1]
-        pad_width = [(0, 0), (0, padding_num), (0, 0)]
-        X = np.pad(X, pad_width=pad_width, mode="constant", constant_values=0)  # Pad the sequence with zeros
+        X = data_processor.length_align(X, args.seq_len)
 
     transformed = {'labels': data["labels"], 'hosts': data["hosts"]}
     
