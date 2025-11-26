@@ -25,7 +25,7 @@ parser.add_argument("--in_file", type=str, default="train", help="input file")
 
 # Parse arguments
 args = parser.parse_args()
-in_path = os.path.join("./datasets", args.dataset)
+in_path = args.dataset
 if not os.path.exists(in_path):
     raise FileNotFoundError(f"The dataset path does not exist: {in_path}")
 
@@ -41,7 +41,7 @@ if not os.path.exists(out_file):
     # Align the sequence length
     X = data_processor.length_align(X, args.seq_len)
     # Extract the TAF
-    X = data_processor.extract_TAF(X)
+    X = data_processor.extract_TAF(X, ignore_size=False)
     # Print processing information
     print(f"{args.in_file} process done: X = {X.shape}, y = {y.shape}")
     # Save the processed data into a new .npz file

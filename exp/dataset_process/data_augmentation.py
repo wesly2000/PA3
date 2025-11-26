@@ -32,7 +32,10 @@ def gen_augment(data, num_aug, effective_ranges, out_file):
 
         # Generate augmentations for each sample
         for ii in range(num_aug):
-            p = np.random.randint(effective_ranges[cur_web][0], effective_ranges[cur_web][1])
+            if effective_ranges[cur_web][0] == effective_ranges[cur_web][1]:
+                p == effective_ranges[cur_web][0]
+            else:
+                p = np.random.randint(effective_ranges[cur_web][0], effective_ranges[cur_web][1])
             threshold = loading_time * p / 100
             valid_X = cur_abs_X[cur_abs_X > 0]
             valid_X = valid_X[valid_X <= threshold]
@@ -71,10 +74,12 @@ parser.add_argument("--attr_method", type=str, default="DeepLiftShap",
 args = parser.parse_args()
 
 # Construct the input path for the dataset
-in_path = os.path.join("./datasets", args.dataset)
+in_path = args.dataset
+print(os.path.join(in_path, f"{args.in_file}.npz"))
 data = np.load(os.path.join(in_path, f"{args.in_file}.npz"))
 
 # Load the temporal attribution data
+print(os.path.join(args.checkpoints, args.dataset, args.model, f"attr_{args.attr_method}.npz"))
 temporal_data = np.load(os.path.join(args.checkpoints, args.dataset, args.model, f"attr_{args.attr_method}.npz"))["attr_values"]
 
 # Calculate effective ranges for each class based on the temporal attribution data

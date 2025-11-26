@@ -53,7 +53,7 @@ if args.device.startswith("cuda"):
 device = torch.device(args.device)
 
 # Construct paths for input dataset and model checkpoints
-in_path = os.path.join("./datasets", args.dataset)
+in_path = args.dataset
 ckp_path = os.path.join(args.checkpoints, args.dataset, args.model)
 out_file = os.path.join(args.checkpoints, args.dataset, args.model, f"attr_{args.attr_method}.npz")
 

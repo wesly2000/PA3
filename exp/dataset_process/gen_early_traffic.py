@@ -17,8 +17,10 @@ parser = argparse.ArgumentParser(description="WFlib")
 parser.add_argument("--dataset", type=str, required=True, default="Undefended", help="Dataset name")
 
 args = parser.parse_args()
-in_path = os.path.join("./datasets", f"{args.dataset}")
+in_path = args.dataset
 in_file = os.path.join(in_path, "test.npz")
+if not os.path.exists(in_file):
+    raise FileNotFoundError(f"The dataset path does not exist: {in_file}")
 
 data = np.load(in_file)
 X = data["X"]
