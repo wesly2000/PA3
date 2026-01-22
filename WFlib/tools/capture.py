@@ -378,18 +378,21 @@ def SNI_extract(capture : Capture) -> set:
     def process_packet(packet):
         try:
             if 'TLS' in packet:
-                tls_layer = packet['TLS']
-                if hasattr(tls_layer, 'handshake_extensions_server_name'):
-                    SNI = tls_layer.handshake_extensions_server_name
-                    SNIs.add(SNI)
+                # For Trojan, there might be multiple TLS layers, so we need to iterate through all of them.
+                tls_layers = filter(lambda layer: layer.layer_name == 'tls', packet.layers)
+                for tls_layer in tls_layers:
+                    if hasattr(tls_layer, 'handshake_extensions_server_name'):
+                        SNI = tls_layer.handshake_extensions_server_name
+                        SNIs.add(SNI)
             elif 'QUIC' in packet:
-                quic_layer = packet['QUIC']
-                # In Wireshark, TLS is embedded in QUIC and the same properties are used.
-                # However, in PyShark, it seems that one should use
-                # tls_handshake_extensions_server_name to fetch SNIs in the embedded TLS SNIs.
-                if hasattr(quic_layer, 'tls_handshake_extensions_server_name'):
-                    SNI = quic_layer.tls_handshake_extensions_server_name
-                    SNIs.add(SNI)
+                quic_layers = filter(lambda layer: layer.layer_name == 'quic', packet.layers)
+                for quic_layer in quic_layers:
+                    # In Wireshark, TLS is embedded in QUIC and the same properties are used.
+                    # However, in PyShark, it seems that one should use
+                    # tls_handshake_extensions_server_name to fetch SNIs in the embedded TLS SNIs.
+                    if hasattr(quic_layer, 'tls_handshake_extensions_server_name'):
+                        SNI = quic_layer.tls_handshake_extensions_server_name
+                        SNIs.add(SNI)
         except AttributeError as e:
             # Handle packets that don't have the expected structure
             print(f"Error processing packet: {e}")
