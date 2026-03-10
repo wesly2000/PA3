@@ -21,7 +21,9 @@ parser = argparse.ArgumentParser(description='Feature extraction')
 parser.add_argument("--seq_len", type=int, default=5000, help="Input sequence length")
 parser.add_argument("--input_file", "-i", type=str, help="input file")
 parser.add_argument("--output_file", "-o", type=str, required=True, help="output file")
-parser.add_argument("--feature", "-f", type=str, required=True, help="Feature used, option=[TAM, TSAM]")
+parser.add_argument("--feature", "-f", type=str, required=True, help="The target feature in the output data, option=[TAM, TSAM]")
+parser.add_argument("--in_feature", type=str, default="raw", help="The original feature to be transformed")
+
 # Params specific to TAM/TASM
 parser.add_argument("-t", type=int, default=80, help="Maximum load time for packets")
 parser.add_argument("-l", type=int, default=1800, help="Maximum length of the matrix")
@@ -55,8 +57,6 @@ if not os.path.exists(args.output_file):
         transformed[feature] = data_processor.extract_TSAM(X, args.t, args.l)
     elif feature == 'mtaf':
         transformed[feature] = data_processor.extract_MTAF(X)
-    elif feature == 'mtsaf':
-        transformed[feature] = data_processor.extract_MTAF(X, ignore_size=False)
     elif feature == 'taf':
         transformed[feature] = data_processor.extract_TAF(X)   
     elif feature == 'tsaf':
