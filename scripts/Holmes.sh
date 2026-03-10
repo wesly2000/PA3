@@ -1,7 +1,13 @@
 #!/bin/bash
 
-dataset=CW
+dataset=${1:-CW}
+device=${2:-"cuda:0"}
+start=${3:-100}  # The test starting percentage
+batch_size=${4:-512}
 attr_method=DeepLiftShap 
+
+end=100
+step=10
 
 for filename in train valid
 do 
@@ -14,7 +20,7 @@ done
 python -u exp/train.py \
   --dataset ${dataset} \
   --model RF \
-  --device cuda:6 \
+  --device ${device} \
   --train_file temporal_train \
   --valid_file temporal_valid \
   --feature TAM \
@@ -31,7 +37,7 @@ python -u exp/data_analysis/feature_attr.py \
   --dataset ${dataset} \
   --model RF \
   --in_file temporal_valid \
-  --device cpu \
+  --device ${device} \
   --feature TAM \
   --seq_len 1000 \
   --save_name temporal \
@@ -58,7 +64,7 @@ done
 python -u exp/train.py \
   --dataset ${dataset} \
   --model Holmes \
-  --device cuda:6 \
+  --device ${device} \
   --train_file taf_aug_train \
   --valid_file taf_aug_valid \
   --feature TAF \
@@ -75,14 +81,14 @@ python -u exp/train.py \
 python -u exp/data_analysis/spatial_analysis.py \
   --dataset ${dataset} \
   --model Holmes \
-  --device cuda:6 \
+  --device ${device} \
   --valid_file taf_aug_valid \
   --feature TAF \
   --seq_len 2000 \
   --batch_size 256 \
   --save_name max_f1
 
-for percent in {20..100..10}
+for ((percent=start; percent<=end; percent+=step));
 do
     python -u exp/dataset_process/gen_taf.py \
         --dataset ${dataset} \
@@ -92,7 +98,7 @@ do
     python -u exp/test.py \
     --dataset ${dataset} \
     --model Holmes \
-    --device cuda:6 \
+    --device ${device} \
     --valid_file taf_aug_valid \
     --test_file taf_test_p${percent} \
     --feature TAF \

@@ -1,18 +1,19 @@
 checkpoints=${1:-normal}
 dataset=${2:-CW}
-device=${3:-"cuda:0"}
+feature=${3:-"dt"}
+device=${4:-"cuda:0"}
 
 seq_len=5000
-feature=size_bin
 
 python -u exp/test_specific.py \
   --dataset ${dataset} \
   --checkpoints ${checkpoints} \
-  --model DF \
+  --model TikTok \
   --device ${device} \
   --feature ${feature} \
   --seq_len ${seq_len} \
   --batch_size 256 \
   --eval_metrics Accuracy Precision Recall F1-score \
   --load_name max_f1 \
-  --result_file ${checkpoints}_DF
+  --eval_method kNN \
+  --result_file ${checkpoints}_TikTok

@@ -1,19 +1,19 @@
 dataset=${1:-CW}
-feature=${2:-"size"}
+feature=${2:-"dt2"}
 device=${3:-"cuda:0"}
 batch_size=${4:-200}
 
-seq_len=8500
+seq_len=5000
 
 python -u exp/train.py \
   --dataset ${dataset} \
-  --model BAPM \
+  --model VarCNN \
   --device ${device} \
   --feature ${feature} \
   --seq_len ${seq_len} \
   --train_epochs 30 \
   --batch_size ${batch_size} \
-  --learning_rate 5e-4 \
+  --learning_rate 1e-3 \
   --optimizer Adam \
   --eval_metrics Accuracy Precision Recall F1-score \
   --save_metric F1-score \
@@ -21,7 +21,7 @@ python -u exp/train.py \
 
 python -u exp/test.py \
   --dataset ${dataset} \
-  --model BAPM \
+  --model VarCNN \
   --device ${device} \
   --feature ${feature} \
   --seq_len ${seq_len} \

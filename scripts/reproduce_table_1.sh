@@ -1,7 +1,7 @@
 #! /bin/bash
 # This script aims to reproduce Table 1 in this paper, with the prepared datasets.
 
-coverage=${1}
+# coverage=${1}
 root_dir="/data/exp/lxyu/Dataset/WF/Reproduce"
 
 # Reproduce the first column, i.e., train with Normal + VMess, test with Shadowsocks and Trojan
@@ -14,7 +14,7 @@ python exp/dataset_process/dataset_split.py -f direction --dataset ${root_dir}/w
 python exp/dataset_process/dataset_split.py -f direction --dataset ${root_dir}/workspace/shadowsocks_size_bs_filter_strip
 python exp/dataset_process/dataset_split.py -f direction --dataset ${root_dir}/workspace/trojan_size_bs_filter_strip
 
-for i in {1..2}; do
+for i in {1..10}; do
     if [ -d "$root_dir/workspace/merge_size_bs_filter_strip/DF" ]; then
         rm -r "$root_dir/workspace/merge_size_bs_filter_strip/DF"
     fi

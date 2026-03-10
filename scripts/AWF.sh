@@ -1,13 +1,16 @@
 dataset=${1:-CW}
-device=${2:-"cuda:0"}
-batch_size=${3:-128}
+feature=${2:-"size"}
+device=${3:-"cuda:0"}
+batch_size=${4:-200}
+
+seq_len=3000
 
 python -u exp/train.py \
   --dataset ${dataset} \
   --model AWF \
   --device ${device} \
-  --feature DIR \
-  --seq_len 3000 \
+  --feature ${feature} \
+  --seq_len ${seq_len} \
   --train_epochs 30 \
   --batch_size ${batch_size} \
   --learning_rate 8e-4 \
@@ -20,8 +23,8 @@ python -u exp/test.py \
   --dataset ${dataset} \
   --model AWF \
   --device ${device} \
-  --feature DIR \
-  --seq_len 3000 \
+  --feature ${feature} \
+  --seq_len ${seq_len} \
   --batch_size 256 \
   --eval_metrics Accuracy Precision Recall F1-score \
   --load_name max_f1
