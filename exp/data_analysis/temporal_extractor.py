@@ -16,7 +16,7 @@ parser.add_argument("--in_file", type=str, default="train", help="Input file nam
 args = parser.parse_args()
 
 # Construct the input path for the dataset
-in_path = os.path.join("./datasets", args.dataset)
+in_path = args.dataset
 if not os.path.exists(in_path):
     raise FileNotFoundError(f"The dataset path does not exist: {in_path}")
 
