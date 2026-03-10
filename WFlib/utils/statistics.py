@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Union, List, Iterable
+from typing import Union, List, Iterable, Tuple
 import random
 
 def IQR_bound(array: Union[np.array, List]):
