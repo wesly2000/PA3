@@ -98,11 +98,19 @@ python exp/dataset_process/dataset_split.py --dataset Closed_2tab --use_stratify
 
 ### Training \& Evaluation
 
-We provide all experiment scripts for WF attacks in the folder `./scripts/`. For example, you can reproduce the DF attack on the CW dataset by executing the following command.
+We provide all experiment scripts for WF attacks in the folder `./scripts/`. Since the generalization of the model usually requires training on one dataset (e.g., VMess data) and testing on another dataset (e.g., Shadowsocks data). We extend the original `.sh` scripts. Take DF attack as an example, which is the main model used in our work, the command
 
 ```sh
-bash scripts/DF.sh
+./scripts/DF.sh [dataset=CW] [device=cuda:1] [batch_size=128]
 ```
+
+supports to parameterize the *dataset* (default is CW), *device* (default is cuda:1) and *batch_size* (default is 128), you may modify the default value to shorten your command. If you don't need to pass device and batch size as parameters, simply run
+
+```sh
+./scripts/DF.sh [dataset=CW]
+```
+
+Note that the *dataset* allow passing your dataset in **absolute path**. For instance, put the
 
 The `./scripts/DF.sh` file contains the commands for model training and evaluation.
 
@@ -151,32 +159,11 @@ $ pip install .
 $ python your_script.py
 ```
 
-#### Keylog Issue
-Originally, the keylog is bound to the protocol-level capture. For example, all the website traffic captured without proxy traffic will output the SSL key log to a single keylog file. After performing some capture in scale, we found that the resulting keylog might be too large, raising *low decryption efficiency* issue.
+#### Original Traffic Dataset Organization
 
-Therefore, currently we try to stick to one-website-one-keylog mode for better isolation and efficiency. However, the previous traffic should be decrypted using the legacy `keylog.txt`, we list these `.pcapng` files for a reference.
+NOTE: *This section is a temporary description of the dataset, because that the original traffic data (.pcapng) may contain sensitive information, especially when the keylogs are provided. Releasing the original dataset requires the review of the lab. Therefore, it is possible that the original dataset is not allowed to be published.*
 
-```
-<= ai.zjnav.com_94.pcapng
-<= chrome.pictureknow.com_93.pcapng
-<= cloud.tencent.com_94.pcapng
-<= cn.bing.com_410.pcapng
-<= docs.scriptcat.org_94.pcapng
-<= extensiondock.com_93.pcapng
-<= m.sm.cn_408.pcapng
-<= quark.sm.cn_412.pcapng
-<= so.douyin.com_408.pcapng
-<= wuqiankx.top_205.pcapng
-<= www.114best.com_412.pcapng
-<= www.baidu.com_416.pcapng
-<= www.chahaoba.com_412.pcapng
-<= www.dogyun.com_90.pcapng
-<= www.jdcloud.com_94.pcapng
-<= www.niaoyun.com_94.pcapng
-<= www.sogou.com_412.pcapng
-<= www.youxiaohou.com_199.pcapng
-<= yandex.com_409.pcapng
-```
+The dataset contains multiple proxy protocols for a fixed set of websites. Moreover, to further
 
 ## Contact
 If you have any questions or suggestions, feel free to contact:
