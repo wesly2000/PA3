@@ -110,7 +110,7 @@ class VarCNN(nn.Module):
         x_dir = self.dir_encoder(x[:,0:1,:])
         x_time = self.time_encoder(x[:,1:,:])
         # Concatenate the outputs of the two encoders
-        x = torch.concat((x_dir,x_time), dim=1)
+        x = torch.cat((x_dir,x_time), dim=1)
         # Pass through the classifier
         x = self.classifier(x)
         return x
