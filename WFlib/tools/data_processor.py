@@ -345,10 +345,13 @@ def extract_TAF(sequences, interval = 40, max_len = 2000, num_workers=30, ignore
 def process_TAM(index, sequence, maximum_load_time, max_matrix_len):
     feature = np.zeros((2, max_matrix_len))  # Initialize feature matrix
 
-    for time, direction, _ in sequence:
-        pack = time * direction
+    try:
+        sequence = [t * d for t, d, _ in sequence]
+    except Exception as e:
+        pass
 
-        if direction == 0:
+    for i, pack in enumerate(sequence):
+        if pack == 0 and i > 0:
             break  # End of sequence
         elif pack > 0:
             if pack >= maximum_load_time:
