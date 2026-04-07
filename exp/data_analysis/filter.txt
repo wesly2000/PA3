@@ -1,9 +1,9 @@
 dns.alidns.com
 doh.pub
 dns.cloudflare.com
-firefox.settings.services.mozilla.com
-content-signature-2.cdn.mozilla.net
-firefox-settings-attachments.cdn.mozilla.net
+# firefox.settings.services.mozilla.com
+# content-signature-2.cdn.mozilla.net
+# firefox-settings-attachments.cdn.mozilla.net
 dns.twnic.tw
 main.vscode-cdn.net
 browser.events.data.msn.cn
