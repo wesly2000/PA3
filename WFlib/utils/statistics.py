@@ -1,6 +1,8 @@
 import numpy as np
 from typing import Union, List, Iterable, Tuple
 import random
+from abc import ABC, abstractmethod
+import sklearn.metrics as metrics
 
 def IQR_bound(array: Union[np.array, List]):
     arr_sorted = np.sort(array)
@@ -99,3 +101,54 @@ def greedy_mass_covering(arr: Union[np.ndarray, List], bin_size: int, coverage_t
         cover_index += 1 
 
     return covers, accumulate_density
+
+
+class MMD(ABC):
+    def __init__(self) -> None:
+        super().__init__()
+
+    @abstractmethod
+    def compute(self, X: np.ndarray, Y: np.ndarray) -> float:
+        raise NotImplementedError
+
+
+class MMDLinear(MMD):
+    """MMD using linear kernel (i.e., k(x, y) = <x, y>)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    def compute(self, X: np.ndarray, Y: np.ndarray) -> float:
+        # This is the reformulated and faster linear MMD expression.
+        delta = X.mean(0) - Y.mean(0)
+        return delta.dot(delta.T)
+
+
+class MMDRBF(MMD):
+    """MMD using rbf (gaussian) kernel (i.e., k(x, y) = exp(-gamma * ||x-y||^2 / 2))."""
+
+    def __init__(self, gamma: float = 1.0) -> None:
+        super().__init__()
+        self.gamma = gamma
+
+    def compute(self, X: np.ndarray, Y: np.ndarray) -> float:
+        XX = metrics.pairwise.rbf_kernel(X, X, self.gamma)
+        YY = metrics.pairwise.rbf_kernel(Y, Y, self.gamma)
+        XY = metrics.pairwise.rbf_kernel(X, Y, self.gamma)
+        return XX.mean() + YY.mean() - 2 * XY.mean()
+
+
+class MMDPoly(MMD):
+    """MMD using polynomial kernel (i.e., k(x, y) = (gamma <X, Y> + coef0)^degree)."""
+
+    def __init__(self, degree: int = 2, gamma: int = 1, coef0: int = 0) -> None:
+        super().__init__()
+        self.degree = degree
+        self.gamma = gamma
+        self.coef0 = coef0
+
+    def compute(self, X: np.ndarray, Y: np.ndarray) -> float:
+        XX = metrics.pairwise.polynomial_kernel(X, X, self.degree, self.gamma, self.coef0)
+        YY = metrics.pairwise.polynomial_kernel(Y, Y, self.degree, self.gamma, self.coef0)
+        XY = metrics.pairwise.polynomial_kernel(X, Y, self.degree, self.gamma, self.coef0)
+        return XX.mean() + YY.mean() - 2 * XY.mean()

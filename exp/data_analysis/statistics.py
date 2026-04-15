@@ -75,37 +75,6 @@ def tcp_stat(base_dir_path : Path, SNIs, keylog_file):
     with open(f"statistics/tcp/{base_dir_path.name}.json", "w") as f:
         json.dump(stat, f)
 
-
-# def http2_stat(base_dir_path : Path, SNIs, keylog_file):
-#     stat = {'host': base_dir_path.name, 'SNIs': SNIs, 'file': []}
-
-#     http2_counter = HTTP2ByteCounter()
-
-#     for file in sorted(base_dir_path.iterdir()):
-#         if file.is_file() and file.suffix in ['.pcapng', '.pcap']:
-#             idx = str(file).split('.')[-2].split('_')[-1]  # Only the index of the filename is needed.
-#             pkt_count, byte_count = 0, 0
-
-#             tcp_stream, _ = h2data_SNI_intersect(file, SNIs, keylog_file=keylog_file, custom_parameters={"-C": "Customized"})
-#             tcp_stream_filter = stream_extract_filter(tcp_stream, [])
-#             display_filter = "http2" + " and " + tcp_stream_filter
-#             if tcp_stream_filter == "":
-#                 print(f"Warning: {file.name} does not have satisfying TCP stream.")
-#                 continue
-#             cap = pyshark.FileCapture(input_file=file, display_filter=display_filter,
-#                                       custom_parameters={"-C": "Customized"},
-#                                       override_prefs={'tls.keylog_file': os.path.abspath(keylog_file)})
-#             for pkt in cap:
-#                 byte_count += http2_counter.count(pkt)
-#                 pkt_count += 1
-
-#             cap.close()
-#             stat["file"].append((idx, list(tcp_stream), pkt_count, byte_count))
-
-
-#     with open(f"statistics/http2/{base_dir_path.name}.json", "w") as f:
-#         json.dump(stat, f)
-
 def http2_stat(base_dir_path : Path, SNIs, keylog_file):
     http2_stat = {'host': base_dir_path.name, 'SNIs': SNIs, 'file': []}
     tls_stat = {'host': base_dir_path.name, 'SNIs': SNIs, 'file': []}
