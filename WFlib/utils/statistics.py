@@ -1,8 +1,146 @@
-import numpy as np
-from typing import Union, List, Iterable, Tuple
 import random
+import bisect
+
+import numpy as np
+from typing import Union, List, Dict, Iterable, Tuple
 from abc import ABC, abstractmethod
 import sklearn.metrics as metrics
+
+
+# ---------------------------------------------------------------------------
+# Burst detection & CDF utilities
+# ---------------------------------------------------------------------------
+
+def find_bursts(direction: np.ndarray) -> List[Tuple[int, int]]:
+    """Return burst index ranges from a direction array.
+
+    A burst is a maximal contiguous run of the same non-zero direction
+    value.  Zero values (padding) terminate scanning.
+
+    Returns a list of (start, end) tuples where ``direction[start:end]``
+    is the burst.
+    """
+    bursts: List[Tuple[int, int]] = []
+    n = len(direction)
+    if n == 0 or direction[0] == 0:
+        return bursts
+
+    start = 0
+    cur_dir = direction[0]
+    for i in range(1, n):
+        if direction[i] == 0:
+            bursts.append((start, i))
+            break
+        if direction[i] != cur_dir:
+            bursts.append((start, i))
+            start = i
+            cur_dir = direction[i]
+    else:
+        bursts.append((start, n))
+    return bursts
+
+
+def sample_from_cdf(cdf: np.ndarray, values: list):
+    """Sample a single value from an empirical CDF.
+
+    Parameters
+    ----------
+    cdf : 1-D array of cumulative probabilities (monotonically increasing,
+        last element is 1.0).
+    values : list of values corresponding to each CDF entry.
+    """
+    p = random.random()
+    idx = bisect.bisect_left(cdf, p)
+    idx = min(idx, len(values) - 1)
+    return values[idx]
+
+
+def empirical_cdf(values: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """Compute the empirical CDF from a 1-D array of observed values.
+
+    Returns
+    -------
+    (unique_values, cdf) where *cdf[i]* is the probability that a sample
+    is <= *unique_values[i]*.
+    """
+    unique_vals, counts = np.unique(values, return_counts=True)
+    cdf = np.cumsum(counts).astype(np.float64) / counts.sum()
+    return unique_vals, cdf
+
+
+def compute_outgoing_cdfs(X_raw: np.ndarray) -> Dict[str, object]:
+    """Compute empirical CDFs for outgoing burst statistics from raw data.
+
+    Parameters
+    ----------
+    X_raw : ndarray of shape (N, L, 3)
+        Each row contains L triplets of ``[timestamp, direction, size]``.
+        Trailing all-zero triplets (padding) are ignored.
+
+    Returns
+    -------
+    dict with keys that can be unpacked directly into
+    ``NetCLRAugmentor(**cdfs)``:
+
+    - ``outgoing_burst_sizes`` / ``outgoing_burst_size_cdf``
+    - ``outgoing_packet_sizes`` / ``outgoing_packet_size_cdf``
+    - ``outgoing_delays`` / ``outgoing_delay_cdf``
+
+    If no outgoing bursts are found, the corresponding values/CDF entries
+    are empty list / ``None``.
+    """
+    burst_size_collector: List[int] = []
+    packet_size_collector: List[int] = []
+    delay_collector: List[float] = []
+
+    for i in range(len(X_raw)):
+        row = X_raw[i]
+        mask = ~np.all(row == 0, axis=1)
+        active = row[mask]
+        if len(active) == 0:
+            continue
+
+        timestamp = active[:, 0]
+        direction = active[:, 1].astype(np.int64)
+        size = active[:, 2].astype(np.int64)
+
+        bursts = find_bursts(direction)
+        for start, end in bursts:
+            if direction[start] != 1:
+                continue
+            burst_len = end - start
+            burst_size_collector.append(burst_len)
+            packet_size_collector.extend(size[start:end].tolist())
+            if burst_len >= 2:
+                delay_collector.extend(np.diff(timestamp[start:end]).tolist())
+
+    result: Dict[str, object] = {}
+
+    if burst_size_collector:
+        vals, cdf = empirical_cdf(np.array(burst_size_collector))
+        result["outgoing_burst_sizes"] = vals.tolist()
+        result["outgoing_burst_size_cdf"] = cdf
+    else:
+        result["outgoing_burst_sizes"] = []
+        result["outgoing_burst_size_cdf"] = None
+
+    if packet_size_collector:
+        vals, cdf = empirical_cdf(np.array(packet_size_collector))
+        result["outgoing_packet_sizes"] = vals.tolist()
+        result["outgoing_packet_size_cdf"] = cdf
+    else:
+        result["outgoing_packet_sizes"] = []
+        result["outgoing_packet_size_cdf"] = None
+
+    if delay_collector:
+        vals, cdf = empirical_cdf(np.array(delay_collector))
+        result["outgoing_delays"] = vals.tolist()
+        result["outgoing_delay_cdf"] = cdf
+    else:
+        result["outgoing_delays"] = []
+        result["outgoing_delay_cdf"] = None
+
+    return result
 
 def IQR_bound(array: Union[np.array, List]):
     arr_sorted = np.sort(array)
@@ -152,3 +290,24 @@ class MMDPoly(MMD):
         YY = metrics.pairwise.polynomial_kernel(Y, Y, self.degree, self.gamma, self.coef0)
         XY = metrics.pairwise.polynomial_kernel(X, Y, self.degree, self.gamma, self.coef0)
         return XX.mean() + YY.mean() - 2 * XY.mean()
+
+
+def classwise_mmd(X_1: np.ndarray, y_1: np.ndarray, X_2: np.ndarray, y_2: np.ndarray, mmd: MMD) -> float:
+    """Compute class-wise MMD and sum over all classes.
+
+    For each class label, this function selects class-specific samples from both
+    datasets and computes MMD using the provided MMD instance.
+    """
+
+    labels_1 = np.unique(y_1)
+    labels_2 = np.unique(y_2)
+    if set(labels_1.tolist()) != set(labels_2.tolist()):
+        raise ValueError("Label spaces of y_1 and y_2 must be identical.")
+
+    total_mmd = 0.0
+    for label in labels_1:
+        X_1_label = X_1[y_1 == label]
+        X_2_label = X_2[y_2 == label]
+        total_mmd += mmd.compute(X_1_label, X_2_label)
+
+    return total_mmd

@@ -1,103 +1,75 @@
-# Offline data augmentation method of Holmes.
-# Details can be found in https://arxiv.org/pdf/2407.00918
+import numpy as np
 import os
 import argparse
-import numpy as np
-from tqdm import tqdm
 import random
+from tqdm import tqdm
 
-def gen_augment(data, num_aug, effective_ranges, out_file):
-    """
-    Generate augmented data based on the provided dataset and save it to a file.
-    
-    Parameters:
-    data (dict): Dictionary containing 'X' (features) and 'y' (labels) from the dataset.
-    num_aug (int): Number of augmentations to generate per original sample.
-    effective_ranges (dict): Dictionary specifying the effective ranges for each class.
-    out_file (str): Path to the output file to save the augmented data.
-    """
-    X = data["X"]
-    y = data["y"]
+from WFlib.tools.augmentor import NetCLRAugmentor, raw_to_dict, dict_to_raw
 
-    new_X = []
-    new_y = []
-    abs_X = np.absolute(X)
-    feat_length = X.shape[1]
-
-    # Loop through each sample in the dataset
-    for index in tqdm(range(abs_X.shape[0])):
-        cur_abs_X = abs_X[index]
-        cur_web = y[index]
-        loading_time = cur_abs_X.max()
-
-        # Generate augmentations for each sample
-        for ii in range(num_aug):
-            if effective_ranges[cur_web][0] == effective_ranges[cur_web][1]:
-                p == effective_ranges[cur_web][0]
-            else:
-                p = np.random.randint(effective_ranges[cur_web][0], effective_ranges[cur_web][1])
-            threshold = loading_time * p / 100
-            valid_X = cur_abs_X[cur_abs_X > 0]
-            valid_X = valid_X[valid_X <= threshold]
-            valid_length = valid_X.shape[0]
-            new_X.append(np.pad(X[index][:valid_length], (0, feat_length - valid_length), "constant", constant_values=(0, 0)))
-            new_y.append(cur_web)
-
-        # Add the original sample
-        new_X.append(X[index])
-        new_y.append(cur_web)
-
-    new_X = np.array(new_X)
-    new_y = np.array(new_y)
-
-    # Save the augmented data to the specified output file
-    np.savez(out_file, X=new_X, y=new_y)
-    print(f"Generate {out_file} done.")
-
-# Set a fixed seed for reproducibility
-fix_seed = 2024
-random.seed(fix_seed)
-np.random.seed(fix_seed)
-
-# Argument parser for command-line options, arguments, and sub-commands
-parser = argparse.ArgumentParser(description="WFlib")
-
-# Define command-line arguments
-parser.add_argument("--dataset", type=str, required=True, default="Undefended", help="Dataset name")
-parser.add_argument("--model", type=str, required=True, default="DF", help="Model name")
-parser.add_argument("--in_file", type=str, default="train", help="Input file name")
-parser.add_argument("--checkpoints", type=str, default="./checkpoints/", help="Directory to save model checkpoints")
-parser.add_argument("--attr_method", type=str, default="DeepLiftShap", 
-                    help="Feature attribution method, options=[DeepLiftShap, GradientShap]")
-
-# Parse command-line arguments
+parser = argparse.ArgumentParser(description="Data augmentation for raw traffic traces")
+parser.add_argument("--input_file", "-i", type=str, required=True, help="Path to input .npz file")
+parser.add_argument("--output_file", "-o", type=str, required=True, help="Path to output .npz file")
+parser.add_argument("--n_aug", type=int, default=1, help="Number of augmented copies per sample")
+parser.add_argument("--inflate_mode", type=str, default="resample", choices=["resample", "interpolate"],
+                    help="Inflate strategy for change_content")
+parser.add_argument("--merge_timestamp_mode", type=str, default="keep", choices=["keep", "compress"],
+                    help="Timestamp strategy for merge_incoming_bursts")
+parser.add_argument("--seed", type=int, default=2024, help="Random seed")
+parser.add_argument("--cdf_file", type=str, default=None,
+                    help="Path to pre-computed CDF .npz file. If not provided, no CDFs are used.")
 args = parser.parse_args()
 
-# Construct the input path for the dataset
-in_path = args.dataset
-print(os.path.join(in_path, f"{args.in_file}.npz"))
-data = np.load(os.path.join(in_path, f"{args.in_file}.npz"))
+random.seed(args.seed)
+np.random.seed(args.seed)
 
-# Load the temporal attribution data
-print(os.path.join(args.checkpoints, args.dataset, args.model, f"attr_{args.attr_method}.npz"))
-temporal_data = np.load(os.path.join(args.checkpoints, args.dataset, args.model, f"attr_{args.attr_method}.npz"))["attr_values"]
+if not os.path.exists(args.input_file):
+    raise FileNotFoundError(f"Input file does not exist: {args.input_file}")
 
-# Calculate effective ranges for each class based on the temporal attribution data
-effective_ranges = {}
-for web in range(temporal_data.shape[0]):
-    cur_temporal = np.cumsum(temporal_data[web])
-    cur_temporal /= cur_temporal.max()
-    cur_lower = np.searchsorted(cur_temporal, 0.3, side="right") * 100 // temporal_data.shape[1]
-    cur_upper = np.searchsorted(cur_temporal, 0.6, side="right") * 100 // temporal_data.shape[1]
-    effective_ranges[web] = (cur_lower, cur_upper)
-
-# Construct the output file path for the augmented data
-out_file = os.path.join(in_path, f"aug_{args.in_file}.npz")
-
-# Check if the output file already exists
-if not os.path.exists(out_file):
-    # Generate augmented data and save it to the output file
-    gen_augment(data, 2, effective_ranges, out_file)
+if os.path.exists(args.output_file):
+    print(f"Output file already exists: {args.output_file}")
 else:
-    # If the output file already exists, print a message indicating it has been generated
-    print(f"{out_file} has been generated.")
+    data = np.load(args.input_file, allow_pickle=True)
+    X = data["raw"]
+    y = data["labels"]
+    hosts = data["hosts"]
+    seq_len = X.shape[1]
+
+    if args.cdf_file is not None:
+        cdf_data = np.load(args.cdf_file, allow_pickle=True)
+        cdfs = {}
+        for key in cdf_data.files:
+            val = cdf_data[key]
+            if key in ("outgoing_burst_sizes", "outgoing_packet_sizes"):
+                cdfs[key] = val.tolist()
+            elif key in ("outgoing_delays",):
+                cdfs[key] = val.tolist()
+            else:
+                cdfs[key] = val
+        augmentor = NetCLRAugmentor(**cdfs)
+    else:
+        augmentor = NetCLRAugmentor()
+
+    X_aug_list = []
+    y_aug_list = []
+
+    for i in tqdm(range(len(X)), desc="Augmenting"):
+        d = raw_to_dict(X[i])
+        if len(d["direction"]) == 0:
+            for _ in range(args.n_aug):
+                X_aug_list.append(np.zeros((seq_len, 3), dtype=np.float64))
+                y_aug_list.append(y[i])
+            continue
+
+        for _ in range(args.n_aug):
+            d_aug = augmentor.augment(d,
+                                      inflate_mode=args.inflate_mode,
+                                      merge_timestamp_mode=args.merge_timestamp_mode)
+            row_aug = dict_to_raw(d_aug, seq_len)
+            X_aug_list.append(row_aug)
+            y_aug_list.append(y[i])
+
+    X_aug = np.stack(X_aug_list, axis=0)
+    y_aug = np.array(y_aug_list)
+
+    np.savez_compressed(args.output_file, raw=X_aug, labels=y_aug, hosts=hosts)
+    print(f"Saved {len(X_aug)} augmented samples to {args.output_file}")

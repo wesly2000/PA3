@@ -1,7 +1,67 @@
 import random
-import bisect
 import numpy as np
 from typing import Any, List, Dict, Tuple
+
+from WFlib.utils.statistics import find_bursts, sample_from_cdf
+
+
+# ---------------------------------------------------------------------------
+# Raw triplet format <-> dict-of-arrays converters
+# ---------------------------------------------------------------------------
+
+def raw_to_dict(row: np.ndarray) -> Dict[str, np.ndarray]:
+    """Convert a single raw-format sample to the dict format used by augmentors.
+
+    Parameters
+    ----------
+    row : ndarray of shape (L, 3)
+        Columns are [timestamp, direction, size].  Trailing all-zero rows
+        (padding) are stripped before conversion.
+
+    Returns
+    -------
+    dict with keys ``"timestamp"``, ``"direction"``, ``"size"``, each a 1-D
+    ndarray.  ``direction`` and ``size`` are ``int64``; ``timestamp`` is
+    ``float64``.
+    """
+    mask = ~np.all(row == 0, axis=1)
+    active = row[mask]
+    return {
+        "timestamp": active[:, 0].astype(np.float64),
+        "direction": active[:, 1].astype(np.int64),
+        "size": active[:, 2].astype(np.int64),
+    }
+
+
+def dict_to_raw(d: Dict[str, np.ndarray], length: int) -> np.ndarray:
+    """Convert an augmented dict back to a single raw-format row.
+
+    Parameters
+    ----------
+    d : dict with ``"timestamp"``, ``"direction"``, ``"size"`` arrays.
+    length : int
+        Target sequence length.  The result is truncated or zero-padded to
+        this length.
+
+    Returns
+    -------
+    ndarray of shape (length, 3) with columns [timestamp, direction, size].
+    """
+    ts = np.asarray(d["timestamp"], dtype=np.float64)
+    dr = np.asarray(d["direction"], dtype=np.float64)
+    sz = np.asarray(d["size"], dtype=np.float64)
+
+    n = len(ts)
+    if n >= length:
+        return np.column_stack([ts[:length], dr[:length], sz[:length]])
+
+    pad = length - n
+    out = np.zeros((length, 3), dtype=np.float64)
+    out[:n, 0] = ts
+    out[:n, 1] = dr
+    out[:n, 2] = sz
+    return out
+
 
 class Augmentor(object):
     def __init__(self):
@@ -62,43 +122,6 @@ class NetCLRAugmentor(TrafficAugmentor):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
-
-    @staticmethod
-    def _find_bursts(direction: np.ndarray) -> List[Tuple[int, int]]:
-        """Return burst index ranges from a direction array.
-
-        A burst is a maximal contiguous run of the same non-zero direction
-        value.  Zero values (padding) terminate scanning.
-
-        Returns a list of (start, end) tuples where direction[start:end]
-        is the burst.
-        """
-        bursts: List[Tuple[int, int]] = []
-        n = len(direction)
-        if n == 0 or direction[0] == 0:
-            return bursts
-
-        start = 0
-        cur_dir = direction[0]
-        for i in range(1, n):
-            if direction[i] == 0:
-                bursts.append((start, i))
-                break
-            if direction[i] != cur_dir:
-                bursts.append((start, i))
-                start = i
-                cur_dir = direction[i]
-        else:
-            bursts.append((start, n))
-        return bursts
-
-    @staticmethod
-    def _sample_from_cdf(cdf: np.ndarray, values: list):
-        """Sample a single value from an empirical CDF."""
-        p = random.random()
-        idx = bisect.bisect_left(cdf, p)
-        idx = min(idx, len(values) - 1)
-        return values[idx]
 
     @staticmethod
     def _build_result(direction: np.ndarray,
@@ -201,7 +224,7 @@ class NetCLRAugmentor(TrafficAugmentor):
         direction = data["direction"].copy()
         size = data["size"].copy()
         timestamp = data["timestamp"].copy()
-        bursts = self._find_bursts(direction)
+        bursts = find_bursts(direction)
         trace_len = len(direction)
 
         if trace_len < 1000:
@@ -279,7 +302,7 @@ class NetCLRAugmentor(TrafficAugmentor):
         direction = data["direction"]
         size = data["size"]
         timestamp = data["timestamp"]
-        bursts = self._find_bursts(direction)
+        bursts = find_bursts(direction)
 
         burst_sizes = [end - start for start, end in bursts]
 
@@ -372,7 +395,7 @@ class NetCLRAugmentor(TrafficAugmentor):
         direction = data["direction"]
         size = data["size"]
         timestamp = data["timestamp"]
-        bursts = self._find_bursts(direction)
+        bursts = find_bursts(direction)
 
         # Skip first ~20 cells
         skip = 0
@@ -410,7 +433,7 @@ class NetCLRAugmentor(TrafficAugmentor):
 
             # Sample outgoing burst packet count from the burst-level CDF
             if self.outgoing_burst_size_cdf is not None and len(self.outgoing_burst_sizes) > 0:
-                out_burst_count = self._sample_from_cdf(self.outgoing_burst_size_cdf, self.outgoing_burst_sizes)
+                out_burst_count = sample_from_cdf(self.outgoing_burst_size_cdf, self.outgoing_burst_sizes)
             else:
                 out_burst_count = random.randint(1, 5)
 
@@ -437,7 +460,7 @@ class NetCLRAugmentor(TrafficAugmentor):
             syn_dir = np.ones(out_burst_count, dtype=direction.dtype)
 
             if self.outgoing_packet_size_cdf is not None and len(self.outgoing_packet_sizes) > 0:
-                syn_size = np.array([self._sample_from_cdf(self.outgoing_packet_size_cdf,
+                syn_size = np.array([sample_from_cdf(self.outgoing_packet_size_cdf,
                                                            self.outgoing_packet_sizes)
                                      for _ in range(out_burst_count)], dtype=np.int64)
             else:
@@ -449,7 +472,7 @@ class NetCLRAugmentor(TrafficAugmentor):
             gap = t_right - t_left
 
             if self.outgoing_delay_cdf is not None and len(self.outgoing_delays) > 0:
-                raw_delays = np.array([self._sample_from_cdf(self.outgoing_delay_cdf, self.outgoing_delays)
+                raw_delays = np.array([sample_from_cdf(self.outgoing_delay_cdf, self.outgoing_delays)
                                        for _ in range(out_burst_count)])
             else:
                 if gap > 0 and out_burst_count > 0:
@@ -492,7 +515,7 @@ class NetCLRAugmentor(TrafficAugmentor):
             ``_merge_incoming_bursts``.
         """
         direction = data["direction"]
-        bursts = self._find_bursts(direction)
+        bursts = find_bursts(direction)
         if len(bursts) == 0:
             return data
 
