@@ -1,9 +1,9 @@
 checkpoints=${1:-normal}
 dataset=${2:-CW}
-device=${3:-"cuda:0"}
+feature=${3:-"size"}
+device=${4:-"cuda:0"}
 
 seq_len=5000
-feature=size_bin
 
 python -u exp/test_specific.py \
   --dataset ${dataset} \

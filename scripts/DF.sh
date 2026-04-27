@@ -1,9 +1,9 @@
 dataset=${1:-CW}
-device=${2:-"cuda:0"}
-batch_size=${3:-128}
+feature=${2:-"dir"}
+device=${3:-"cuda:0"}
+batch_size=${4:-128}
 
 seq_len=5000
-feature=size_bin
 
 python -u exp/train.py \
   --dataset ${dataset} \
