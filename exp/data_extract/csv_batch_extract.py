@@ -7,6 +7,7 @@ import numpy as np
 
 from WFlib.tools.formatter import CsvFormatter
 from WFlib.tools.extractor import NpzDirExtractor, HSDBSExcludeCriterion, NpzRawExtractor
+from WFlib.tools.augmentor import SlopeAugmentor
 from WFlib.tools.capture import read_host_list
 from WFlib.tools.extractor import sni_cover, PROTOCOL_STRIPPER
 
@@ -33,7 +34,14 @@ if __name__ == '__main__':
     parser.add_argument('--coverage', default=0.8, type=float, help="BS coverage to filter")
     parser.add_argument('--strip', action='store_true', help="Strip the handshake packets")
     parser.add_argument('--feature', type=str, default="size", help="Feature type, options=[dir, size, raw]")
+    parser.add_argument('--slope', type=str, default=None, help="The slope file")
     args = parser.parse_args()
+
+    if args.slope is not None:
+        slope_arr = np.load(args.slope)
+        augmentor = SlopeAugmentor(slope_arr)
+    else:
+        augmentor = None
 
     stripper = None
     criteria = None
