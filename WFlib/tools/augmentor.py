@@ -2,7 +2,8 @@ import random
 import numpy as np
 from typing import Any, List, Dict, Tuple
 
-from WFlib.utils.statistics import find_bursts, sample_from_cdf
+import math
+from WFlib.utils.statistics import find_bursts, sample_from_cdf, empirical_cdf
 
 
 # ---------------------------------------------------------------------------
@@ -81,6 +82,16 @@ class TrafficAugmentor(Augmentor):
     def augment(self, data: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
         raise NotImplementedError("TrafficAugmentor is an abstract class and cannot be instantiated directly.")
 
+
+class FlowAugmentor(Augmentor):
+    """
+    FlowAugmentor is the augmentor for flow data, i.e., a single flow.
+    """
+    def __init__(self):
+        super().__init__()
+
+    def augment(self, data: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
+        raise NotImplementedError("FlowAugmentor is an abstract class and cannot be instantiated directly.")
 
 
 class NetCLRAugmentor(TrafficAugmentor):
@@ -526,3 +537,391 @@ class NetCLRAugmentor(TrafficAugmentor):
             return self._merge_incoming_bursts(data, merge_timestamp_mode=merge_timestamp_mode)
         else:
             return self._add_outgoing_burst(data)
+
+
+class SlopeAugmentor(FlowAugmentor):
+    """
+    SlopeAugmentor augments a single flow according to an empirical slope
+    distribution.  Bursts are defined by TCP segmentation behaviour rather
+    than simple direction runs.
+    """
+
+    def __init__(self, slope_arr: np.ndarray,
+                 threshold_ack: int = 100,
+                 threshold_seg: int = 1400,
+                 tcp_header_size: int = 60,
+                 tcp_max_size: int = 1460,
+                 ack_interval: int = 2):
+        self.slope_arr = slope_arr
+        self.threshold_ack = threshold_ack
+        self.threshold_seg = threshold_seg
+        self.tcp_header_size = tcp_header_size
+        self.tcp_max_size = tcp_max_size
+        self.mss = tcp_max_size - tcp_header_size
+        self.ack_interval = ack_interval
+
+    # ------------------------------------------------------------------
+    # Burst construction helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _strip_padding(data: Dict[str, np.ndarray]
+                       ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Remove trailing zero-padding from direction/timestamp/length.
+
+        Returns the three stripped arrays (direction, timestamp, length).
+        """
+        direction = data["direction"]
+        timestamp = data["timestamp"]
+        length = data["length"]
+
+        nonzero = np.nonzero(direction)[0]
+        if len(nonzero) == 0:
+            empty_int = np.array([], dtype=np.int64)
+            empty_float = np.array([], dtype=np.float64)
+            return empty_int, empty_float, empty_int
+        active_end = nonzero[-1] + 1
+        return (direction[:active_end].copy(),
+                timestamp[:active_end].copy(),
+                length[:active_end].copy())
+
+    def _classify_packets(self, direction: np.ndarray, length: np.ndarray
+                          ) -> Dict[str, np.ndarray]:
+        """Classify packet indices into four groups.
+
+        Returns a dict with keys ``"out_ack"``, ``"in_ack"``,
+        ``"out_data"``, ``"in_data"``, each mapping to an ``int64``
+        index array.
+        """
+        out_mask = direction == 1
+        in_mask = direction == -1
+        ack_mask = length < self.threshold_ack
+        data_mask = ~ack_mask
+
+        return {
+            "out_ack": np.where(out_mask & ack_mask)[0].astype(np.int64),
+            "in_ack": np.where(in_mask & ack_mask)[0].astype(np.int64),
+            "out_data": np.where(out_mask & data_mask)[0].astype(np.int64),
+            "in_data": np.where(in_mask & data_mask)[0].astype(np.int64),
+        }
+
+    def _build_data_bursts(self, data_indices: np.ndarray,
+                           length: np.ndarray) -> List[np.ndarray]:
+        """Group data-view indices into TCP-segmentation-aware bursts.
+
+        A burst is a maximal run of consecutive data-view indices whose
+        packet length >= ``threshold_seg``, followed by at most one
+        packet with length < ``threshold_seg``.  A standalone packet
+        with length < ``threshold_seg`` forms its own single-element
+        burst.
+        """
+        if len(data_indices) == 0:
+            return []
+
+        bursts: List[np.ndarray] = []
+        current: List[int] = []
+
+        for idx in data_indices:
+            pkt_len = length[idx]
+            if pkt_len >= self.threshold_seg:
+                current.append(idx)
+            else:
+                current.append(idx)
+                bursts.append(np.array(current, dtype=np.int64))
+                current = []
+
+        if current:
+            bursts.append(np.array(current, dtype=np.int64))
+
+        return bursts
+
+    def _build_burst_view(self, data: Dict[str, np.ndarray]) -> Dict[str, object]:
+        """Build the full burst view for a single flow.
+
+        Returns
+        -------
+        dict with keys:
+
+        - ``"out_ack"``  -- ``np.ndarray`` of outgoing ACK indices
+        - ``"in_ack"``   -- ``np.ndarray`` of incoming ACK indices
+        - ``"out_data"`` -- ``List[np.ndarray]``, outgoing data bursts
+        - ``"in_data"``  -- ``List[np.ndarray]``, incoming data bursts
+        - ``"active_length"`` -- number of non-padding packets
+        - ``"direction"`` -- stripped direction array
+        - ``"timestamp"`` -- stripped timestamp array
+        - ``"length"``    -- stripped length array
+        """
+        direction, timestamp, length = self._strip_padding(data)
+        groups = self._classify_packets(direction, length)
+
+        return {
+            "out_ack": groups["out_ack"],
+            "in_ack": groups["in_ack"],
+            "out_data": self._build_data_bursts(groups["out_data"], length),
+            "in_data": self._build_data_bursts(groups["in_data"], length),
+            "active_length": len(direction),
+            "direction": direction,
+            "timestamp": timestamp,
+            "length": length,
+        }
+
+    # ------------------------------------------------------------------
+    # Augmentation helpers
+    # ------------------------------------------------------------------
+
+    def _compute_flow_delay_cdf(
+        self,
+        timestamp: np.ndarray,
+        direction: np.ndarray,
+        length: np.ndarray,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Compute empirical inter-packet delay CDF from data packets.
+
+        Only considers consecutive data packets (length >= threshold_ack)
+        travelling in the same direction.  Returns ``(values, cdf)`` or
+        a small fallback if fewer than 2 qualifying delays exist.
+        """
+        data_mask = length >= self.threshold_ack
+        data_ts = timestamp[data_mask]
+        data_dir = direction[data_mask]
+
+        delays: List[float] = []
+        for i in range(1, len(data_ts)):
+            if data_dir[i] == data_dir[i - 1]:
+                d = data_ts[i] - data_ts[i - 1]
+                if d > 0:
+                    delays.append(d)
+
+        if len(delays) < 2:
+            fallback_vals = np.array([0.0001, 0.001, 0.01])
+            fallback_cdf = np.array([0.33, 0.67, 1.0])
+            return fallback_vals, fallback_cdf
+
+        return empirical_cdf(np.array(delays))
+
+    def _rescale_burst(
+        self,
+        burst_indices: np.ndarray,
+        length: np.ndarray,
+        direction: np.ndarray,
+        timestamp: np.ndarray,
+        slope: float,
+        delay_values: np.ndarray,
+        delay_cdf: np.ndarray,
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Rescale a data burst's payload by *slope* and re-segment.
+
+        Returns ``(new_direction, new_length, new_timestamp)`` arrays
+        for the rescaled burst (data packets only, no ACKs yet).
+        """
+        burst_len = length[burst_indices]
+        burst_dir = direction[burst_indices[0]]
+        t_start = timestamp[burst_indices[0]]
+
+        payload = int(np.sum(burst_len)) - len(burst_indices) * self.tcp_header_size
+        if payload <= 0:
+            return (
+                direction[burst_indices].copy(),
+                length[burst_indices].copy(),
+                timestamp[burst_indices].copy(),
+            )
+
+        extend_payload = math.ceil(payload / slope)
+        k_new = math.ceil(extend_payload / self.mss)
+        if k_new <= 0:
+            k_new = 1
+
+        remainder = extend_payload % self.mss
+        new_lengths = np.full(k_new, self.tcp_max_size, dtype=np.int64)
+        if remainder != 0:
+            new_lengths[-1] = remainder + self.tcp_header_size
+
+        new_dir = np.full(k_new, burst_dir, dtype=np.int64)
+
+        new_ts = np.empty(k_new, dtype=np.float64)
+        new_ts[0] = t_start
+        for i in range(1, k_new):
+            new_ts[i] = new_ts[i - 1] + sample_from_cdf(delay_cdf, delay_values.tolist())
+
+        return new_dir, new_lengths, new_ts
+
+    def _insert_acks(
+        self,
+        data_dir: np.ndarray,
+        data_len: np.ndarray,
+        data_ts: np.ndarray,
+        delay_values: np.ndarray,
+        delay_cdf: np.ndarray,
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Interleave ACK packets into a rescaled data burst.
+
+        One ACK is inserted every ``ack_interval`` data segments.
+        ACK direction is opposite to the burst direction.
+
+        Timestamp rules:
+        - ACK between two data packets: uniform random between neighbours.
+        - Trailing ACK (after last data packet): last timestamp + sampled delay.
+        """
+        if len(data_dir) == 0:
+            return data_dir.copy(), data_len.copy(), data_ts.copy()
+
+        ack_dir_val = -data_dir[0]
+        merged_dir: List[int] = []
+        merged_len: List[int] = []
+        merged_ts: List[float] = []
+        data_count = 0
+
+        for i in range(len(data_dir)):
+            merged_dir.append(int(data_dir[i]))
+            merged_len.append(int(data_len[i]))
+            merged_ts.append(float(data_ts[i]))
+            data_count += 1
+
+            if data_count % self.ack_interval == 0:
+                if i + 1 < len(data_dir):
+                    ack_t = random.uniform(data_ts[i], data_ts[i + 1])
+                else:
+                    ack_t = data_ts[i] + sample_from_cdf(
+                        delay_cdf, delay_values.tolist()
+                    )
+                merged_dir.append(int(ack_dir_val))
+                merged_len.append(self.tcp_header_size)
+                merged_ts.append(ack_t)
+
+        return (
+            np.array(merged_dir, dtype=np.int64),
+            np.array(merged_len, dtype=np.int64),
+            np.array(merged_ts, dtype=np.float64),
+        )
+
+    def _reassemble_flow(
+        self,
+        view: Dict[str, object],
+        rescaled_bursts: Dict[int, Tuple[np.ndarray, np.ndarray, np.ndarray]],
+    ) -> Dict[str, np.ndarray]:
+        """Reassemble the flow from original ACKs and rescaled bursts.
+
+        Parameters
+        ----------
+        view : burst view from ``_build_burst_view``.
+        rescaled_bursts : mapping from the *first* original index of each
+            burst to its ``(direction, length, timestamp)`` replacement
+            (already including inserted ACKs).
+
+        Walks through original indices in order, emitting either the
+        original ACK packet (time-shifted) or the rescaled burst block.
+        A running ``time_offset`` accumulates overflow from bursts that
+        grew longer in time.
+        """
+        direction = view["direction"]
+        timestamp = view["timestamp"]
+        length = view["length"]
+        n = view["active_length"]
+
+        burst_start_set: Dict[int, Tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
+        burst_member_set: set = set()
+        for start_idx, replacement in rescaled_bursts.items():
+            burst_start_set[start_idx] = replacement
+
+        all_burst_indices: set = set()
+        for burst_list in (view["out_data"], view["in_data"]):
+            for b in burst_list:
+                for idx in b:
+                    all_burst_indices.add(int(idx))
+
+        out_dir: List[np.ndarray] = []
+        out_len: List[np.ndarray] = []
+        out_ts: List[np.ndarray] = []
+        time_offset = 0.0
+        i = 0
+
+        while i < n:
+            if i in burst_start_set:
+                burst_indices = None
+                for burst_list in (view["out_data"], view["in_data"]):
+                    for b in burst_list:
+                        if len(b) > 0 and b[0] == i:
+                            burst_indices = b
+                            break
+                    if burst_indices is not None:
+                        break
+
+                orig_end_ts = timestamp[burst_indices[-1]]
+                rep_dir, rep_len, rep_ts = burst_start_set[i]
+                shifted_rep_ts = rep_ts + time_offset
+                out_dir.append(rep_dir)
+                out_len.append(rep_len)
+                out_ts.append(shifted_rep_ts)
+
+                new_end_ts = shifted_rep_ts[-1] if len(shifted_rep_ts) > 0 else orig_end_ts
+                overflow = new_end_ts - (orig_end_ts + time_offset)
+                if overflow > 0:
+                    time_offset += overflow
+
+                i = int(burst_indices[-1]) + 1
+            elif i in all_burst_indices:
+                i += 1
+            else:
+                out_dir.append(np.array([direction[i]], dtype=np.int64))
+                out_len.append(np.array([length[i]], dtype=np.int64))
+                out_ts.append(np.array([timestamp[i] + time_offset], dtype=np.float64))
+                i += 1
+
+        if not out_dir:
+            return {
+                "direction": np.array([], dtype=np.int64),
+                "length": np.array([], dtype=np.int64),
+                "timestamp": np.array([], dtype=np.float64),
+            }
+
+        return {
+            "direction": np.concatenate(out_dir).astype(np.int64),
+            "length": np.concatenate(out_len).astype(np.int64),
+            "timestamp": np.concatenate(out_ts).astype(np.float64),
+        }
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def augment(self, data: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
+        """Augment a flow by rescaling data burst payloads via slope sampling.
+
+        For each data burst (both directions), a random slope is drawn
+        from ``slope_arr``.  The burst payload is divided by the slope,
+        re-segmented into TCP-sized packets, ACKs are interleaved, and
+        timestamps are assigned from the flow's empirical delay CDF.
+        Subsequent packets are globally shifted to accommodate any
+        time overflow.
+        """
+        view = self._build_burst_view(data)
+        if view["active_length"] == 0:
+            return {
+                "direction": np.array([], dtype=np.int64),
+                "length": np.array([], dtype=np.int64),
+                "timestamp": np.array([], dtype=np.float64),
+            }
+
+        direction = view["direction"]
+        timestamp = view["timestamp"]
+        length = view["length"]
+
+        delay_values, delay_cdf = self._compute_flow_delay_cdf(
+            timestamp, direction, length
+        )
+
+        rescaled_bursts: Dict[int, Tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
+
+        for burst_list in (view["out_data"], view["in_data"]):
+            for burst_indices in burst_list:
+                if len(burst_indices) == 0:
+                    continue
+                slope = float(np.random.choice(self.slope_arr))
+                d, l, t = self._rescale_burst(
+                    burst_indices, length, direction, timestamp,
+                    slope, delay_values, delay_cdf,
+                )
+                d, l, t = self._insert_acks(d, l, t, delay_values, delay_cdf)
+                rescaled_bursts[int(burst_indices[0])] = (d, l, t)
+
+        return self._reassemble_flow(view, rescaled_bursts)
