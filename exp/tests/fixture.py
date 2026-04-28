@@ -101,3 +101,30 @@ def assert_valid_result(result, msg=""):
     if n > 1:
         assert np.all(np.diff(result["timestamp"]) >= -1e-12), \
             f"timestamps not monotonically non-decreasing {msg}"
+
+
+# ---------------------------------------------------------------------------
+# SlopeAugmentor test helpers
+# ---------------------------------------------------------------------------
+
+def make_slope_augmentor(**kwargs):
+    """Create a SlopeAugmentor with sensible defaults for testing."""
+    from WFlib.tools.augmentor import SlopeAugmentor
+    defaults = dict(
+        slope_arr=np.array([1.0, 1.5, 2.0]),
+        threshold_ack=100,
+        threshold_seg=1400,
+    )
+    defaults.update(kwargs)
+    return SlopeAugmentor(**defaults)
+
+
+def make_flow(direction, length, timestamp=None):
+    """Build a flow dict from direction/length lists, auto-generating timestamps."""
+    d = np.array(direction, dtype=np.int64)
+    l = np.array(length, dtype=np.int64)
+    if timestamp is None:
+        timestamp = np.arange(len(d), dtype=np.float64) * 0.01
+    else:
+        timestamp = np.array(timestamp, dtype=np.float64)
+    return {"direction": d, "timestamp": timestamp, "length": l}
