@@ -177,3 +177,15 @@ We would like to appreciate sincerely the original WFlib created by
 - Yixiang Zhang (zhangyix24@mails.tsinghua.edu.cn)
 
 If we find that our extended library useful for general research on Website Fingerprinting Attack, we will try to create PR to the original repo. 
+
+## Data Transform
+python exp/dataset_process/gen_transformed.py --input_file /data/exp/lxyu/Dataset/WF/Reproduce/features/vmess/raw_bs_filter_strip_4_aug_no_cdf.npz -o /data/exp/lxyu/Dataset/WF/Reproduce/features/vmess/size_bs_filter_strip_4_aug_no_cdf.npz -f size --seq_len=10000
+
+### Step 1: Extract CDFs from training data
+python exp/data_analysis/cdf_extract.py -i /data/exp/lxyu/Dataset/WF/Reproduce/features/vmess/raw_bs_filter_strip_4.npz -o /data/exp/lxyu/Dataset/WF/VisualSeg/cdf/vmess.npz
+
+### Step 2: Augment using pre-computed CDFs
+python exp/dataset_process/data_augmentation.py -i data/train.npz -o data/augmented.npz --cdf_file data/cdfs.npz
+
+## Slope-based augmentation 
+python exp/data_extract/csv_batch_extract.py -d /data/exp/lxyu/Dataset/WF/VisualSeg/csv_db_extract -p vmess -o /data/exp/lxyu/Dataset/WF/Reproduce/features/vmess/raw_bs_filter_strip_4_aug_slope_trojan.npz --bs_filter --strip --slope /data/exp/lxyu/Dataset/WF/VisualSeg/slope/trojan_vmess_slope_ratio.npz
