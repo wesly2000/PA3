@@ -9,6 +9,7 @@ from pathlib import Path
 import math
 
 from WFlib.utils.statistics import greedy_mass_covering
+from WFlib.tools.augmentor import FlowAugmentor
 
 
 class StreamProcessingError(Exception):
@@ -992,9 +993,10 @@ class NpzRawExtractor(NpzExtractor):
     """
     supported_features = {'direction', 'length', 'timestamp'}
 
-    def __init__(self, features: Union[Set[str], List[str]], name: str='raw', stripper: Optional[Stripper]=None, criteria: Optional[Union[List[Criterion], Criterion]]=None):
+    def __init__(self, features: Union[Set[str], List[str]], name: str='raw', stripper: Optional[Stripper]=None, criteria: Optional[Union[List[Criterion], Criterion]]=None, augmentor: Optional[FlowAugmentor]=None):
         super().__init__(name=name, criteria=criteria)
         self.stripper = stripper
+        self.augmentor = augmentor
         features = set(features)
         assert features.issubset(self.supported_features), f"Unsupported features: {features - self.supported_features}"
         features = list(features)
@@ -1003,6 +1005,10 @@ class NpzRawExtractor(NpzExtractor):
         self.features = sorted(features, key=lambda x: feature_order[x])
 
     def single_stream_extract(self, stream: Dict[str, np.ndarray]) -> List[tuple]:
+        # TODO: Add support for augmentation.
+        if self.augmentor:
+            stream = self.augmentor.augment(stream)
+
         timestamp_arr, feature_arrs = stream['timestamp'], [stream[feature] for feature in self.features]
         raw_arr = [(timestamp, tuple(features)) for timestamp, *features in zip(timestamp_arr, *feature_arrs)]
         if self.stripper:
