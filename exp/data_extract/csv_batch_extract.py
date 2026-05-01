@@ -72,7 +72,7 @@ if __name__ == '__main__':
     if args.feature.lower() in ['size', 'dir']:
         extractor = NpzDirExtractor(criteria=criteria, stripper=stripper)
     elif args.feature.lower() in ['raw']:
-        extractor = NpzRawExtractor(features={'direction', 'length', 'timestamp'}, criteria=criteria, stripper=stripper)
+        extractor = NpzRawExtractor(features={'direction', 'length', 'timestamp'}, criteria=criteria, stripper=stripper, augmentor=augmentor)
     else:
         raise NotImplementedError
     
