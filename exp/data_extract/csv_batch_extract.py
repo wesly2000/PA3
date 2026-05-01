@@ -31,7 +31,7 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--protocol', default='normal', type=str, help="The protocol considered in the extraction")
     parser.add_argument('-f', '--filter_file', default=None, type=str, help="The SNI filter file")
     parser.add_argument('--bs_filter', action='store_true', help="The BS filter file")
-    parser.add_argument('--coverage', default=0.8, type=float, help="BS coverage to filter")
+    parser.add_argument('--coverage', default=0.4, type=float, help="BS coverage to filter")
     parser.add_argument('--strip', action='store_true', help="Strip the handshake packets")
     parser.add_argument('--feature', type=str, default="size", help="Feature type, options=[dir, size, raw]")
     parser.add_argument('--slope', type=str, default=None, help="The slope file")
