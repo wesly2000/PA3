@@ -38,7 +38,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.slope is not None:
-        slope_arr = np.load(args.slope)
+        slope_arr = np.load(args.slope)['slope_ratio']
         augmentor = SlopeAugmentor(slope_arr)
     else:
         augmentor = None
