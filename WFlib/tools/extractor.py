@@ -282,7 +282,7 @@ class TrojanStripper(Stripper):
         if len(feature) < 13:
             return []
         else:
-            return [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+            return [3, 4, 5, 6, 7, 8]
 
 
 PROTOCOL_STRIPPER = {'vmess': VMessStripper(), 'shadowsocks': ShadowsocksStripper(), 'trojan': TrojanStripper()}
