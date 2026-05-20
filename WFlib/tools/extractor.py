@@ -1,4 +1,6 @@
-from typing import Union, List, Set, Optional, Iterable, Tuple, Callable, Dict, Any
+from collections import Counter
+from dataclasses import dataclass
+from typing import Union, List, Set, Optional, Iterable, Tuple, Callable, Dict, Any, Mapping
 import numpy as np
 from numpy.lib.npyio import NpzFile
 import pandas as pd
@@ -7,6 +9,8 @@ import logging
 import io
 from pathlib import Path
 import math
+
+from sklearn.metrics import mutual_info_score, precision_score, recall_score, mutual_info_score
 
 from WFlib.utils.statistics import greedy_mass_covering
 from WFlib.tools.augmentor import FlowAugmentor
@@ -1031,6 +1035,405 @@ class NpzRawExtractor(NpzExtractor):
 
         raw_features.sort(key=lambda x: x[0])
         target += [feature for _, feature in raw_features]
+
+
+# --- N-gram anomaly detection ---
+
+def uniform_bin(
+    data: Union[np.ndarray, List],
+    lower_bound: int,
+    upper_bound: int,
+    vocabulary_size: int,
+) -> np.ndarray:
+    """
+    Discretize a 1-D integer array into uniform bins and return integer bin midpoints.
+
+    The interval [lower_bound, upper_bound] is split into vocabulary_size equal-width bins.
+    Values below lower_bound or above upper_bound are clipped to the first/last bin.
+    """
+    if vocabulary_size <= 0 or lower_bound >= upper_bound:
+        raise ValueError(
+            "vocabulary_size must be positive and lower_bound must be less than upper_bound"
+        )
+
+    data = np.asarray(data, dtype=np.int64)
+    edges = np.linspace(lower_bound, upper_bound, vocabulary_size + 1, dtype=np.int64)
+    bin_idx = np.digitize(data, edges) - 1
+    bin_idx = np.clip(bin_idx, 0, vocabulary_size - 1)
+    midpoints = (edges[:-1] + edges[1:]) // 2
+    return midpoints[bin_idx]
+
+
+def packet_size_counter(data: Union[np.ndarray, List]) -> Dict[int, int]:
+    """Build a signed packet-size histogram from a 1-D flow array."""
+    return dict(Counter(np.asarray(data, dtype=np.int64)))
+
+
+def build_distribution_bins(
+    size_counts: Mapping[int, int],
+    vocabulary_size: int,
+) -> List[Tuple[int, int, int]]:
+    """
+    Partition distinct packet sizes into equal-mass bins.
+
+    Returns a list of (bin_min, bin_max, representative) where representative is
+    (bin_min + bin_max) // 2. Each distinct size is assigned to exactly one bin.
+    """
+    if vocabulary_size <= 0:
+        raise ValueError("vocabulary_size must be positive")
+
+    items = sorted((int(size), int(count)) for size, count in size_counts.items() if count > 0)
+    if not items:
+        raise ValueError("size_counts must contain at least one positive count")
+    if vocabulary_size > len(items):
+        raise ValueError("vocabulary_size cannot exceed the number of distinct packet sizes")
+
+    if vocabulary_size == len(items):
+        return [(size, size, size) for size, _ in items]
+
+    total = sum(count for _, count in items)
+    target = total / vocabulary_size
+    bins: List[Tuple[int, int, int]] = []
+    current_sizes: List[int] = []
+    current_mass = 0
+
+    for size, count in items:
+        if current_sizes and len(bins) < vocabulary_size - 1 and current_mass >= target:
+            bin_min, bin_max = current_sizes[0], current_sizes[-1]
+            bins.append((bin_min, bin_max, (bin_min + bin_max) // 2))
+            current_sizes = []
+            current_mass = 0
+
+        current_sizes.append(size)
+        current_mass += count
+
+    if current_sizes:
+        bin_min, bin_max = current_sizes[0], current_sizes[-1]
+        bins.append((bin_min, bin_max, (bin_min + bin_max) // 2))
+
+    return bins
+
+
+def distribution_bin(
+    data: Union[np.ndarray, List],
+    size_counts: Mapping[int, int],
+    vocabulary_size: int,
+) -> np.ndarray:
+    """
+    Discretize data using equal-mass bins derived from an empirical size histogram.
+
+    Values below the smallest or above the largest supported size are clipped to the
+    first or last bin. Values between bins are assigned by bin_max boundaries.
+    """
+    bins = build_distribution_bins(size_counts, vocabulary_size)
+    data = np.asarray(data, dtype=np.int64)
+    bin_mins = np.array([spec[0] for spec in bins], dtype=np.int64)
+    bin_maxs = np.array([spec[1] for spec in bins], dtype=np.int64)
+    representatives = np.array([spec[2] for spec in bins], dtype=np.int64)
+
+    idx = np.searchsorted(bin_maxs, data, side="left")
+    idx = np.clip(idx, 0, len(representatives) - 1)
+    result = representatives[idx]
+    result[data < bin_mins[0]] = representatives[0]
+    result[data > bin_maxs[-1]] = representatives[-1]
+    return result
+
+
+@dataclass(frozen=True)
+class PacketSizeBinner:
+    """
+    Fit-once packet-size discretizer for train/test n-gram pipelines.
+
+    Use fit_uniform or fit_distribution on training data, then transform flows
+    or individual windows at test time with the same spec.
+    """
+
+    mode: str
+    vocabulary_size: int
+    lower_bound: Optional[int] = None
+    upper_bound: Optional[int] = None
+    size_counts: Optional[Dict[int, int]] = None
+    bin_specs: Optional[List[Tuple[int, int, int]]] = None
+
+    @classmethod
+    def fit_uniform(
+        cls,
+        lower_bound: int,
+        upper_bound: int,
+        vocabulary_size: int,
+    ) -> "PacketSizeBinner":
+        if vocabulary_size <= 0 or lower_bound >= upper_bound:
+            raise ValueError(
+                "vocabulary_size must be positive and lower_bound must be less than upper_bound"
+            )
+        return cls(
+            mode="uniform",
+            vocabulary_size=vocabulary_size,
+            lower_bound=lower_bound,
+            upper_bound=upper_bound,
+        )
+
+    @classmethod
+    def fit_distribution(
+        cls,
+        flows_or_counts: Union[Mapping[int, int], Iterable[Union[np.ndarray, List]]],
+        vocabulary_size: int,
+    ) -> "PacketSizeBinner":
+        if isinstance(flows_or_counts, Mapping):
+            size_counts = {int(size): int(count) for size, count in flows_or_counts.items()}
+        else:
+            size_counts: Dict[int, int] = {}
+            for flow in flows_or_counts:
+                for size, count in packet_size_counter(flow).items():
+                    size_counts[size] = size_counts.get(size, 0) + count
+        bin_specs = build_distribution_bins(size_counts, vocabulary_size)
+        return cls(
+            mode="distribution",
+            vocabulary_size=vocabulary_size,
+            size_counts=size_counts,
+            bin_specs=bin_specs,
+        )
+
+    def transform(self, data: Union[np.ndarray, List]) -> np.ndarray:
+        if self.mode == "uniform":
+            return uniform_bin(
+                data,
+                lower_bound=self.lower_bound,
+                upper_bound=self.upper_bound,
+                vocabulary_size=self.vocabulary_size,
+            )
+        return distribution_bin(data, self.size_counts, self.vocabulary_size)
+
+    def transform_window(self, window: Tuple[int, ...]) -> Tuple[int, ...]:
+        return tuple(int(v) for v in self.transform(window))
+
+
+def label_windows(
+    data: Union[np.ndarray, List],
+    strip_indices: Iterable[int],
+    window_size: int,
+    overlap_threshold: float = 0.9,
+) -> List[Tuple[Tuple, int]]:
+    """
+    Slide a window over data and label each window anomalous (1) when more than
+    overlap_threshold of its packet indices appear in strip_indices.
+    """
+    data = np.asarray(data, dtype=np.int64)
+    if window_size <= 0:
+        raise ValueError("window_size must be positive")
+    if len(data) < window_size:
+        return []
+
+    strip_set = set(strip_indices)
+    labeled = []
+    for i in range(len(data) - window_size + 1):
+        window_indices = range(i, i + window_size)
+        m = sum(1 for j in window_indices if j in strip_set)
+        window = tuple(int(v) for v in data[i:i + window_size])
+        label = 1 if m / window_size > overlap_threshold else 0
+        labeled.append((window, label))
+    return labeled
+
+
+def build_ngram_db(labeled_windows: List[Tuple[Tuple, int]]) -> Set[Tuple]:
+    """
+    Build an anomaly-signature database from binned training windows (label == 1).
+    """
+    return {window for window, label in labeled_windows if label == 1}
+
+
+def train_ngram_db(
+    flows_train: Iterable[Union[np.ndarray, List]],
+    strip_indices: Iterable[int],
+    window_size: int,
+    binner: PacketSizeBinner,
+    overlap_threshold: float = 0.9,
+) -> Set[Tuple]:
+    """
+    Training phase: label windows on raw flows, bin anomalous windows, build signature DB.
+    """
+    labeled_binned: List[Tuple[Tuple, int]] = []
+    for flow in flows_train:
+        for window, label in label_windows(
+            flow, strip_indices, window_size, overlap_threshold
+        ):
+            labeled_binned.append((binner.transform_window(window), label))
+    return build_ngram_db(labeled_binned)
+
+
+def evaluate_ngram(
+    flows_test: Iterable[Union[np.ndarray, List]],
+    strip_indices: Iterable[int],
+    window_size: int,
+    db: Set[Tuple],
+    binner: PacketSizeBinner,
+    overlap_threshold: float = 0.9,
+) -> Tuple[float, float]:
+    """
+    Testing phase: ground truth from raw flows; predictions from binned flows.
+    """
+    labeled: List[Tuple[Tuple, int]] = []
+    predictions: List[Tuple[Tuple, int]] = []
+    for flow in flows_test:
+        labeled.extend(
+            label_windows(flow, strip_indices, window_size, overlap_threshold)
+        )
+        predictions.extend(
+            ngram_predict(binner.transform(flow), db, window_size)
+        )
+    return ngram_precision_recall(labeled, predictions)
+
+
+def collect_labeled_windows(
+    flows: Iterable[Union[np.ndarray, List]],
+    strip_indices: Iterable[int],
+    window_size: int,
+    overlap_threshold: float = 0.9,
+) -> List[Tuple[Tuple, int]]:
+    """Concatenate label_windows results over multiple raw flows."""
+    labeled: List[Tuple[Tuple, int]] = []
+    for flow in flows:
+        labeled.extend(
+            label_windows(flow, strip_indices, window_size, overlap_threshold)
+        )
+    return labeled
+
+
+def _window_as_label(window: Tuple) -> str:
+    """Encode a window tuple as a scalar label for discrete MI estimators."""
+    return repr(window)
+
+
+def mutual_information_windows(
+    windows: List[Tuple],
+    labels: List[int],
+) -> float:
+    """
+    Plug-in mutual information I(W; Y) in nats for discrete window tuples and binary labels.
+    """
+    if not windows or not labels or len(windows) != len(labels):
+        return 0.0
+    if len(set(labels)) < 2:
+        return 0.0
+    window_labels = [_window_as_label(window) for window in windows]
+    return float(mutual_info_score(labels, window_labels))
+
+
+def vocabulary_objective(
+    labeled_windows: List[Tuple[Tuple, int]],
+    vocabulary_size: int,
+    binner: PacketSizeBinner,
+    *,
+    window_size: int,
+    lambda_penalty: float = 1.0,
+    penalty_mode: str = "log_mdl",
+) -> Dict[str, float]:
+    """
+    Compute J(|V|) = I(Q(W), Y) - penalty for a fitted binner and raw labeled windows.
+    """
+    if vocabulary_size < 1:
+        raise ValueError("vocabulary_size must be at least 1")
+
+    binned_windows = [binner.transform_window(window) for window, _ in labeled_windows]
+    labels = [label for _, label in labeled_windows]
+    for window in binned_windows:
+        if len(window) != window_size:
+            raise ValueError(
+                f"expected window length {window_size}, got {len(window)}"
+            )
+
+    mi_nats = mutual_information_windows(binned_windows, labels)
+    if penalty_mode == "log_mdl":
+        penalty = lambda_penalty * window_size * math.log(vocabulary_size)
+    elif penalty_mode == "exact_power":
+        penalty = float(vocabulary_size ** window_size)
+    else:
+        raise ValueError(f"unsupported penalty_mode: {penalty_mode}")
+
+    return {
+        "mi_nats": mi_nats,
+        "penalty": penalty,
+        "objective": mi_nats - penalty,
+        "n_windows": float(len(labeled_windows)),
+        "n_distinct_binned_windows": float(len(set(binned_windows))),
+    }
+
+
+def sweep_vocabulary_objective(
+    flows: Iterable[Union[np.ndarray, List]],
+    strip_indices: Iterable[int],
+    window_size: int,
+    vocabulary_sizes: Iterable[int],
+    *,
+    fit_binner: Callable[[int], PacketSizeBinner],
+    overlap_threshold: float = 0.9,
+    lambda_penalty: float = 1.0,
+    penalty_mode: str = "log_mdl",
+) -> List[Dict[str, float]]:
+    """
+    Sweep vocabulary size and return MI, penalty, and objective per |V|.
+
+    Uses all provided flows for labeling (caller controls calibration set).
+    """
+    labeled = collect_labeled_windows(
+        flows, strip_indices, window_size, overlap_threshold
+    )
+    rows: List[Dict[str, float]] = []
+    for vocabulary_size in vocabulary_sizes:
+        binner = fit_binner(vocabulary_size)
+        row = vocabulary_objective(
+            labeled,
+            vocabulary_size,
+            binner,
+            window_size=window_size,
+            lambda_penalty=lambda_penalty,
+            penalty_mode=penalty_mode,
+        )
+        row["vocabulary_size"] = float(vocabulary_size)
+        rows.append(row)
+    return rows
+
+
+def ngram_predict(
+    binned_data: Union[np.ndarray, List],
+    db: Set[Tuple],
+    window_size: int,
+) -> List[Tuple[Tuple, int]]:
+    """
+    Signature-based prediction: windows in the anomaly DB are predicted anomalous (1).
+    """
+    binned_data = np.asarray(binned_data, dtype=np.int64)
+    if window_size <= 0:
+        raise ValueError("window_size must be positive")
+    if len(binned_data) < window_size:
+        return []
+
+    predictions = []
+    for i in range(len(binned_data) - window_size + 1):
+        window = tuple(int(v) for v in binned_data[i:i + window_size])
+        pred = 1 if window in db else 0
+        predictions.append((window, pred))
+    return predictions
+
+
+def ngram_precision_recall(
+    labeled_windows: List[Tuple[Tuple, int]],
+    predictions: List[Tuple[Tuple, int]],
+) -> Tuple[float, float]:
+    """
+    Compute precision and recall for window-level binary labels.
+    """
+    if len(labeled_windows) != len(predictions):
+        raise ValueError("labeled_windows and predictions must have the same length")
+    if not labeled_windows:
+        return 0.0, 0.0
+
+    y_true = [label for _, label in labeled_windows]
+    y_pred = [label for _, label in predictions]
+    return (
+        float(precision_score(y_true, y_pred, zero_division=0)),
+        float(recall_score(y_true, y_pred, zero_division=0)),
+    )
 
 
 SNI_BIN_SIZE = {
