@@ -553,3 +553,215 @@ def test_NpzRawExtractor_3(npz_buffers):
     target.sort(key=lambda x: x[0])
 
     assert result == target
+
+# --- N-gram anomaly detection ---
+
+def test_ngram_uniform_bin_basic():
+    binned = uniform_bin([-15, -5, 0, 5, 15], lower_bound=-10, upper_bound=10, vocabulary_size=2)
+    np.testing.assert_array_equal(binned, np.array([-5, -5, 5, 5, 5], dtype=np.int64))
+
+
+def test_ngram_uniform_bin_vocabulary_size():
+    binned = uniform_bin([-15, -5, 0, 5, 15], lower_bound=-10, upper_bound=10, vocabulary_size=4)
+    np.testing.assert_array_equal(binned, np.array([-8, -3, 2, 7, 7], dtype=np.int64))
+    assert len(np.unique(binned)) == 4
+
+
+def test_ngram_uniform_bin_invalid_args():
+    with pytest.raises(ValueError):
+        uniform_bin([1, 2, 3], lower_bound=10, upper_bound=-10, vocabulary_size=5)
+    with pytest.raises(ValueError):
+        uniform_bin([1, 2, 3], lower_bound=0, upper_bound=10, vocabulary_size=0)
+
+
+def test_build_distribution_bins_equal_mass():
+    size_counts = {10: 100, 20: 100, 30: 100, 40: 100}
+    bins = build_distribution_bins(size_counts, vocabulary_size=2)
+    assert bins == [(10, 20, 15), (30, 40, 35)]
+
+
+def test_distribution_bin_basic():
+    size_counts = {10: 100, 20: 100, 30: 100, 40: 100}
+    binned = distribution_bin([10, 20, 30, 40], size_counts, vocabulary_size=2)
+    np.testing.assert_array_equal(binned, np.array([15, 15, 35, 35], dtype=np.int64))
+
+
+def test_distribution_bin_user_example():
+    size_counts = {150: 1888, -100: 105}
+    bins = build_distribution_bins(size_counts, vocabulary_size=2)
+    assert bins == [(-100, -100, -100), (150, 150, 150)]
+    binned = distribution_bin([-100, 150, 150], size_counts, vocabulary_size=2)
+    np.testing.assert_array_equal(binned, np.array([-100, 150, 150], dtype=np.int64))
+
+
+def test_distribution_bin_clip():
+    size_counts = {0: 100, 100: 100}
+    binned = distribution_bin([-999, 0, 50, 100, 999], size_counts, vocabulary_size=2)
+    np.testing.assert_array_equal(binned, np.array([0, 0, 100, 100, 100], dtype=np.int64))
+
+
+def test_distribution_bin_invalid():
+    with pytest.raises(ValueError):
+        build_distribution_bins({}, vocabulary_size=2)
+    with pytest.raises(ValueError):
+        build_distribution_bins({10: 100}, vocabulary_size=0)
+    with pytest.raises(ValueError):
+        build_distribution_bins({10: 100, 20: 100}, vocabulary_size=3)
+
+
+def test_packet_size_counter():
+    data = np.array([100, -100, 100, 50], dtype=np.int64)
+    assert packet_size_counter(data) == {100: 2, -100: 1, 50: 1}
+
+
+def test_packet_size_binner_uniform_roundtrip():
+    data = [-15, -5, 0, 5, 15]
+    expected = uniform_bin(data, lower_bound=-10, upper_bound=10, vocabulary_size=2)
+    binner = PacketSizeBinner.fit_uniform(-10, 10, vocabulary_size=2)
+    np.testing.assert_array_equal(binner.transform(data), expected)
+
+
+def test_packet_size_binner_distribution_uses_train_counts():
+    flows_train = [np.array([10, 20, 30], dtype=np.int64)]
+    flows_test = [np.array([40, 50], dtype=np.int64)]
+    binner = PacketSizeBinner.fit_distribution(flows_train, vocabulary_size=3)
+    assert binner.bin_specs == [(10, 10, 10), (20, 20, 20), (30, 30, 30)]
+    np.testing.assert_array_equal(
+        binner.transform(flows_test[0]),
+        distribution_bin(flows_test[0], binner.size_counts, vocabulary_size=3),
+    )
+    assert 40 not in binner.size_counts and 50 not in binner.size_counts
+
+
+def test_train_ngram_db_binned_anomaly_only():
+    flow = np.array([-8, -3, 2, 7], dtype=np.int64)
+    binner = PacketSizeBinner.fit_uniform(-10, 10, vocabulary_size=4)
+    db = train_ngram_db(
+        [flow],
+        strip_indices={0},
+        window_size=1,
+        binner=binner,
+        overlap_threshold=0.5,
+    )
+    assert db == {(-8,)}
+    assert (10,) not in db
+
+
+def test_evaluate_ngram_raw_gt_binned_predict():
+    flow = np.array([-8, -3, 2, 7], dtype=np.int64)
+    binner = PacketSizeBinner.fit_uniform(-10, 10, vocabulary_size=4)
+    db = train_ngram_db(
+        [flow],
+        strip_indices={0},
+        window_size=1,
+        binner=binner,
+        overlap_threshold=0.5,
+    )
+    precision, recall = evaluate_ngram(
+        [flow],
+        strip_indices={0},
+        window_size=1,
+        db=db,
+        binner=binner,
+        overlap_threshold=0.5,
+    )
+    assert precision == 1.0
+    assert recall == 1.0
+
+
+def test_ngram_predict_on_binned():
+    flow = np.array([10, 20, 30, 40], dtype=np.int64)
+    binner = PacketSizeBinner.fit_uniform(-10, 10, vocabulary_size=2)
+    db = train_ngram_db(
+        [flow],
+        strip_indices={0, 1},
+        window_size=2,
+        binner=binner,
+        overlap_threshold=0.5,
+    )
+    binned_preds = ngram_predict(binner.transform(flow), db, window_size=2)
+    raw_preds = ngram_predict(flow, db, window_size=2)
+    assert binned_preds[0][1] == 1
+    assert raw_preds[0][1] == 0
+
+
+def test_ngram_label_windows_majority():
+    data = np.array([1, 2, 3, 4, 5, 6])
+    labeled = label_windows(data, strip_indices={1, 2, 3}, window_size=4, overlap_threshold=0.5)
+    assert labeled == [
+        ((1, 2, 3, 4), 1),
+        ((2, 3, 4, 5), 1),
+        ((3, 4, 5, 6), 0),
+    ]
+
+
+def test_ngram_label_windows_empty_strip():
+    data = np.array([10, 20, 30])
+    labeled = label_windows(data, strip_indices=[], window_size=2)
+    assert labeled == [((10, 20), 0), ((20, 30), 0)]
+
+
+def test_ngram_precision_recall():
+    labeled = [((1,), 1), ((2,), 0), ((3,), 1), ((4,), 0)]
+    perfect = [((1,), 1), ((2,), 0), ((3,), 1), ((4,), 0)]
+    all_fp = [((1,), 1), ((2,), 1), ((3,), 1), ((4,), 1)]
+    all_fn = [((1,), 0), ((2,), 0), ((3,), 0), ((4,), 0)]
+
+    p, r = ngram_precision_recall(labeled, perfect)
+    assert p == 1.0 and r == 1.0
+
+    p, r = ngram_precision_recall(labeled, all_fp)
+    assert p == 0.5 and r == 1.0
+
+    p, r = ngram_precision_recall(labeled, all_fn)
+    assert p == 0.0 and r == 0.0
+
+    assert ngram_precision_recall([], []) == (0.0, 0.0)
+
+
+def test_mutual_information_perfect_association():
+    windows = [("a",), ("a",), ("b",), ("b",)]
+    labels = [1, 1, 0, 0]
+    assert mutual_information_windows(windows, labels) > 0.0
+
+
+def test_mutual_information_independent():
+    windows = [("a",)] * 50 + [("b",)] * 50
+    labels = [1] * 25 + [0] * 25 + [1] * 25 + [0] * 25
+    assert mutual_information_windows(windows, labels) == 0.0
+
+
+def test_vocabulary_objective_penalty_increases_with_vocab():
+    labeled = [((10, 20), 1), ((30, 40), 0), ((10, 20), 1), ((50, 60), 0)]
+    binner = PacketSizeBinner.fit_uniform(-10, 10, vocabulary_size=4)
+    mi = vocabulary_objective(labeled, 4, binner, window_size=2, lambda_penalty=0.0)["mi_nats"]
+    obj_small = vocabulary_objective(
+        labeled, 2, binner, window_size=2, lambda_penalty=1.0
+    )
+    obj_large = vocabulary_objective(
+        labeled, 100, binner, window_size=2, lambda_penalty=1.0
+    )
+    assert obj_large["penalty"] > obj_small["penalty"]
+    assert obj_small["objective"] == mi - obj_small["penalty"]
+    assert obj_large["objective"] == mi - obj_large["penalty"]
+    assert obj_large["objective"] < obj_small["objective"]
+
+
+def test_sweep_vocabulary_objective_shape():
+    flows = [
+        np.array([-8, -3, 2, 7], dtype=np.int64),
+        np.array([10, 20, 30, 40], dtype=np.int64),
+    ]
+    rows = sweep_vocabulary_objective(
+        flows,
+        strip_indices={0},
+        window_size=1,
+        vocabulary_sizes=[1, 2, 4],
+        fit_binner=lambda v: PacketSizeBinner.fit_uniform(-10, 10, v),
+        overlap_threshold=0.5,
+    )
+    assert len(rows) == 3
+    for row in rows:
+        assert {"vocabulary_size", "mi_nats", "penalty", "objective", "n_windows"}.issubset(
+            row.keys()
+        )
