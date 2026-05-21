@@ -765,3 +765,134 @@ def test_sweep_vocabulary_objective_shape():
         assert {"vocabulary_size", "mi_nats", "penalty", "objective", "n_windows"}.issubset(
             row.keys()
         )
+
+
+def test_flow_anomaly_vote():
+    flow = np.array([10, 20, 30, 40], dtype=np.int64)
+    binner = PacketSizeBinner.fit_uniform(-10, 10, vocabulary_size=2)
+    db = train_ngram_db(
+        [flow],
+        strip_indices={0, 1},
+        window_size=2,
+        binner=binner,
+        overlap_threshold=0.5,
+    )
+    binned = binner.transform(flow)
+    assert flow_anomaly_vote(binned, db, window_size=2) == 1
+    assert flow_anomaly_vote(binned, set(), window_size=2) == 0
+
+
+def test_flow_anomaly_vote_strip_indices_only():
+    flow = np.arange(15, dtype=np.int64)
+    binner = PacketSizeBinner.fit_uniform(0, 20, vocabulary_size=15)
+    db = train_ngram_db(
+        [flow],
+        strip_indices=[3, 4],
+        window_size=2,
+        binner=binner,
+        overlap_threshold=0.9,
+    )
+    binned = binner.transform(flow)
+    strip_window = strip_window_tuple(binned, [3, 4], window_size=2)
+    assert strip_window in db
+    assert flow_anomaly_vote(
+        binned, db, window_size=2, strip_indices=[3, 4]
+    ) == 1
+    assert flow_anomaly_vote(
+        binned, set(), window_size=2, strip_indices=[3, 4]
+    ) == 0
+    other_flow = np.arange(15, dtype=np.int64) + 100
+    binned_other = binner.transform(other_flow)
+    assert flow_anomaly_vote(
+        binned_other, db, window_size=2, strip_indices=[3, 4]
+    ) == 0
+
+
+def test_flow_protocol_votes_and_predict():
+    flow = np.array([-8, -3, 2, 7], dtype=np.int64)
+    binner_a = PacketSizeBinner.fit_uniform(-10, 10, vocabulary_size=4)
+    binner_b = PacketSizeBinner.fit_uniform(-10, 10, vocabulary_size=4)
+    db_a = train_ngram_db(
+        [flow], strip_indices={0}, window_size=1, binner=binner_a, overlap_threshold=0.5
+    )
+    votes = flow_protocol_votes(
+        flow,
+        {"a": db_a, "b": set()},
+        {"a": binner_a, "b": binner_b},
+        ["a", "b"],
+        window_size=1,
+    )
+    assert votes["a"] == 1
+    assert votes["b"] == 0
+    assert predict_protocol_from_votes({"a": 2, "b": 1}) == "a"
+    assert predict_protocol_from_votes({"a": 1, "b": 1}) == "b"
+
+
+def test_identify_pcap_protocol_with_fallback_unknown(monkeypatch):
+    monkeypatch.setattr(
+        "WFlib.tools.extractor.pcap_protocol_votes",
+        lambda *args, **kwargs: {"vmess": 0, "shadowsocks": 0, "trojan": 0},
+    )
+    monkeypatch.setattr(
+        "WFlib.tools.extractor.pcap_protocol_votes_heuristic",
+        lambda *args, **kwargs: {"vmess": 0, "shadowsocks": 0, "trojan": 0},
+    )
+    rng = np.random.default_rng(0)
+    labels = {
+        identify_pcap_protocol_with_fallback(
+            [],
+            {},
+            {},
+            ["vmess", "shadowsocks", "trojan"],
+            window_size=2,
+            rng=rng,
+        )
+        for _ in range(30)
+    }
+    assert labels <= {"vmess", "shadowsocks", "trojan"}
+    assert len(labels) >= 2
+
+
+def test_identify_pcap_protocol_with_fallback_tie(monkeypatch):
+    vote = {"vmess": 2, "shadowsocks": 2, "trojan": 0}
+    monkeypatch.setattr(
+        "WFlib.tools.extractor.pcap_protocol_votes",
+        lambda *args, **kwargs: dict(vote),
+    )
+    rng = np.random.default_rng(1)
+    labels = {
+        identify_pcap_protocol_with_fallback(
+            [],
+            {},
+            {},
+            ["vmess", "shadowsocks", "trojan"],
+            window_size=2,
+            rng=rng,
+        )
+        for _ in range(30)
+    }
+    assert labels <= {"vmess", "shadowsocks"}
+    assert len(labels) == 2
+
+
+def test_pcap_protocol_votes_missing_file(tmp_path):
+    flow = np.array([-8, -3, 2, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.int64)
+    binner = PacketSizeBinner.fit_uniform(-10, 10, vocabulary_size=4)
+    db = train_ngram_db(
+        [flow], strip_indices={0}, window_size=1, binner=binner, overlap_threshold=0.5
+    )
+    npz_path = tmp_path / "flow.npz"
+    length = np.abs(flow).astype(np.int64)
+    direction = np.sign(flow, dtype=np.int64)
+    direction[direction == 0] = 1
+    np.savez(npz_path, direction=direction, length=length)
+    vote = pcap_protocol_votes(
+        [str(npz_path), str(tmp_path / "missing.npz")],
+        {"p": db},
+        {"p": binner},
+        ["p"],
+        window_size=1,
+        strip_indices={"p": [0]},
+        min_len=15,
+    )
+    assert vote["p"] >= 0

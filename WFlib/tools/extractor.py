@@ -1416,6 +1416,290 @@ def ngram_predict(
     return predictions
 
 
+def strip_window_tuple(
+    binned_flow: Union[np.ndarray, List],
+    strip_indices: Iterable[int],
+    window_size: int,
+) -> Optional[Tuple[int, ...]]:
+    """
+    Extract the contiguous binned window aligned to strip_indices (starts at min index).
+    Returns None if the flow is too short for that window.
+    """
+    if window_size <= 0:
+        raise ValueError("window_size must be positive")
+
+    windows = []
+    for idx in range(len(strip_indices) - 1):
+        start = strip_indices[idx]
+        end = start + window_size
+        binned_flow = np.asarray(binned_flow, dtype=np.int64)
+        if end > len(binned_flow):
+            break
+        windows.append(tuple(int(v) for v in binned_flow[start:end]))
+    return windows
+
+
+def flow_anomaly_vote(
+    binned_flow: Union[np.ndarray, List],
+    db: Set[Tuple],
+    window_size: int,
+    *,
+    strip_indices: Optional[Iterable[int]] = None,
+) -> int:
+    """
+    Return 1 if the flow is anomalous under the signature DB.
+
+    When strip_indices is set, only the strip-aligned window is checked (same span as
+    training strip labeling). Otherwise every sliding window is checked.
+    """
+    if strip_indices is not None:
+        windows = strip_window_tuple(binned_flow, strip_indices, window_size)
+        if len(windows) == 0:
+            return 0
+        return int(any(window in db for window in windows))
+
+    predictions = ngram_predict(binned_flow, db, window_size)
+    return int(any(label == 1 for _, label in predictions))
+
+
+def flow_protocol_votes(
+    flow: Union[np.ndarray, List],
+    ngram_dbs: Mapping[str, Set[Tuple]],
+    binners: Mapping[str, "PacketSizeBinner"],
+    protocols: Iterable[str],
+    window_size: int,
+    *,
+    strip_indices: Optional[Mapping[str, Iterable[int]]] = None,
+) -> Dict[str, int]:
+    """Per-protocol binary vote: 1 if the strip window is in that protocol's anomaly DB."""
+    votes: Dict[str, int] = {}
+    for protocol in protocols:
+        binned = binners[protocol].transform(flow)
+        indices = None if strip_indices is None else strip_indices[protocol]
+        votes[protocol] = flow_anomaly_vote(
+            binned,
+            ngram_dbs[protocol],
+            window_size,
+            strip_indices=indices,
+        )
+    return votes
+
+
+def flow_protocol_votes_heuristic(
+    flow: Union[np.ndarray, List],
+    ngram_dbs: Mapping[str, Set[Tuple]],
+    binners: Mapping[str, "PacketSizeBinner"],
+    protocols: Iterable[str],
+    window_size: int,
+    *,
+    strip_indices: Optional[Mapping[str, Iterable[int]]] = None,
+) -> Dict[str, int]:
+    """Heuristic classifier for protocol identification."""
+    if abs(flow[3]) > 60 and abs(flow[3]) < 200:
+        if abs(flow[4]) > 60 and abs(flow[4]) < 200:
+            return {"vmess": 0, "shadowsocks": 1, "trojan": 0}
+        else:
+            return {"vmess": 1, "shadowsocks": 0, "trojan": 0}
+
+    if abs(flow[3]) > 300:
+        return {"vmess": 0, "shadowsocks": 0, "trojan": 1}
+    
+    return {"vmess": 0, "shadowsocks": 0, "trojan": 0}
+
+
+def pcap_protocol_votes(
+    paths: Iterable[Union[str, Path]],
+    ngram_dbs: Mapping[str, Set[Tuple]],
+    binners: Mapping[str, "PacketSizeBinner"],
+    protocols: Iterable[str],
+    window_size: int,
+    *,
+    strip_indices: Optional[Mapping[str, Iterable[int]]] = None,
+    min_len: int = 15,
+) -> Dict[str, int]:
+    """Sum per-flow protocol votes across all flows in a capture."""
+    vote = {protocol: 0 for protocol in protocols}
+    for path in paths:
+        path = Path(path)
+        if not path.exists():
+            continue
+        data = np.load(path)
+        if len(data["direction"]) < min_len:
+            continue
+        flow = data["direction"][:min_len] * data["length"][:min_len]
+        flow_votes = flow_protocol_votes(
+            flow,
+            ngram_dbs,
+            binners,
+            protocols,
+            window_size,
+            strip_indices=strip_indices,
+        )
+        for protocol in protocols:
+            vote[protocol] += flow_votes[protocol]
+    return vote
+
+
+def pcap_protocol_votes_heuristic(
+    paths: Iterable[Union[str, Path]],
+    ngram_dbs: Mapping[str, Set[Tuple]],
+    binners: Mapping[str, "PacketSizeBinner"],
+    protocols: Iterable[str],
+    window_size: int,
+    *,
+    strip_indices: Optional[Mapping[str, Iterable[int]]] = None,
+    min_len: int = 15,
+) -> Dict[str, int]:
+    """Sum per-flow protocol votes across all flows in a capture."""
+    vote = {protocol: 0 for protocol in protocols}
+    for path in paths:
+        path = Path(path)
+        if not path.exists():
+            continue
+        data = np.load(path)
+        if len(data["direction"]) < min_len:
+            continue
+        flow = data["direction"][:min_len] * data["length"][:min_len]
+        flow_votes = flow_protocol_votes_heuristic(
+            flow,
+            ngram_dbs,
+            binners,
+            protocols,
+            window_size,
+            strip_indices=strip_indices,
+        )
+        for protocol in protocols:
+            vote[protocol] += flow_votes[protocol]
+    return vote
+
+
+def predict_protocol_from_votes(vote: Mapping[str, int]) -> str:
+    """Return the protocol name with the highest vote (lexicographic tie-break)."""
+    if not vote:
+        raise ValueError("vote must not be empty")
+    return max(vote, key=lambda p: (vote[p], p))
+
+
+def _tied_top_protocols(vote: Mapping[str, int]) -> List[str]:
+    top = max(vote.values())
+    return [protocol for protocol, count in vote.items() if count == top]
+
+
+def _random_protocol_choice(
+    options: Iterable[str],
+    rng: Optional[np.random.Generator] = None,
+) -> str:
+    choices = list(options)
+    if not choices:
+        raise ValueError("options must not be empty")
+    if rng is None:
+        rng = np.random.default_rng()
+    return choices[int(rng.integers(0, len(choices)))]
+
+
+def identify_pcap_protocol_with_fallback(
+    paths: Iterable[Union[str, Path]],
+    ngram_dbs: Mapping[str, Set[Tuple]],
+    binners: Mapping[str, "PacketSizeBinner"],
+    protocols: Iterable[str],
+    window_size: int,
+    *,
+    strip_indices: Optional[Mapping[str, Iterable[int]]] = None,
+    min_len: int = 15,
+    rng: Optional[np.random.Generator] = None,
+) -> str:
+    """
+    Identify pcap protocol: strip n-gram vote, heuristic if all-zero, else argmax.
+
+    All-zero after heuristic: random among protocols. Tied top vote: random among tied.
+    """
+    protocol_list = list(protocols)
+    vote = pcap_protocol_votes(
+        paths,
+        ngram_dbs,
+        binners,
+        protocol_list,
+        window_size,
+        strip_indices=strip_indices,
+        min_len=min_len,
+    )
+    if max(vote.values()) == 0:
+        vote = pcap_protocol_votes_heuristic(
+            paths,
+            ngram_dbs,
+            binners,
+            protocol_list,
+            window_size,
+            strip_indices=strip_indices,
+            min_len=min_len,
+        )
+    if max(vote.values()) == 0:
+        return _random_protocol_choice(protocol_list, rng)
+
+    tied = _tied_top_protocols(vote)
+    if len(tied) > 1:
+        return _random_protocol_choice(tied, rng)
+    return predict_protocol_from_votes(vote)
+
+
+def train_ngram_protocol_models(
+    train_dir: Union[str, Path],
+    protocols: Iterable[str],
+    strip_indices: Mapping[str, Iterable[int]],
+    window_size: int,
+    lower_bound: int,
+    upper_bound: int,
+    vocab_sizes: Mapping[str, int],
+    train_samples: Mapping[str, int],
+) -> Tuple[Dict[str, Set[Tuple]], Dict[str, "PacketSizeBinner"]]:
+    """Train per-protocol n-gram DB and binner from ``{protocol}.pkl`` flow lists."""
+    import pickle
+
+    train_path = Path(train_dir)
+    ngram_dbs: Dict[str, Set[Tuple]] = {}
+    binners: Dict[str, PacketSizeBinner] = {}
+    for protocol in protocols:
+        pkl_file = train_path / f"{protocol}.pkl"
+        with open(pkl_file, "rb") as f:
+            flows = pickle.load(f)
+        binner = PacketSizeBinner.fit_uniform(
+            lower_bound,
+            upper_bound,
+            vocabulary_size=vocab_sizes[protocol],
+        )
+        binners[protocol] = binner
+        ngram_dbs[protocol] = train_ngram_db(
+            flows[: train_samples[protocol]],
+            strip_indices[protocol],
+            window_size,
+            binner,
+        )
+    return ngram_dbs, binners
+
+
+def identify_protocol_pcap(
+    paths: Iterable[Union[str, Path]],
+    ngram_dbs: Mapping[str, Set[Tuple]],
+    binners: Mapping[str, "PacketSizeBinner"],
+    protocols: Iterable[str],
+    window_size: int,
+    *,
+    strip_indices: Optional[Mapping[str, Iterable[int]]] = None,
+    min_len: int = 15,
+) -> str:
+    """Identify proxy protocol for a pcap from accumulated n-gram votes."""
+    vote = pcap_protocol_votes(
+        paths,
+        ngram_dbs,
+        binners,
+        protocols,
+        window_size,
+        strip_indices=strip_indices,
+        min_len=min_len,
+    )
+    return predict_protocol_from_votes(vote)
+
+
 def ngram_precision_recall(
     labeled_windows: List[Tuple[Tuple, int]],
     predictions: List[Tuple[Tuple, int]],
