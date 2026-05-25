@@ -5,6 +5,8 @@ from torch.utils.data.dataset import Dataset
 from torch.cuda.amp import GradScaler, autocast
 import tqdm
 
+DISABLE_TQDM = True  # Turn off the progress bar
+
 def cal_accuracy(output, target, topk=(1,)):
     """Computes the accuracy over the k top predictions for the specified values of k"""
     with torch.no_grad():
@@ -71,7 +73,7 @@ class NetCLR(object):
         for epoch_counter in range(self.num_epoches+1):
             
 #             print ("Epoch: ", epoch_counter)
-            with tqdm.tqdm(train_loader, unit='batch') as tepoch:
+            with tqdm.tqdm(train_loader, unit='batch', disable=DISABLE_TQDM) as tepoch:
                 for data, _ in tepoch:
                     tepoch.set_description(f"Epoch {epoch_counter}")
                     
