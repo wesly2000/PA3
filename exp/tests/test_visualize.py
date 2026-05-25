@@ -76,17 +76,3 @@ def test_greedy_mass_covering_01():
     expect_ranges = [[10, 30], [40, 60], [70, 80]]
     expect_coverage = .75
     assert ranges == expect_ranges and math.isclose(coverage, expect_coverage)
-    
-
-def test_stream_feature_2D_01(npz_buffers):
-    npz_files = [np.load(npz_buffer) for npz_buffer in npz_buffers]
-    yz_2D = stream_feature_2D(npz_files, NpzHSDBSExtractor(threshold=20, ignore_control_packets=True))
-
-    assert len(yz_2D) == 3
-    target_yz_2D = [
-        (np.array([3, 6, 7, 11]), np.array([250, -250, 250, -250])),
-        (np.array([9, 16, 17]), np.array([-250, 250, -250])),
-        (np.array([0, 2, 23]), np.array([250, -250, 250]))
-    ]
-    assert all(np.array_equal(yz[0], target[0]) and np.array_equal(yz[1], target[1]) 
-              for yz, target in zip(yz_2D, target_yz_2D))

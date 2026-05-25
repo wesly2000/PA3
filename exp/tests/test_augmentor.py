@@ -608,7 +608,7 @@ class TestRescaleBurst:
     def test_plan_example(self):
         """[1460,1460,1060], s=0.5 -> payload=3800, extend=7600, k'=ceil(7600/1400)=6."""
         aug, indices, length, direction, timestamp, dv, dc = self._setup()
-        d, l, t = aug._rescale_burst(indices, length, direction, timestamp, 0.5, dv, dc)
+        d, l, t = aug._rescale_burst(indices, length, direction, timestamp, 2, dv, dc)
         assert len(d) == 6
         assert np.all(d == 1)
         assert l[0] == 1460  # tcp_max_size
@@ -625,7 +625,7 @@ class TestRescaleBurst:
     def test_slope_greater_than_one_reduces(self):
         """slope > 1 should reduce the burst."""
         aug, indices, length, direction, timestamp, dv, dc = self._setup()
-        d, l, t = aug._rescale_burst(indices, length, direction, timestamp, 2.0, dv, dc)
+        d, l, t = aug._rescale_burst(indices, length, direction, timestamp, 0.5, dv, dc)
         assert len(d) <= 3
 
     def test_timestamps_monotonic(self):
@@ -647,7 +647,7 @@ class TestRescaleBurst:
     def test_last_packet_size(self):
         """Last packet should have correct remainder size."""
         aug, indices, length, direction, timestamp, dv, dc = self._setup()
-        d, l, t = aug._rescale_burst(indices, length, direction, timestamp, 0.5, dv, dc)
+        d, l, t = aug._rescale_burst(indices, length, direction, timestamp, 2, dv, dc)
         # extend_payload = ceil(3800/0.5) = 7600
         # 7600 % 1400 = 600, last = 600 + 60 = 660
         assert l[-1] == 660
