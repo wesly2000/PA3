@@ -1428,15 +1428,11 @@ def strip_window_tuple(
     if window_size <= 0:
         raise ValueError("window_size must be positive")
 
-    windows = []
-    for idx in range(len(strip_indices) - 1):
-        start = strip_indices[idx]
-        end = start + window_size
-        binned_flow = np.asarray(binned_flow, dtype=np.int64)
-        if end > len(binned_flow):
-            break
-        windows.append(tuple(int(v) for v in binned_flow[start:end]))
-    return windows
+    start = strip_indices[0]
+    end = start + window_size
+    if end > len(binned_flow):
+        return None
+    return tuple(int(v) for v in binned_flow[start:end].tolist())
 
 
 def flow_anomaly_vote(
@@ -1453,10 +1449,10 @@ def flow_anomaly_vote(
     training strip labeling). Otherwise every sliding window is checked.
     """
     if strip_indices is not None:
-        windows = strip_window_tuple(binned_flow, strip_indices, window_size)
-        if len(windows) == 0:
+        window = strip_window_tuple(binned_flow, strip_indices, window_size)
+        if window is None:
             return 0
-        return int(any(window in db for window in windows))
+        return int(window in db)
 
     predictions = ngram_predict(binned_flow, db, window_size)
     return int(any(label == 1 for _, label in predictions))
