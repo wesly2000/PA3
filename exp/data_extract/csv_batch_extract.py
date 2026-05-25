@@ -62,7 +62,7 @@ if __name__ == '__main__':
     elif args.protocol == 'normal':
         # When needed, Normal could always leverage SNI filter
         if args.bs_filter:
-            SNI_filter = read_host_list("exp/data_extract/tmp_filter.txt")
+            SNI_filter = read_host_list("exp/data_extract/filter.txt")
     else:
         raise ValueError(f"Invalid protocol: {args.protocol}")
     
@@ -82,7 +82,7 @@ if __name__ == '__main__':
         SNI_filter = read_host_list(args.filter_file)
 
     array_dir = f'{args.dir}/arrays'
-    db_file = f'{args.dir}/database.csv'
+    db_file = f'{args.dir}/database_with_infer.csv'
     logger.info("Task csv_batch_extract started")
     formatter.batch_extract(array_dir, db_file, args.protocol, args.output_file, SNI_filter, extractor, regenerate=regenerate)
     logger.info("Task csv_batch_extract completed")

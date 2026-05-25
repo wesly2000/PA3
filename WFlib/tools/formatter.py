@@ -559,10 +559,10 @@ class CsvFormatter(Formatter):
             The number of times to regenerate of a given pcap, use a value larger than 1 only when the NpzExtractor is equipped with a splitter.
         """
         label = 0  # Processing a hostname will increase the label by 1
-        db = pd.read_csv(db_file).query(f"protocol == '{protocol}'")[['host', 'id', 'stream', 'transport', 'sni']]
+        db = pd.read_csv(db_file).query(f"inferred_protocol == '{protocol}'")[['host', 'id', 'stream', 'transport', 'sni']]
         if SNIs is not None:
             db = db[~db['sni'].isin(SNIs)]
-            db = db[['host', 'id', 'stream', 'transport']]
+            db = db[['host', 'id', 'stream', 'transport', 'protocol']]
 
         # Fetch all the hosts from the database and sort them alphabetically
         hosts = sorted(db['host'].unique())
