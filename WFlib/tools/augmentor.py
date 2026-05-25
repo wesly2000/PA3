@@ -545,6 +545,7 @@ class SlopeAugmentor(FlowAugmentor):
     distribution.  Bursts are defined by TCP segmentation behaviour rather
     than simple direction runs.
     """
+    BETA = 0.2
 
     def __init__(self, slope_arr: np.ndarray,
                  threshold_ack: int = 100,
@@ -552,7 +553,8 @@ class SlopeAugmentor(FlowAugmentor):
                  tcp_header_size: int = 60,
                  tcp_max_size: int = 1460,
                  ack_interval: int = 2):
-        self.slope_arr = slope_arr
+        self.slope_arr = np.arange(1 - self.BETA, 1 + self.BETA + 0.01, 0.01)
+   
         self.threshold_ack = threshold_ack
         self.threshold_seg = threshold_seg
         self.tcp_header_size = tcp_header_size
@@ -726,7 +728,7 @@ class SlopeAugmentor(FlowAugmentor):
                 timestamp[burst_indices].copy(),
             )
 
-        extend_payload = math.ceil(payload / slope)
+        extend_payload = math.ceil(payload * slope)
         k_new = math.ceil(extend_payload / self.mss)
         if k_new <= 0:
             k_new = 1
