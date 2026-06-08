@@ -415,15 +415,14 @@ def test_DistriPcapFormatter_1():
 
 
 def test_CsvFormatter_1(npz_buffers):
-    formatter = CsvFormatter(length=10)
-
     extractor = NpzHSDBSExtractor(threshold=32)
+    formatter = CsvFormatter(extractor=extractor, length=10)
 
     label = 0
     hosts = ["www.baidu.com", "www.zhihu.com", "www.google.com"]
     for npz_buffer in npz_buffers:
-        formatter.load([npz_buffer])
-        formatter.transform(hosts[label], label, extractor)
+        data = [np.load(npz_buffer)]
+        formatter.transform(hosts[label], label, data)
         label += 1
 
     # Create an in-memory bytes buffer
@@ -448,15 +447,14 @@ def test_CsvFormatter_1(npz_buffers):
 
 
 def test_CsvFormatter_2(npz_buffers):
-    formatter = CsvFormatter(length=5)
-
     extractor = NpzHSDBSExtractor(ignore_control_packets=True, threshold=32)
+    formatter = CsvFormatter(extractor=extractor, length=5)
 
     label = 0
     hosts = ["www.baidu.com"]
 
-    formatter.load([npz_buffer for npz_buffer in npz_buffers])
-    formatter.transform(hosts[label], label, extractor)
+    data = [np.load(npz_buffer) for npz_buffer in npz_buffers]
+    formatter.transform(hosts[label], label, data)
 
     # Create an in-memory bytes buffer
     buffer = io.BytesIO()
@@ -481,15 +479,14 @@ def test_CsvFormatter_3(npz_buffers):
     """
     This test covers the use of NpzRawExtractor, and no padding is performed.
     """
-    formatter = CsvFormatter(length=5)
-
     extractor = NpzRawExtractor(features=["length", "direction", "timestamp"])
+    formatter = CsvFormatter(extractor=extractor, length=5)
 
     label = 0
     hosts = ["www.baidu.com"]
 
-    formatter.load([npz_buffer for npz_buffer in npz_buffers])
-    formatter.transform(hosts[label], label, extractor)
+    data = [np.load(npz_buffer) for npz_buffer in npz_buffers]
+    formatter.transform(hosts[label], label, data)
 
     # Create an in-memory bytes buffer
     buffer = io.BytesIO()
@@ -514,15 +511,14 @@ def test_CsvFormatter_4(npz_buffers):
     """
     This test covers the use of NpzRawExtractor, and padding (-2, -2, -2) is performed.
     """
-    formatter = CsvFormatter(length=30)
-
     extractor = NpzRawExtractor(features=["length", "direction", "timestamp"])
+    formatter = CsvFormatter(extractor=extractor, length=30)
 
     label = 0
     hosts = ["www.baidu.com"]
 
-    formatter.load([npz_buffer for npz_buffer in npz_buffers])
-    formatter.transform(hosts[label], label, extractor)
+    data = [np.load(npz_buffer) for npz_buffer in npz_buffers]
+    formatter.transform(hosts[label], label, data)
 
     # Create an in-memory bytes buffer
     buffer = io.BytesIO()
