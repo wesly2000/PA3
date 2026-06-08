@@ -761,9 +761,10 @@ class LengthExcludeCriterion(CheckCriterion):
     """
     def __init__(self, threshold: int = 32):
         self.threshold = threshold
-        def condition(length):
-            return length > self.threshold
-        super().__init__(name="length_exclude", condition=condition)
+        super().__init__(name="length_exclude", condition=self._condition)
+
+    def _condition(self, length):
+        return length > self.threshold
 
     def feature_map(self, stream: Dict[str, np.ndarray]):
         return len(stream['length'])
@@ -778,10 +779,11 @@ class HSDBSExcludeCriterion(CheckCriterion):
         self.lower_bounds = lower_bounds
         self.upper_bounds = upper_bounds
         self.threshold = threshold
-        def condition(feature):
-            in_range = (self.lower_bounds <= feature) & (feature <= self.upper_bounds)
-            return not in_range.any()
-        super().__init__(name="hsdbs_exclude", condition=condition)
+        super().__init__(name="hsdbs_exclude", condition=self._condition)
+
+    def _condition(self, feature):
+        in_range = (self.lower_bounds <= feature) & (feature <= self.upper_bounds)
+        return not in_range.any()
 
 
     def feature_map(self, stream: Dict[str, np.ndarray]):
