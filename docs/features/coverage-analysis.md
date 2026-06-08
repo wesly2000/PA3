@@ -16,5 +16,6 @@ Currently, the goals include mainly in 2 sides:
 
 ## TODOs
 + [x] Website flow sizes KDE
-+ [ ] BIH flow size range in KDE
-+ [ ] Coverage website flow filtration relationship.
++ [x] BIH flow size range in KDE
++ [x] Coverage website flow filtration relationship
++ [x] Optimal coverage selection
