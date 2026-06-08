@@ -37,12 +37,6 @@ if __name__ == '__main__':
     parser.add_argument('--slope', type=str, default=None, help="The slope file")
     args = parser.parse_args()
 
-    if args.slope is not None:
-        slope_arr = np.load(args.slope)['slope_ratio']
-        augmentor = SlopeAugmentor(slope_arr)
-    else:
-        augmentor = None
-
     stripper = None
     criteria = None
     SNI_filter = None
@@ -65,6 +59,38 @@ if __name__ == '__main__':
             SNI_filter = read_host_list("exp/data_extract/filter.txt")
     else:
         raise ValueError(f"Invalid protocol: {args.protocol}")
+
+
+
+    if args.slope is not None:
+        # slope_arr = np.load(args.slope)['slope_ratio']
+        if args.protocol == 'vmess':
+            if args.slope == 'shadowsocks':
+                mean = 1.1732
+                std = 0.1519
+            elif args.slope == 'trojan':
+                mean = 0.9829
+                std = 0.1168
+        elif args.protocol == 'shadowsocks':
+            if args.slope == 'vmess':
+                mean = 0.8658
+                std = 0.1049
+            elif args.slope == 'trojan':
+                mean = 0.9000
+                std = 0.0727
+        elif args.protocol == 'trojan':
+            if args.slope == 'vmess':
+                mean = 0.8763
+                std = 0.1233
+            elif args.slope == 'shadowsocks':
+                mean = 1.1183
+                std = 0.0902
+        # Fix the random seed for reproducibility
+        rng = np.random.RandomState(114514)
+        slope_arr = rng.normal(loc=mean, scale=std, size=80)
+        augmentor = SlopeAugmentor(slope_arr)
+    else:
+        augmentor = None
     
     if lower_bounds is not None and upper_bounds is not None:
         criteria = HSDBSExcludeCriterion(lower_bounds=lower_bounds, upper_bounds=upper_bounds, threshold=0)
@@ -76,7 +102,7 @@ if __name__ == '__main__':
     else:
         raise NotImplementedError
     
-    formatter = CsvFormatter(length=args.length)
+    formatter = CsvFormatter(extractor=extractor, length=args.length)
 
     if args.filter_file is not None:
         SNI_filter = read_host_list(args.filter_file)
@@ -84,5 +110,5 @@ if __name__ == '__main__':
     array_dir = f'{args.dir}/arrays'
     db_file = f'{args.dir}/database_with_infer.csv'
     logger.info("Task csv_batch_extract started")
-    formatter.batch_extract(array_dir, db_file, args.protocol, args.output_file, SNI_filter, extractor, regenerate=regenerate)
+    formatter.batch_extract(array_dir, db_file, args.protocol, args.output_file, SNI_filter, regenerate=regenerate)
     logger.info("Task csv_batch_extract completed")

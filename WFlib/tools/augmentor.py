@@ -553,8 +553,8 @@ class SlopeAugmentor(FlowAugmentor):
                  tcp_header_size: int = 60,
                  tcp_max_size: int = 1460,
                  ack_interval: int = 2):
-        self.slope_arr = np.arange(1 - self.BETA, 1 + self.BETA + 0.01, 0.01)
-   
+        self.slope_arr = slope_arr
+
         self.threshold_ack = threshold_ack
         self.threshold_seg = threshold_seg
         self.tcp_header_size = tcp_header_size
