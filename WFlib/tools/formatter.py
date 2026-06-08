@@ -2,12 +2,13 @@ import numpy as np
 import pyshark
 import json
 from pathlib import Path
-from typing import Union, List, Optional
+from typing import Any, Union, List, Optional
 import warnings
 import pandas as pd
 from WFlib.tools.capture import SNI_exclude_filter
 from WFlib.tools.extractor import Extractor, array_path, NpzExtractor
 import asyncio
+import concurrent.futures
 import nest_asyncio
 nest_asyncio.apply()
 
@@ -44,7 +45,7 @@ class Formatter(object):
         """
         self._length = length
         self._raw_buf = None
-        self._buf = dict()
+        self._buf = dict[str, List]()
         self._buf['hosts'] = []
         self._buf['labels'] = []
 
@@ -489,48 +490,57 @@ class JsonFormatter(Formatter):
         """
         return self._raw_buf[name]
     
+def _csv_transform_single(extractor, paths, length):
+    """Worker function for ProcessPoolExecutor: compute one feature vector for a single pcap capture.
+
+    Must be module-level (not a method or nested function) so it can be pickled by ProcessPoolExecutor.
+    """
+    data = [np.load(p) for p in paths]
+    tmp_buf = []
+    extractor.extract(tmp_buf, data)
+    if length <= len(tmp_buf):
+        return np.array(tmp_buf[:length])
+    else:
+        if extractor.name == 'raw':
+            padding = tuple([0] * len(extractor.features))
+        else:
+            padding = 0
+        padding_len = length - len(tmp_buf)
+        return np.array(tmp_buf + [padding] * padding_len)
+
+
 class CsvFormatter(Formatter):
     """
     Convert a csv database (along with its linked array files) into a .npz dataset.
     """
-    def __init__(self, length=1000):
+    def __init__(self, extractor: NpzExtractor, length=1000):
         super().__init__(length)
+        self.extractor = extractor
+        self._buf[self.extractor.name] = []
 
 
-    def load(self, paths: List[Union[str, Path]]):
-        self._raw_buf = [np.load(path) for path in paths]
+    # def load(self, paths: List[Union[str, Path]]):
+    #     self._raw_buf = [np.load(path) for path in paths]
     
 
-    def transform(self, host : str, label : int, *extractors : NpzExtractor):
+    def transform(self, host: str, label: int, data: List[np.ndarray]):
         if host not in self._buf['hosts']:
             self._buf['hosts'].append(host)
-
         self._buf['labels'].append(label)
-        tmp_buf = dict()
-
-        for extractor in extractors:
-            tmp_buf[extractor.name] = []
-            # Initialize a new list for the given feature name
-            if extractor.name not in self._buf:
-                self._buf[extractor.name] = []
-
-        for extractor in extractors:
-            extractor.extract(tmp_buf[extractor.name], self._raw_buf)
-
-        # Dump features into ndarray, and append to self._buf[name]
-        for extractor in extractors: 
-            if self._length <= len(tmp_buf[extractor.name]): # Truncate
-                self._buf[extractor.name].append(np.array(tmp_buf[extractor.name][:self._length]))
+        tmp_buf = []
+        self.extractor.extract(tmp_buf, data)
+        if self._length <= len(tmp_buf):
+            self._buf[self.extractor.name].append(np.array(tmp_buf[:self._length]))
+        else:
+            if self.extractor.name == 'raw':
+                padding = tuple([0] * len(self.extractor.features))
             else:
-                if extractor.name == 'raw':
-                    padding = tuple([0] * len(extractor.features))  # Awkward padding, but should be useful
-                else:
-                    padding = 0
-                padding_len = self._length - len(tmp_buf[extractor.name])
-                self._buf[extractor.name].append(np.array(tmp_buf[extractor.name] + [padding] * padding_len))
+                padding = 0
+            padding_len = self._length - len(tmp_buf)
+            self._buf[self.extractor.name].append(np.array(tmp_buf + [padding] * padding_len))
 
 
-    def batch_extract(self, base_dir, db_file, protocol, output_file, SNIs=Optional[Union[list, set]], *extractors: NpzExtractor, regenerate: int=1):
+    def batch_extract(self, base_dir, db_file, protocol, output_file, SNIs=Optional[Union[list, set]], regenerate: int=1):
         """
         Extract all the given features from all the files in the given base directory.
 
@@ -559,7 +569,7 @@ class CsvFormatter(Formatter):
             The number of times to regenerate of a given pcap, use a value larger than 1 only when the NpzExtractor is equipped with a splitter.
         """
         label = 0  # Processing a hostname will increase the label by 1
-        db = pd.read_csv(db_file).query(f"inferred_protocol == '{protocol}'")[['host', 'id', 'stream', 'transport', 'sni']]
+        db = pd.read_csv(db_file).query(f"inferred_protocol == '{protocol}'")[['host', 'id', 'stream', 'transport', 'sni', 'protocol']]
         if SNIs is not None:
             db = db[~db['sni'].isin(SNIs)]
             db = db[['host', 'id', 'stream', 'transport', 'protocol']]
@@ -568,15 +578,23 @@ class CsvFormatter(Formatter):
         hosts = sorted(db['host'].unique())
 
         # Iterate over all hosts in the database
-        for host in hosts:
+        for label, host in enumerate(hosts):
             logger.info(f"Processing host: {host}, protocol: {protocol}")
-            for pcap_id in db[db['host'] == host]['id'].unique():
-                host_db = db[(db['host'] == host) & (db['id'] == int(pcap_id))]
-                paths = host_db.apply(lambda row: f'{base_dir}/{array_path(row["host"], row["id"], row["transport"], row["stream"], protocol)}', axis=1)
-
-                self.load(paths)
-                for _ in range(regenerate):
-                    self.transform(host, label, *extractors)
-            label += 1
+            self._buf['hosts'].append(host)
+            futures = []
+            with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
+                for pcap_id in db[db['host'] == host]['id'].unique():
+                    host_db = db[(db['host'] == host) & (db['id'] == int(pcap_id))]
+                    paths = list(host_db.apply(
+                        lambda row: f'{base_dir}/{array_path(row["host"], row["id"], row["transport"], row["stream"], row["protocol"])}',
+                        axis=1
+                    ))
+                    for _ in range(regenerate):
+                        futures.append(executor.submit(
+                            _csv_transform_single, self.extractor, paths, self._length
+                        ))
+            for future in futures:
+                self._buf['labels'].append(label)
+                self._buf[self.extractor.name].append(future.result())
 
         self.dump(output_file)
