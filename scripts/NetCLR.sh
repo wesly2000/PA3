@@ -21,7 +21,7 @@ if [[ "$use_pretrain" -eq 1 ]]; then
     --feature ${feature} \
     --model NetCLR \
     --device ${device} \
-    --train_epochs 100 \
+    --train_epochs 30 \
     --batch_size ${batch_size} \
     --learning_rate 3e-4 \
     --optimizer Adam \
