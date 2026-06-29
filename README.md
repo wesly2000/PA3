@@ -178,8 +178,14 @@ We would like to appreciate sincerely the original WFlib created by
 
 If we find that our extended library useful for general research on Website Fingerprinting Attack, we will try to create PR to the original repo. 
 
+## Indexing DB Protocol Prediction
+python exp/data_extract/csv_db_label.py --root_dir /data/exp/lxyu/Dataset/WF/VisualSeg/csv_db_extract --ngram_train_dir exp/data_analysis
+
 ## Raw Data Extract (Note that --bs_filter only means default coverage (0.4))
 python exp/data_extract/csv_batch_extract.py -d /data/exp/lxyu/Dataset/WF/VisualSeg/csv_db_extract -p vmess -o /data/exp/lxyu/Dataset/WF/Reproduce/features/vmess/raw_bs_filter_4.npz --bs_filter --feature raw
+
+### Using Host Filter
+python exp/data_extract/csv_batch_extract.py -d /data/exp/lxyu/Dataset/WF/VisualSeg/csv_db_extract -p vmess -o /data/exp/lxyu/Dataset/WF/Reproduce/features/vmess/raw_host_filter_strip_aug_slope_trojan.npz -f exp/data_extract/filter.txt --strip --slope /data/exp/lxyu/Dataset/WF/VisualSeg/slope/trojan_vmess_slope_ratio.npz --feature raw
 
 ## Data Transform
 python exp/dataset_process/gen_transformed.py --input_file /data/exp/lxyu/Dataset/WF/Reproduce/features/vmess/raw_bs_filter_strip_4_aug_no_cdf.npz -o /data/exp/lxyu/Dataset/WF/Reproduce/features/vmess/size_bs_filter_strip_4_aug_no_cdf.npz -f size --seq_len=10000

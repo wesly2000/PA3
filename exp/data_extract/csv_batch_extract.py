@@ -4,6 +4,7 @@ This file is used to extract the csv files from the database and related array s
 
 import argparse
 import numpy as np
+from pathlib import Path
 
 from WFlib.tools.formatter import CsvFormatter
 from WFlib.tools.extractor import NpzDirExtractor, HSDBSExcludeCriterion, NpzRawExtractor
@@ -36,6 +37,10 @@ if __name__ == '__main__':
     parser.add_argument('--feature', type=str, default="size", help="Feature type, options=[dir, size, raw]")
     parser.add_argument('--slope', type=str, default=None, help="The slope file")
     args = parser.parse_args()
+
+    if Path(args.output_file).exists():
+        logger.info(f"The file {args.output_file} already exists")
+        exit(0)
 
     stripper = None
     criteria = None
