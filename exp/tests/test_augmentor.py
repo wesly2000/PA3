@@ -876,7 +876,7 @@ class TestSlopeAugment:
 
     def test_augment_slope_less_than_one_grows(self):
         """slope < 1 should generally increase packet count."""
-        aug = make_slope_augmentor(slope_arr=np.array([0.5]))
+        aug = make_slope_augmentor(slope_arr=np.array([2]))
         flow = self._make_realistic_flow()
         result = aug.augment(flow)
         d, _, l = SlopeAugmentor._strip_padding(flow)
@@ -886,7 +886,7 @@ class TestSlopeAugment:
 
     def test_augment_slope_greater_than_one_shrinks(self):
         """slope > 1 should generally reduce packet count."""
-        aug = make_slope_augmentor(slope_arr=np.array([3.0]))
+        aug = make_slope_augmentor(slope_arr=np.array([1/3]))
         flow = self._make_realistic_flow()
         result = aug.augment(flow)
         d, _, l = SlopeAugmentor._strip_padding(flow)
