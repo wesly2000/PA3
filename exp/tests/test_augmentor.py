@@ -4,11 +4,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 import numpy as np
 import pytest
-from WFlib.tools.augmentor import NetCLRAugmentor, SlopeAugmentor
+from WFlib.tools.augmentor import NetCLRAugmentor, SlopeAugmentor, RosettaAugmentor, dict_to_raw
 from WFlib.utils.statistics import find_bursts
 from fixture import (
     make_trace, make_short_trace, make_augmentor, assert_valid_result,
     make_slope_augmentor, make_flow,
+)
+from exp.dataset_process.data_augmentation_netrand import (
+    NetRandAugmentRaw,
+    augment_raw_dataset,
+    build_pools_from_raw,
 )
 
 
@@ -936,6 +941,264 @@ class TestSlopeAugment:
         result = aug.augment(flow)
         # The ACK at original index 2 (length=50) should still exist
         assert 50 in result["length"] or self  # ACK may be shifted but present
+
+
+# ---------------------------------------------------------------------------
+# RosettaAugmentor tests
+# ---------------------------------------------------------------------------
+
+class TestRosettaAugmentor:
+    def _make_flow(self, key="length"):
+        return {
+            "direction": np.array([1, 1, -1, -1, 1], dtype=np.int64),
+            key: np.array([600, 600, 700, 700, 300], dtype=np.int64),
+            "timestamp": np.array([0.0, 0.01, 0.02, 0.03, 0.04], dtype=np.float64),
+        }
+
+    def _assert_valid(self, result, key="length"):
+        assert "timestamp" in result
+        assert "direction" in result
+        assert key in result
+        n = len(result["direction"])
+        assert len(result[key]) == n
+        assert len(result["timestamp"]) == n
+        assert np.issubdtype(result["direction"].dtype, np.integer)
+        assert np.issubdtype(result[key].dtype, np.integer)
+        assert np.issubdtype(result["timestamp"].dtype, np.floating)
+        if n > 1:
+            assert np.all(np.diff(result["timestamp"]) >= -1e-12)
+
+    def test_packet_loss_drops_aligned_triplets(self, monkeypatch):
+        aug = RosettaAugmentor(loss_rate_max=1.0, nagle=False)
+        direction = np.array([1, -1, 1, -1], dtype=np.int64)
+        length = np.array([10, 20, 30, 40], dtype=np.int64)
+        timestamp = np.array([0.0, 0.1, 0.2, 0.3], dtype=np.float64)
+        draws = iter([0.5, 0.4, 0.6, 0.1])
+        monkeypatch.setattr("WFlib.tools.augmentor.random.random", lambda: next(draws))
+
+        result = aug._apply_packet_loss("length", direction, length, timestamp)
+
+        np.testing.assert_array_equal(result["direction"], np.array([1, 1]))
+        np.testing.assert_array_equal(result["length"], np.array([10, 30]))
+        np.testing.assert_allclose(result["timestamp"], np.array([0.0, 0.2]))
+
+    def test_aggregation_does_not_cross_direction_changes(self, monkeypatch):
+        aug = RosettaAugmentor(loss_rate_max=0.0, max_rtt=1.0, mss=1000, warmup_packets=0)
+        flow = self._make_flow()
+        monkeypatch.setattr("WFlib.tools.augmentor.random.random", lambda: 1.0)
+
+        result = aug._apply_nagle(
+            "length", flow["direction"], flow["length"], flow["timestamp"]
+        )
+
+        np.testing.assert_array_equal(result["direction"], np.array([1, 1, -1, -1, 1]))
+        np.testing.assert_array_equal(result["length"], np.array([1000, 200, 1000, 400, 300]))
+        self._assert_valid(result)
+
+    def test_segmented_packets_share_group_direction(self, monkeypatch):
+        aug = RosettaAugmentor(loss_rate_max=0.0, max_rtt=1.0, mss=1000, warmup_packets=0)
+        direction = np.array([-1, -1, -1], dtype=np.int64)
+        length = np.array([800, 800, 800], dtype=np.int64)
+        timestamp = np.array([0.0, 0.01, 0.02], dtype=np.float64)
+        monkeypatch.setattr("WFlib.tools.augmentor.random.random", lambda: 1.0)
+
+        result = aug._apply_nagle("length", direction, length, timestamp)
+
+        np.testing.assert_array_equal(result["direction"], np.array([-1, -1, -1]))
+        np.testing.assert_array_equal(result["length"], np.array([1000, 1000, 400]))
+        self._assert_valid(result)
+
+    def test_preserves_length_schema(self):
+        aug = RosettaAugmentor(loss_rate_max=0.0, nagle=False)
+        result = aug.augment(self._make_flow("length"))
+        assert "length" in result
+        assert "size" not in result
+        self._assert_valid(result, "length")
+
+    def test_preserves_size_schema(self):
+        aug = RosettaAugmentor(loss_rate_max=0.0, nagle=False)
+        result = aug.augment(self._make_flow("size"))
+        assert "size" in result
+        assert "length" not in result
+        self._assert_valid(result, "size")
+
+    def test_repeated_augmentation_stable(self):
+        aug = RosettaAugmentor()
+        flow = {
+            "direction": np.array([1, 1, 1, -1, -1, 1, 1, -1], dtype=np.int64),
+            "length": np.array([300, 600, 900, 700, 500, 400, 1200, 300], dtype=np.int64),
+            "timestamp": np.array([0.0, 0.002, 0.006, 0.009, 0.013, 0.02, 0.025, 0.03], dtype=np.float64),
+        }
+        for _ in range(50):
+            result = aug.augment(flow)
+            self._assert_valid(result, "length")
+
+    def test_empty_flow_returns_valid_output(self):
+        aug = RosettaAugmentor()
+        flow = make_flow([0, 0, 0], [0, 0, 0])
+        result = aug.augment(flow)
+        self._assert_valid(result, "length")
+        assert len(result["direction"]) == 0
+
+    def test_single_packet_flow_returns_valid_output(self):
+        aug = RosettaAugmentor()
+        flow = make_flow([1], [1460], [0.0])
+        result = aug.augment(flow)
+        self._assert_valid(result, "length")
+        assert len(result["direction"]) == 1
+
+
+
+# ---------------------------------------------------------------------------
+# NetRandAugment offline raw augmentation tests
+# ---------------------------------------------------------------------------
+
+def make_netrand_trace(direction, size, timestamp=None):
+    direction = np.asarray(direction, dtype=np.int64)
+    size = np.asarray(size, dtype=np.int64)
+    if timestamp is None:
+        timestamp = np.arange(len(direction), dtype=np.float64) * 0.01
+    return {
+        "timestamp": np.asarray(timestamp, dtype=np.float64),
+        "direction": direction,
+        "size": size,
+    }
+
+
+def make_netrand_dataset(seq_len=80):
+    traces = [
+        make_netrand_trace([1, 1, -1, -1, 1], [10, 11, 20, 21, 12]),
+        make_netrand_trace([1, -1, -1, 1, 1], [30, 40, 41, 31, 32]),
+        make_netrand_trace([-1, -1, 1, 1, -1], [50, 51, 60, 61, 52]),
+    ]
+    X = np.stack([dict_to_raw(t, seq_len) for t in traces], axis=0)
+    y = np.array([0, 0, 1], dtype=np.int64)
+    return X, y
+
+
+def assert_valid_netrand_trace(trace):
+    n = len(trace["direction"])
+    assert len(trace["timestamp"]) == n
+    assert len(trace["size"]) == n
+    assert np.issubdtype(trace["timestamp"].dtype, np.floating)
+    assert np.issubdtype(trace["direction"].dtype, np.integer)
+    assert np.issubdtype(trace["size"].dtype, np.integer)
+    if n > 1:
+        assert np.all(np.diff(trace["timestamp"]) >= -1e-12)
+
+
+def make_netrand_augmentor():
+    X, y = make_netrand_dataset()
+    pools = build_pools_from_raw(X, y)
+    return NetRandAugmentRaw(*pools, n=1, m=4), pools
+
+
+class TestNetRandPools:
+    def test_pool_construction_by_label_and_current_exclusion(self):
+        aug, (traces, same_class_pool, random_pool, outgoing_burst_pool) = make_netrand_augmentor()
+        assert same_class_pool[0] == [0, 1]
+        assert same_class_pool[1] == [2]
+        assert random_pool == [0, 1, 2]
+        assert len(outgoing_burst_pool) > 0
+
+        peer = aug._peer_trace(0, 0)
+        assert peer is not None
+        np.testing.assert_array_equal(peer["size"], traces[1]["trace"]["size"])
+        assert aug._peer_trace(2, 1) is None
+
+
+class TestNetRandOperators:
+    def test_remove_operation_preserves_aligned_triplets(self, monkeypatch):
+        aug, _ = make_netrand_augmentor()
+        aug.remove_ratio = 0.5
+        trace = make_netrand_trace([1, -1, 1, -1, 1, -1], [10, 20, 30, 40, 50, 60])
+        monkeypatch.setattr("exp.dataset_process.data_augmentation_netrand.random.random", lambda: 0.0)
+
+        result = aug.inject_or_remove_packets(trace)
+
+        assert_valid_netrand_trace(result)
+        assert len(result["direction"]) == 3
+
+    def test_inserted_packets_receive_integer_sizes_from_current_trace(self, monkeypatch):
+        aug, _ = make_netrand_augmentor()
+        aug.inject_ratio = 0.5
+        trace = make_netrand_trace([1, -1, 1, -1, 1, -1], [10, 20, 30, 40, 50, 60])
+        monkeypatch.setattr("exp.dataset_process.data_augmentation_netrand.random.random", lambda: 1.0)
+
+        result = aug.inject_or_remove_packets(trace)
+
+        assert_valid_netrand_trace(result)
+        assert len(result["direction"]) > len(trace["direction"])
+        assert set(result["size"].tolist()).issubset(set(trace["size"].tolist()))
+
+    def test_burst_swap_moves_sizes_with_direction(self):
+        aug, _ = make_netrand_augmentor()
+        aug.swap_ratio = 0.5
+        trace = make_netrand_trace([1, 1, -1, -1], [10, 11, 20, 21], [0.0, 0.1, 0.2, 0.3])
+
+        result = aug.swap_burst_pairs(trace)
+
+        assert_valid_netrand_trace(result)
+        np.testing.assert_array_equal(result["direction"], np.array([-1, -1, 1, 1]))
+        np.testing.assert_array_equal(result["size"], np.array([20, 21, 10, 11]))
+
+    def test_peer_overlap_interpolation_methods_are_valid_with_context(self):
+        aug, (traces, _, _, _) = make_netrand_augmentor()
+        trace = traces[0]["trace"]
+        peer = traces[1]["trace"]
+        other = traces[2]["trace"]
+        aug.replace_rate = 1.0
+        aug.overlap_ratio = 0.5
+        aug.interp_rate = 0.5
+
+        for result in (
+            aug.replace_peer_bursts(trace, peer),
+            aug.add_overlapping_segment(trace, other),
+            aug.generate_linear_interpolation(trace, peer),
+        ):
+            assert_valid_netrand_trace(result)
+            assert len(result["direction"]) > 0
+
+    def test_insert_outgoing_bursts_uses_pool_and_preserves_validity(self):
+        aug, _ = make_netrand_augmentor()
+        aug.insert_rate = 1.0
+        aug.shift_bound_i = 0
+        trace = make_netrand_trace([1] * 20 + [-1] * 12, list(range(10, 42)))
+
+        result = aug.insert_outgoing_bursts(trace)
+
+        assert_valid_netrand_trace(result)
+        assert np.any(result["direction"] == 1)
+        assert len(result["direction"]) >= len(trace["direction"])
+
+    def test_unavailable_peer_context_is_skipped_safely(self):
+        X, y = make_netrand_dataset()
+        y = np.array([0, 1, 2], dtype=np.int64)
+        pools = build_pools_from_raw(X, y)
+        aug = NetRandAugmentRaw(*pools, n=1, m=4, methods=["replace_peer_bursts"])
+        trace = pools[0][0]["trace"]
+
+        result = aug.augment(trace, index=0, label=0, mode="randaugment")
+
+        assert_valid_netrand_trace(result)
+        np.testing.assert_array_equal(result["direction"], trace["direction"])
+        np.testing.assert_array_equal(result["size"], trace["size"])
+
+
+class TestNetRandScriptSmoke:
+    def test_tiny_npz_smoke(self, tmp_path):
+        X, y = make_netrand_dataset(seq_len=32)
+        hosts = np.array(["a.example", "b.example"])
+        input_file = tmp_path / "input.npz"
+        output_file = tmp_path / "output.npz"
+        np.savez_compressed(input_file, raw=X, labels=y, hosts=hosts)
+
+        augment_raw_dataset(str(input_file), str(output_file), n_aug=2, n=1, m=4, seed=123)
+
+        out = np.load(output_file, allow_pickle=True)
+        assert out["raw"].shape == (len(X) * 2, X.shape[1], X.shape[2])
+        assert out["labels"].shape == (len(X) * 2,)
+        np.testing.assert_array_equal(out["hosts"], hosts)
 
 
 if __name__ == "__main__":
