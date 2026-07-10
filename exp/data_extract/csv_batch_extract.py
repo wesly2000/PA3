@@ -8,12 +8,13 @@ from pathlib import Path
 
 from WFlib.tools.formatter import CsvFormatter
 from WFlib.tools.extractor import NpzDirExtractor, HSDBSExcludeCriterion, NpzRawExtractor
-from WFlib.tools.augmentor import SlopeAugmentor
+from WFlib.tools.augmentor import *
 from WFlib.tools.capture import read_host_list
 from WFlib.tools.extractor import sni_cover, PROTOCOL_STRIPPER
 
 INTRINSIC_SNIS = ['firefox-settings-attachments.cdn.mozilla.net', 'firefox.settings.services.mozilla.com', 'content-signature-2.cdn.mozilla.net']
 STAT_ROOT = "exp/data_extract"
+CLASS_NUM=80
 
 def bound_gen(*ranges: tuple):
     lower_bounds = np.array([r[0] for r in ranges])
@@ -34,8 +35,9 @@ if __name__ == '__main__':
     parser.add_argument('--bs_filter', action='store_true', help="The BS filter file")
     parser.add_argument('--coverage', default=0.4, type=float, help="BS coverage to filter")
     parser.add_argument('--strip', action='store_true', help="Strip the handshake packets")
+    parser.add_argument('--rosetta', action='store_true', help="Use Rosetta as the augmentor")
     parser.add_argument('--feature', type=str, default="size", help="Feature type, options=[dir, size, raw]")
-    parser.add_argument('--slope', type=str, default=None, help="The slope file")
+    parser.add_argument('--slope', type=str, default=None, help="The target protocol to use slope-base augmentation")
     args = parser.parse_args()
 
     if Path(args.output_file).exists():
@@ -65,35 +67,14 @@ if __name__ == '__main__':
     else:
         raise ValueError(f"Invalid protocol: {args.protocol}")
 
-
-
     if args.slope is not None:
-        # slope_arr = np.load(args.slope)['slope_ratio']
-        if args.protocol == 'vmess':
-            if args.slope == 'shadowsocks':
-                mean = 1.1732
-                std = 0.1519
-            elif args.slope == 'trojan':
-                mean = 0.9829
-                std = 0.1168
-        elif args.protocol == 'shadowsocks':
-            if args.slope == 'vmess':
-                mean = 0.8658
-                std = 0.1049
-            elif args.slope == 'trojan':
-                mean = 0.9000
-                std = 0.0727
-        elif args.protocol == 'trojan':
-            if args.slope == 'vmess':
-                mean = 0.8763
-                std = 0.1233
-            elif args.slope == 'shadowsocks':
-                mean = 1.1183
-                std = 0.0902
+        mean, std = slope(args.protocol, args.slope)
         # Fix the random seed for reproducibility
         rng = np.random.RandomState(114514)
-        slope_arr = rng.normal(loc=mean, scale=std, size=80)
+        slope_arr = rng.normal(loc=mean, scale=std, size=CLASS_NUM)
         augmentor = SlopeAugmentor(slope_arr)
+    elif args.rosetta:
+        augmentor = RosettaAugmentor()
     else:
         augmentor = None
     
