@@ -539,6 +539,230 @@ class NetCLRAugmentor(TrafficAugmentor):
             return self._add_outgoing_burst(data)
 
 
+def slope(source_proto: str, target_proto: str) -> Tuple[float, float]:
+    slope_dict = {
+            ('vmess', 'shadowsocks'): (1.1732, 0.1519),
+            ('vmess', 'trojan'): (0.9829, 0.1168),
+            ('shadowsocks', 'vmess'): (0.8658, 0.1049),
+            ('shadowsocks', 'trojan'): (0.9000, 0.0727),
+            ('trojan', 'vmess'): (0.8763, 0.1233),
+            ('trojan', 'shadowsocks'): (1.1183, 0.0902),
+        }
+    
+    return slope_dict[(source_proto, target_proto)]
+
+class RosettaAugmentor(FlowAugmentor):
+    """
+    Raw-flow extension of Rosetta's TCP-aware augmentation.
+
+    The public Rosetta code augments CSV packet-size sequences rather than
+    emitting modified pcap/raw traces. This implementation adapts the same
+    packet aggregation and packet loss ideas to WFLib flow dictionaries while
+    preserving aligned timestamp, direction, and length/size arrays.
+    """
+    EPSILON = 1e-9
+
+    def __init__(self,
+                 loss_rate_max: float = 0.3,
+                 max_rtt: float = 0.01,
+                 mss: int = 1448,
+                 nagle: bool = True,
+                 warmup_packets: int = 2):
+        self.loss_rate_max = loss_rate_max
+        self.max_rtt = max_rtt
+        self.mss = mss
+        self.nagle = nagle
+        self.warmup_packets = warmup_packets
+
+    @staticmethod
+    def _length_key(data: Dict[str, np.ndarray]) -> str:
+        if "length" in data:
+            return "length"
+        if "size" in data:
+            return "size"
+        raise KeyError("RosettaAugmentor requires either 'length' or 'size'.")
+
+    @classmethod
+    def _build_result(cls,
+                      length_key: str,
+                      direction: np.ndarray,
+                      length: np.ndarray,
+                      timestamp: np.ndarray) -> Dict[str, np.ndarray]:
+        timestamp = np.asarray(timestamp, dtype=np.float64)
+        timestamp = cls._ensure_monotonic(timestamp)
+        return {
+            "timestamp": timestamp,
+            "direction": np.asarray(direction, dtype=np.int64),
+            length_key: np.asarray(length, dtype=np.int64),
+        }
+
+    @staticmethod
+    def _strip_padding(data: Dict[str, np.ndarray]
+                       ) -> Tuple[str, np.ndarray, np.ndarray, np.ndarray]:
+        length_key = RosettaAugmentor._length_key(data)
+        direction = np.asarray(data["direction"], dtype=np.int64)
+        timestamp = np.asarray(data["timestamp"], dtype=np.float64)
+        length = np.asarray(data[length_key], dtype=np.int64)
+
+        nonzero = np.nonzero(direction)[0]
+        if len(nonzero) == 0:
+            empty_int = np.array([], dtype=np.int64)
+            empty_float = np.array([], dtype=np.float64)
+            return length_key, empty_int, empty_int, empty_float
+
+        active_end = nonzero[-1] + 1
+        return (length_key,
+                direction[:active_end].copy(),
+                length[:active_end].copy(),
+                timestamp[:active_end].copy())
+
+    @classmethod
+    def _ensure_monotonic(cls, timestamp: np.ndarray) -> np.ndarray:
+        timestamp = np.asarray(timestamp, dtype=np.float64).copy()
+        for i in range(1, len(timestamp)):
+            if timestamp[i] < timestamp[i - 1]:
+                timestamp[i] = timestamp[i - 1] + cls.EPSILON
+        return timestamp
+
+    def _compute_delay_cdf(self,
+                           timestamp: np.ndarray,
+                           direction: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        same_dir_delays: List[float] = []
+        for i in range(1, len(timestamp)):
+            delay = timestamp[i] - timestamp[i - 1]
+            if direction[i] == direction[i - 1] and delay > 0:
+                same_dir_delays.append(float(delay))
+
+        if same_dir_delays:
+            return empirical_cdf(np.array(same_dir_delays, dtype=np.float64))
+
+        all_delays = np.diff(timestamp)
+        all_delays = all_delays[all_delays > 0]
+        if len(all_delays) > 0:
+            return empirical_cdf(all_delays.astype(np.float64))
+
+        fallback = max(float(self.max_rtt), self.EPSILON)
+        values = np.array([fallback / 100.0, fallback / 10.0, fallback],
+                          dtype=np.float64)
+        cdf = np.array([0.33, 0.67, 1.0], dtype=np.float64)
+        return values, cdf
+
+    def _sample_delay(self, delay_values: np.ndarray, delay_cdf: np.ndarray) -> float:
+        delay = float(sample_from_cdf(delay_cdf, delay_values.tolist()))
+        if delay <= 0:
+            return self.EPSILON
+        return delay
+
+    def _segment_payload(self, payload: int) -> List[int]:
+        payload = int(abs(payload))
+        if payload <= 0:
+            return []
+
+        segments: List[int] = []
+        while payload > self.mss:
+            segments.append(self.mss)
+            payload -= self.mss
+        segments.append(payload)
+        return segments
+
+    def _timestamps_for_segments(self,
+                                 start_timestamp: float,
+                                 count: int,
+                                 delay_values: np.ndarray,
+                                 delay_cdf: np.ndarray) -> List[float]:
+        if count <= 0:
+            return []
+
+        timestamps = [float(start_timestamp)]
+        while len(timestamps) < count:
+            timestamps.append(timestamps[-1] +
+                              self._sample_delay(delay_values, delay_cdf))
+        return timestamps
+
+    def _apply_nagle(self,
+                     length_key: str,
+                     direction: np.ndarray,
+                     length: np.ndarray,
+                     timestamp: np.ndarray) -> Dict[str, np.ndarray]:
+        if not self.nagle or len(direction) == 0:
+            return self._build_result(length_key, direction, length, timestamp)
+
+        delay_values, delay_cdf = self._compute_delay_cdf(timestamp, direction)
+        warmup = min(max(int(self.warmup_packets), 0), len(direction))
+
+        out_dir: List[int] = direction[:warmup].astype(np.int64).tolist()
+        out_len: List[int] = length[:warmup].astype(np.int64).tolist()
+        out_ts: List[float] = timestamp[:warmup].astype(np.float64).tolist()
+
+        i = warmup
+        while i < len(direction):
+            group_dir = int(direction[i])
+            start_ts = float(timestamp[i])
+            rtt_budget = random.random() * self.max_rtt
+            payload = 0
+            consumed = 0
+
+            while i < len(direction) and int(direction[i]) == group_dir:
+                payload += int(abs(length[i]))
+                i += 1
+                consumed += 1
+
+                if i >= len(direction) or int(direction[i]) != group_dir:
+                    break
+
+                rtt_budget -= self._sample_delay(delay_values, delay_cdf)
+                if consumed > 0 and rtt_budget <= 0:
+                    break
+
+            segments = self._segment_payload(payload)
+            segment_ts = self._timestamps_for_segments(
+                start_ts, len(segments), delay_values, delay_cdf
+            )
+
+            out_dir.extend([group_dir] * len(segments))
+            out_len.extend(segments)
+            out_ts.extend(segment_ts)
+
+        return self._build_result(length_key,
+                                  np.array(out_dir, dtype=np.int64),
+                                  np.array(out_len, dtype=np.int64),
+                                  np.array(out_ts, dtype=np.float64))
+
+    def _apply_packet_loss(self,
+                           length_key: str,
+                           direction: np.ndarray,
+                           length: np.ndarray,
+                           timestamp: np.ndarray) -> Dict[str, np.ndarray]:
+        if len(direction) <= 1 or self.loss_rate_max <= 0:
+            return self._build_result(length_key, direction, length, timestamp)
+
+        loss_rate = random.random() * self.loss_rate_max
+        keep_indices = [0]
+        for idx in range(1, len(direction)):
+            if random.random() > loss_rate:
+                keep_indices.append(idx)
+
+        keep = np.array(keep_indices, dtype=np.int64)
+        return self._build_result(length_key,
+                                  direction[keep],
+                                  length[keep],
+                                  timestamp[keep])
+
+    def augment(self, data: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
+        """Apply Rosetta-style Nagle aggregation followed by packet loss."""
+        length_key, direction, length, timestamp = self._strip_padding(data)
+        if len(direction) == 0:
+            return self._build_result(length_key, direction, length, timestamp)
+
+        aggregated = self._apply_nagle(length_key, direction, length, timestamp)
+        return self._apply_packet_loss(
+            length_key,
+            aggregated["direction"],
+            aggregated[length_key],
+            aggregated["timestamp"],
+        )
+
+
 class SlopeAugmentor(FlowAugmentor):
     """
     SlopeAugmentor augments a single flow according to an empirical slope
