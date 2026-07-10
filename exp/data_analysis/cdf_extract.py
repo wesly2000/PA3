@@ -6,6 +6,8 @@ import numpy as np
 import argparse
 
 from WFlib.utils.statistics import compute_outgoing_cdfs
+import logging
+logger = logging.getLogger(__name__)
 
 parser = argparse.ArgumentParser(
     description="Extract outgoing burst CDFs from a raw .npz dataset")
@@ -17,6 +19,10 @@ args = parser.parse_args()
 
 if not os.path.exists(args.input_file):
     raise FileNotFoundError(f"Input file does not exist: {args.input_file}")
+
+if os.path.exists(args.output_file):
+    logger.info(f"The file {args.output_file} already exists")
+    exit(0)
 
 data = np.load(args.input_file, allow_pickle=True)
 X = data["raw"]
