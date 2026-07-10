@@ -94,6 +94,95 @@ class FlowAugmentor(Augmentor):
         raise NotImplementedError("FlowAugmentor is an abstract class and cannot be instantiated directly.")
 
 
+class DyWinAugmentor(TrafficAugmentor):
+    """RoFiRe-style dynamic-window augmentation for raw traffic traces.
+
+    The augmentor operates on the raw-dict representation used by this
+    module: ``timestamp``, ``direction``, and ``size`` are aligned 1-D arrays.
+    Windows are packet-count chunks, matching RoFiRe's released DyWin rule.
+    """
+
+    def __init__(self,
+                 prob: float = 0.3,
+                 num_windows: int = 9,
+                 jitter_min: float = 0.2,
+                 jitter_max: float = 1.0):
+        self.prob = prob
+        self.num_windows = num_windows
+        self.jitter_min = jitter_min
+        self.jitter_max = jitter_max
+
+    @staticmethod
+    def _build_result(direction: np.ndarray,
+                      size: np.ndarray,
+                      timestamp: np.ndarray) -> Dict[str, np.ndarray]:
+        return {
+            "direction": np.asarray(direction, dtype=np.int64),
+            "size": np.asarray(size, dtype=np.int64),
+            "timestamp": np.asarray(timestamp, dtype=np.float64),
+        }
+
+    def _copy_input(self, data: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
+        return self._build_result(
+            np.asarray(data["direction"]).copy(),
+            np.asarray(data["size"]).copy(),
+            np.asarray(data["timestamp"]).copy(),
+        )
+
+    def augment(self, data: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
+        direction = np.asarray(data["direction"])
+        size = np.asarray(data["size"])
+        timestamp = np.asarray(data["timestamp"])
+
+        n = len(direction)
+        if n == 0:
+            return self._copy_input(data)
+        if len(size) != n or len(timestamp) != n:
+            raise ValueError("direction, size, and timestamp must have the same length")
+        if n < 4:
+            return self._copy_input(data)
+
+        chunk_size = max(2, n // self.num_windows)
+        out_dir, out_size, out_ts = [], [], []
+
+        for start in range(0, n, chunk_size):
+            end = min(start + chunk_size, n)
+            chunk_dir = direction[start:end]
+            chunk_size_arr = size[start:end]
+            chunk_ts = timestamp[start:end]
+            p = random.random()
+
+            if p < self.prob / 2.0:
+                continue
+            elif p < self.prob:
+                out_dir.extend([chunk_dir, chunk_dir.copy()])
+                out_size.extend([chunk_size_arr, chunk_size_arr.copy()])
+                offset = random.uniform(self.jitter_min, self.jitter_max)
+                out_ts.extend([chunk_ts, chunk_ts + offset])
+            else:
+                out_dir.append(chunk_dir)
+                out_size.append(chunk_size_arr)
+                out_ts.append(chunk_ts)
+
+        if not out_dir:
+            return self._build_result(
+                np.array([], dtype=direction.dtype),
+                np.array([], dtype=size.dtype),
+                np.array([], dtype=timestamp.dtype),
+            )
+
+        new_direction = np.concatenate(out_dir)
+        new_size = np.concatenate(out_size)
+        new_timestamp = np.concatenate(out_ts)
+        order = np.argsort(new_timestamp, kind="stable")
+
+        return self._build_result(
+            new_direction[order],
+            new_size[order],
+            new_timestamp[order],
+        )
+
+
 class NetCLRAugmentor(TrafficAugmentor):
     """
     Implementation of the NetCLR augmentor, which is described in the paper: Realistic Website Fingerprinting By Augmenting Network Trace. CCS 2023.

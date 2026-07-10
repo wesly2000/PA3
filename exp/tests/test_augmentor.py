@@ -2,9 +2,10 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
+import random
 import numpy as np
 import pytest
-from WFlib.tools.augmentor import NetCLRAugmentor, SlopeAugmentor, RosettaAugmentor, dict_to_raw
+from WFlib.tools.augmentor import NetCLRAugmentor, SlopeAugmentor, RosettaAugmentor, dict_to_raw, DyWinAugmentor, dict_to_raw
 from WFlib.utils.statistics import find_bursts
 from fixture import (
     make_trace, make_short_trace, make_augmentor, assert_valid_result,
@@ -15,6 +16,67 @@ from exp.dataset_process.data_augmentation_netrand import (
     augment_raw_dataset,
     build_pools_from_raw,
 )
+
+
+# ---------------------------------------------------------------------------
+# DyWinAugmentor tests
+# ---------------------------------------------------------------------------
+
+class TestDyWinAugmentor:
+    def test_none_behavior_returns_original(self):
+        aug = DyWinAugmentor(prob=0.0)
+        data = make_short_trace()
+        result = aug.augment(data)
+        assert_valid_result(result, "dywin-none")
+        np.testing.assert_array_equal(result["direction"], data["direction"])
+        np.testing.assert_array_equal(result["size"], data["size"])
+        np.testing.assert_allclose(result["timestamp"], data["timestamp"])
+
+    def test_mask_window_removes_aligned_packets(self, monkeypatch):
+        monkeypatch.setattr(random, "random", lambda: 0.0)
+        aug = DyWinAugmentor(prob=1.0, num_windows=9)
+        data = make_short_trace()
+        result = aug.augment(data)
+        assert_valid_result(result, "dywin-mask")
+        assert len(result["direction"]) == 0
+        assert len(result["size"]) == 0
+        assert len(result["timestamp"]) == 0
+
+    def test_jitter_window_duplicates_triplets(self, monkeypatch):
+        monkeypatch.setattr(random, "random", lambda: 0.75)
+        monkeypatch.setattr(random, "uniform", lambda _lo, _hi: 0.5)
+        aug = DyWinAugmentor(prob=1.0, num_windows=1, jitter_min=0.5, jitter_max=0.5)
+        data = {
+            "direction": np.array([1, -1, 1, -1], dtype=np.int64),
+            "size": np.array([100, 200, 300, 400], dtype=np.int64),
+            "timestamp": np.array([0.0, 1.0, 2.0, 3.0], dtype=np.float64),
+        }
+        result = aug.augment(data)
+        assert_valid_result(result, "dywin-jitter")
+        assert len(result["direction"]) == 8
+
+        original_keys = set(zip(data["direction"], data["size"], data["timestamp"]))
+        jittered_keys = set(zip(data["direction"], data["size"], data["timestamp"] + 0.5))
+        result_keys = set(zip(result["direction"], result["size"], result["timestamp"]))
+        assert original_keys.issubset(result_keys)
+        assert jittered_keys.issubset(result_keys)
+
+    def test_repeated_augment_stable(self):
+        aug = DyWinAugmentor(prob=0.5)
+        data = make_trace()
+        for i in range(50):
+            result = aug.augment(data)
+            assert_valid_result(result, f"dywin-iter-{i}")
+
+    def test_raw_round_trip_compatible(self):
+        aug = DyWinAugmentor(prob=0.0)
+        data = make_short_trace()
+        result = aug.augment(data)
+        raw = dict_to_raw(result, 64)
+        assert raw.shape == (64, 3)
+        np.testing.assert_allclose(raw[:len(data["timestamp"]), 0], data["timestamp"])
+        np.testing.assert_array_equal(raw[:len(data["direction"]), 1], data["direction"])
+        np.testing.assert_array_equal(raw[:len(data["size"]), 2], data["size"])
 
 
 # ---------------------------------------------------------------------------
