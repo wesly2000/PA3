@@ -20,7 +20,7 @@ gen_all_transforms() {
                 ;;
         esac
         output_file="${base_dir}/${output_name}"
-        python exp/dataset_process/gen_transformed.py --input_file "$input_file" -o "$output_file" -f "$feat" --seq_len="${seq_len:-10000}" &
+        python exp/dataset_process/gen_transformed.py --input_file "$input_file" -o "$output_file" -f "$feat" --seq_len="${seq_len:-10000}"
     done
 }
 
