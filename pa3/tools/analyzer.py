@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 from typing import List, Tuple, Union
 import pandas as pd
-from WFlib.utils.statistics import jaccard_similarity
+from pa3.utils.statistics import jaccard_similarity
 
 AES_128_GCM_TAG_LEN = 16
 CHACHA20_POLY1305_TAG_LEN = 16

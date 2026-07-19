@@ -9,9 +9,9 @@ import logging
 import pandas as pd
 import argparse
 
-from WFlib.tools.capture import stream_number_extract, read_host_list
-from WFlib.tools.analyzer import PROTOCOL_CH_SEARCHER
-from WFlib.utils.config import get_tshark_path, default_override_prefs
+from pa3.tools.capture import stream_number_extract, read_host_list
+from pa3.tools.analyzer import PROTOCOL_CH_SEARCHER
+from pa3.utils.config import get_tshark_path, default_override_prefs
 
 logger = logging.getLogger(__name__)
 

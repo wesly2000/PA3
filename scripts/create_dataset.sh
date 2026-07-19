@@ -118,8 +118,8 @@ coverage=4
 
     # python exp/data_extract/csv_batch_extract.py -d /data/exp/lxyu/Dataset/WF/VisualSeg/csv_db_extract -p normal -o /data/exp/lxyu/Dataset/WF/datasets/normal_dir_bs_filter_strip.npz --strip 
 
-    # python /home/lxyu/Reproduction/WFLib/exp/dataset_process/dataset_merge.py --coverage ${coverage}
-    # python /home/lxyu/Reproduction/WFLib/exp/dataset_process/dataset_merge.py
+    # python exp/dataset_process/dataset_merge.py --coverage ${coverage}
+    # python exp/dataset_process/dataset_merge.py
 
     # python exp/dataset_process/dataset_split.py -f direction --dataset /data/exp/lxyu/Dataset/WF/datasets/merge_dir_strip
     # python exp/dataset_process/dataset_split.py -f direction --dataset /data/exp/lxyu/Dataset/WF/datasets/vmess_dir_bs_filter_strip_${coverage}
@@ -135,7 +135,7 @@ coverage=4
 
 #     python exp/data_extract/csv_batch_extract.py -d /data/exp/lxyu/Dataset/WF/VisualSeg/csv_db_extract -p normal -o /data/exp/lxyu/Dataset/WF/datasets/normal_dir.npz  
 
-#     python /home/lxyu/Reproduction/WFLib/exp/dataset_process/dataset_merge.py
+#     python exp/dataset_process/dataset_merge.py
 
 #     ./scripts/split.sh ${coverage}
 # done

@@ -4,7 +4,7 @@ import argparse
 import random
 from tqdm import tqdm
 
-from WFlib.tools.augmentor import NetCLRAugmentor, raw_to_dict, dict_to_raw
+from pa3.tools.augmentor import NetCLRAugmentor, raw_to_dict, dict_to_raw
 
 parser = argparse.ArgumentParser(description="Data augmentation for raw traffic traces")
 parser.add_argument("--input_file", "-i", type=str, required=True, help="Path to input .npz file")

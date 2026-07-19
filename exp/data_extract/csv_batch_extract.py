@@ -6,11 +6,11 @@ import argparse
 import numpy as np
 from pathlib import Path
 
-from WFlib.tools.formatter import CsvFormatter
-from WFlib.tools.extractor import NpzDirExtractor, HSDBSExcludeCriterion, NpzRawExtractor
-from WFlib.tools.augmentor import *
-from WFlib.tools.capture import read_host_list
-from WFlib.tools.extractor import sni_cover, PROTOCOL_STRIPPER
+from pa3.tools.formatter import CsvFormatter
+from pa3.tools.extractor import NpzDirExtractor, HSDBSExcludeCriterion, NpzRawExtractor
+from pa3.tools.augmentor import *
+from pa3.tools.capture import read_host_list
+from pa3.tools.extractor import sni_cover, PROTOCOL_STRIPPER
 
 INTRINSIC_SNIS = ['firefox-settings-attachments.cdn.mozilla.net', 'firefox.settings.services.mozilla.com', 'content-signature-2.cdn.mozilla.net']
 STAT_ROOT = "exp/data_extract"

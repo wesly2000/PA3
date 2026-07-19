@@ -1,8 +1,8 @@
-from WFlib.tools.extractor import PcapDirExtractor, NpzHSDBSExtractor, NpzRawExtractor
-from WFlib.tools.formatter import *
+from pa3.tools.extractor import PcapDirExtractor, NpzHSDBSExtractor, NpzRawExtractor
+from pa3.tools.formatter import *
 from exp.tests.fixture import npz_buffers
 from pathlib import Path
-from WFlib.utils.config import get_tshark_path
+from pa3.utils.config import get_tshark_path
 
 import io
 import json

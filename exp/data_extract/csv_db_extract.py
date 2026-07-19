@@ -11,10 +11,10 @@ import logging
 import multiprocessing as mp
 from functools import partial
 
-from WFlib.tools.extractor import *
-from WFlib.utils.config import default_override_prefs, get_tshark_path
-from WFlib.tools.capture import read_host_list
-from WFlib.utils.config import COMMON_SOURCE_IP
+from pa3.tools.extractor import *
+from pa3.utils.config import default_override_prefs, get_tshark_path
+from pa3.tools.capture import read_host_list
+from pa3.utils.config import COMMON_SOURCE_IP
 
 logger = logging.getLogger(__name__)
 

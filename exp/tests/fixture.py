@@ -70,7 +70,7 @@ def make_short_trace(seed=99):
 
 def make_augmentor(**kwargs):
     """Create an augmentor with sensible defaults for testing."""
-    from WFlib.tools.augmentor import NetCLRAugmentor
+    from pa3.tools.augmentor import NetCLRAugmentor
     defaults = dict(
         outgoing_burst_sizes=[1, 2, 3, 4, 5],
         outgoing_burst_size_cdf=np.array([0.2, 0.4, 0.6, 0.8, 1.0]),
@@ -109,7 +109,7 @@ def assert_valid_result(result, msg=""):
 
 def make_slope_augmentor(**kwargs):
     """Create a SlopeAugmentor with sensible defaults for testing."""
-    from WFlib.tools.augmentor import SlopeAugmentor
+    from pa3.tools.augmentor import SlopeAugmentor
     defaults = dict(
         slope_arr=np.array([1.0, 1.5, 2.0]),
         threshold_ack=100,

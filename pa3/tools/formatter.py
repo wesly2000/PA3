@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import Any, Union, List, Optional
 import warnings
 import pandas as pd
-from WFlib.tools.capture import SNI_exclude_filter
-from WFlib.tools.extractor import Extractor, array_path, NpzExtractor
+from pa3.tools.capture import SNI_exclude_filter
+from pa3.tools.extractor import Extractor, array_path, NpzExtractor
 import asyncio
 import concurrent.futures
 import nest_asyncio
@@ -22,7 +22,7 @@ class Formatter(object):
     This class provides a universal format transformer between np.array (or tensor) between all other
     network files, e.g., .pcap, .csv, .json, etc.
 
-    Since the models of WFlib and all other util functions request .npz format, this abstract class provides
+    Since the models of pa3 and all other util functions request .npz format, this abstract class provides
     interfaces to transform arbitrary format into .npz files. Optionally, the implement could also
     extend methods that transform the original data into other file formats.
 

@@ -11,7 +11,7 @@ from joblib import Parallel, delayed
 import numpy as np
 import torch
 from tqdm import tqdm
-from WFlib.tools import data_processor
+from pa3.tools import data_processor
 
 
 def process_TSAM(sequence, maximum_load_time, max_matrix_len):

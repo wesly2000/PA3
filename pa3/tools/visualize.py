@@ -1,7 +1,7 @@
-from WFlib.tools.analyzer import Line 
-from WFlib.utils.statistics import IQR_bound
-from WFlib.tools.extractor import NpzExtractor 
-from WFlib.tools.formatter import array_path
+from pa3.tools.analyzer import Line 
+from pa3.utils.statistics import IQR_bound
+from pa3.tools.extractor import NpzExtractor 
+from pa3.tools.formatter import array_path
  
 from typing import List, Tuple, Union, Set
 import numpy as np

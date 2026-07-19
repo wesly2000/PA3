@@ -2,7 +2,7 @@
 This file is used to test batch_capture. Also, it could be used as a simple script to for capture.
 """
 
-from WFlib.tools.capture import batch_capture, read_host_list, decide_output_file_idx
+from pa3.tools.capture import batch_capture, read_host_list, decide_output_file_idx
 import argparse
 import os
 from pathlib import Path

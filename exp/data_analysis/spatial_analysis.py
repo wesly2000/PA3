@@ -6,8 +6,8 @@ import torch
 import argparse
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
-from WFlib import models
-from WFlib.tools import data_processor, evaluator
+from pa3 import models
+from pa3.tools import data_processor, evaluator
 
 # Set a fixed seed for reproducibility of experiments
 fix_seed = 2024

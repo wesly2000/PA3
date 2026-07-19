@@ -1,6 +1,6 @@
-from WFlib.tools.domain_generalize import *
-from WFlib.models.DF import *
-from WFlib.tools import data_processor
+from pa3.tools.domain_generalize import *
+from pa3.models.DF import *
+from pa3.tools import data_processor
 import os
 import argparse
 from typing import List
@@ -57,7 +57,7 @@ def main(datasets: List[str], feature: str, model: str, device: str, num_tabs: i
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="WFlib")
+    parser = argparse.ArgumentParser(description="pa3")
     parser.add_argument("--datasets", nargs='+', required=True, type=str, help="Dataset name")
     parser.add_argument("--use_stratify", type=str, default="True", help="Whether to use stratify")
     # parser.add_argument("-f", "--feature", type=str, default="X", help="The name of features to use")

@@ -43,7 +43,7 @@ printf '%s\n' "$MODEL_CONFIGS" | while IFS='|' read -r model model_feature split
     copy_npz_if_missing "${root_dir}/features/trojan/${file_feature}_host_filter_strip.npz" "${root_dir}/workspace/trojan_${model_feature}_host_filter_strip.npz"
 
     # Merge VMess datasets
-    python /home/lxyu/Reproduction/WFLib/exp/dataset_process/dataset_merge.py -i ${root_dir}/workspace/vmess_${model_feature}_host_filter_strip.npz ${root_dir}/workspace/vmess_${model_feature}_host_filter_strip_aug_slope_shadowsocks_gaussian.npz ${root_dir}/workspace/vmess_${model_feature}_host_filter_strip_aug_slope_trojan_gaussian.npz -o ${root_dir}/workspace/vmess_${model_feature}_host_filter_strip_aug_slope_gaussian.npz
+    python exp/dataset_process/dataset_merge.py -i ${root_dir}/workspace/vmess_${model_feature}_host_filter_strip.npz ${root_dir}/workspace/vmess_${model_feature}_host_filter_strip_aug_slope_shadowsocks_gaussian.npz ${root_dir}/workspace/vmess_${model_feature}_host_filter_strip_aug_slope_trojan_gaussian.npz -o ${root_dir}/workspace/vmess_${model_feature}_host_filter_strip_aug_slope_gaussian.npz
 
     python exp/dataset_process/dataset_split.py -f ${split_feature} --dataset ${root_dir}/workspace/vmess_${model_feature}_host_filter_strip
     python exp/dataset_process/dataset_split.py -f ${split_feature} --dataset ${root_dir}/workspace/vmess_${model_feature}_host_filter_strip_aug_slope_gaussian

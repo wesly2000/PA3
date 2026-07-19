@@ -4,10 +4,10 @@ Extract basic features from .pcap files, i.e., use the PcapExtractor and PcapFor
 NOTE: The extractors are now hard-coded into the script. Passing extractors as flags might be supported in the future.
 """
 
-from WFlib.tools.formatter import DistriPcapFormatter
-from WFlib.tools.extractor import PcapDirExtractor, PcapTsExtractor
-from WFlib.tools.capture import read_host_list
-from WFlib.utils.config import COMMON_SOURCE_IP
+from pa3.tools.formatter import DistriPcapFormatter
+from pa3.tools.extractor import PcapDirExtractor, PcapTsExtractor
+from pa3.tools.capture import read_host_list
+from pa3.utils.config import COMMON_SOURCE_IP
 import argparse
 import asyncio
 import nest_asyncio

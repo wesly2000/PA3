@@ -7,10 +7,10 @@ from tqdm import tqdm
 import argparse
 import logging
 
-from WFlib.tools.capture import *
-from WFlib.utils.statistics import *
-from WFlib.utils.config import default_override_prefs, get_tshark_path
-from WFlib.tools.analyzer import user_agent_fetch
+from pa3.tools.capture import *
+from pa3.utils.statistics import *
+from pa3.utils.config import default_override_prefs, get_tshark_path
+from pa3.tools.analyzer import user_agent_fetch
 
 logger = logging.getLogger(__name__)
 

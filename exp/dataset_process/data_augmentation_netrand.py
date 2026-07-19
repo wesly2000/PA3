@@ -1,8 +1,8 @@
 """
-Offline NetRandAugment-style augmentation for WFLib raw datasets.
+Offline NetRandAugment-style augmentation for pa3 raw datasets.
 
 The released NetRandAugment implementation operates on timing and direction
-sequences. This script adapts those transformations to WFLib raw triplets by
+sequences. This script adapts those transformations to pa3 raw triplets by
 carrying packet sizes through reorder/drop operations and sampling sizes for
 synthetic packets from the current trace.
 """
@@ -15,7 +15,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import numpy as np
 from tqdm import tqdm
 
-from WFlib.tools.augmentor import raw_to_dict, dict_to_raw
+from pa3.tools.augmentor import raw_to_dict, dict_to_raw
 
 
 Trace = Dict[str, np.ndarray]
@@ -705,7 +705,7 @@ def _parse_methods(methods: Optional[str]) -> Optional[List[str]]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="NetRandAugment for WFLib raw .npz datasets")
+    parser = argparse.ArgumentParser(description="NetRandAugment for pa3 raw .npz datasets")
     parser.add_argument("--input_file", "-i", type=str, required=True, help="Path to input raw .npz file")
     parser.add_argument("--output_file", "-o", type=str, required=True, help="Path to output raw .npz file")
     parser.add_argument("--n_aug", type=int, default=1, help="Number of augmented copies per sample")

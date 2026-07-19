@@ -1,8 +1,8 @@
-from WFlib.tools.capture import *
-from WFlib.tools.analyzer import packet_count
+from pa3.tools.capture import *
+from pa3.tools.analyzer import packet_count
 import pyshark
 from pathlib import Path
-from WFlib.utils.config import get_tshark_path
+from pa3.utils.config import get_tshark_path
 
 baidu_proxied_file = "exp/test_dataset/realworld_dataset/www.baidu.com_proxied.pcapng"
 google_file = "exp/test_dataset/realworld_dataset/www.google.com.pcapng"

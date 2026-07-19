@@ -4,7 +4,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 import numpy as np
 import pytest
-from WFlib.utils.statistics import (
+from pa3.utils.statistics import (
     find_bursts, sample_from_cdf, empirical_cdf, compute_outgoing_cdfs,
 )
 from fixture import make_trace
@@ -175,7 +175,7 @@ class TestComputeOutgoingCdfs:
 
     def test_result_unpacks_into_augmentor(self):
         """The returned dict should be directly usable as kwargs."""
-        from WFlib.tools.augmentor import NetCLRAugmentor
+        from pa3.tools.augmentor import NetCLRAugmentor
         trace = make_trace()
         X = _build_raw_array([trace], seq_len=250)
         cdfs = compute_outgoing_cdfs(X)

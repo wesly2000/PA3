@@ -5,7 +5,7 @@ import random
 import numpy as np
 from tqdm import tqdm
 
-from WFlib.tools.augmentor import DyWinAugmentor, raw_to_dict, dict_to_raw
+from pa3.tools.augmentor import DyWinAugmentor, raw_to_dict, dict_to_raw
 
 
 parser = argparse.ArgumentParser(description="DyWin data augmentation for raw traffic traces")

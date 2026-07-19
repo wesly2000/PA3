@@ -3,7 +3,7 @@ This file extract SNIs from each .pcap(ng) files in the base dir, and summarize 
 into a JSON file.
 """
 
-from WFlib.tools.capture import SNI_extract
+from pa3.tools.capture import SNI_extract
 from pathlib import Path
 import pyshark
 import json

@@ -5,9 +5,9 @@ import pandas as pd
 import pytest
 from tempfile import TemporaryFile
 
-from WFlib.tools.extractor import *
-from WFlib.tools.formatter import PcapFormatter
-from WFlib.utils.config import get_config
+from pa3.tools.extractor import *
+from pa3.tools.formatter import PcapFormatter
+from pa3.utils.config import get_config
 from exp.tests.test_formatter import google_file, apple_file, tiktok_file, yandex_file
 
 from exp.tests.fixture import npz_buffers
@@ -830,11 +830,11 @@ def test_flow_protocol_votes_and_predict():
 
 def test_identify_pcap_protocol_with_fallback_unknown(monkeypatch):
     monkeypatch.setattr(
-        "WFlib.tools.extractor.pcap_protocol_votes",
+        "pa3.tools.extractor.pcap_protocol_votes",
         lambda *args, **kwargs: {"vmess": 0, "shadowsocks": 0, "trojan": 0},
     )
     monkeypatch.setattr(
-        "WFlib.tools.extractor.pcap_protocol_votes_heuristic",
+        "pa3.tools.extractor.pcap_protocol_votes_heuristic",
         lambda *args, **kwargs: {"vmess": 0, "shadowsocks": 0, "trojan": 0},
     )
     rng = np.random.default_rng(0)
@@ -856,7 +856,7 @@ def test_identify_pcap_protocol_with_fallback_unknown(monkeypatch):
 def test_identify_pcap_protocol_with_fallback_tie(monkeypatch):
     vote = {"vmess": 2, "shadowsocks": 2, "trojan": 0}
     monkeypatch.setattr(
-        "WFlib.tools.extractor.pcap_protocol_votes",
+        "pa3.tools.extractor.pcap_protocol_votes",
         lambda *args, **kwargs: dict(vote),
     )
     rng = np.random.default_rng(1)

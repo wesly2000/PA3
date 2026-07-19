@@ -12,8 +12,8 @@ import torch
 import random
 import argparse
 import numpy as np
-from WFlib import models
-from WFlib.tools import data_processor, model_utils
+from pa3 import models
+from pa3.tools import data_processor, model_utils
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -24,7 +24,7 @@ torch.manual_seed(fix_seed)
 np.random.seed(fix_seed)
 
 # Argument parser for command-line options, arguments, and sub-commands
-parser = argparse.ArgumentParser(description="WFlib")
+parser = argparse.ArgumentParser(description="pa3")
 parser.add_argument("--dataset", type=str, required=True, default="CW", help="Dataset name")
 parser.add_argument("--model", type=str, required=True, default="DF", help="Model name")
 parser.add_argument("--device", type=str, default="cpu", help="Device, options=[cpu, cuda, cuda:x]")

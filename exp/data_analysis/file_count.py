@@ -1,7 +1,7 @@
 """
 This file is used to count pcap(ng) files per subdirectory in the base dir.
 """
-from WFlib.tools.analyzer import file_count
+from pa3.tools.analyzer import file_count
 import argparse
 import os
 from pathlib import Path

@@ -43,7 +43,7 @@ for _cfg_row in "${MODEL_CONFIGS[@]}"; do
     copy_npz_if_missing "${root_dir}/features/shadowsocks/${file_feature}_bs_filter_strip_${shadowsocks_coverage}.npz" "${root_dir}/workspace/shadowsocks_${model_feature}_bs_filter_strip_${shadowsocks_coverage}.npz"
     copy_npz_if_missing "${root_dir}/features/trojan/${file_feature}_bs_filter_strip_${trojan_coverage}.npz" "${root_dir}/workspace/trojan_${model_feature}_bs_filter_strip_${trojan_coverage}.npz"
 
-    python /home/lxyu/Reproduction/WFLib/exp/dataset_process/dataset_merge.py -i "${root_dir}/workspace/vmess_${model_feature}_bs_filter_strip_${vmess_coverage}.npz" "${root_dir}/workspace/vmess_${model_feature}_bs_filter_strip_${vmess_coverage}_aug_slope_shadowsocks.npz" "${root_dir}/workspace/vmess_${model_feature}_bs_filter_strip_${vmess_coverage}_aug_slope_trojan.npz" -o "${root_dir}/workspace/vmess_${model_feature}_bs_filter_strip_${vmess_coverage}_aug_slope.npz"
+    python exp/dataset_process/dataset_merge.py -i "${root_dir}/workspace/vmess_${model_feature}_bs_filter_strip_${vmess_coverage}.npz" "${root_dir}/workspace/vmess_${model_feature}_bs_filter_strip_${vmess_coverage}_aug_slope_shadowsocks.npz" "${root_dir}/workspace/vmess_${model_feature}_bs_filter_strip_${vmess_coverage}_aug_slope_trojan.npz" -o "${root_dir}/workspace/vmess_${model_feature}_bs_filter_strip_${vmess_coverage}_aug_slope.npz"
 
     python exp/dataset_process/dataset_split.py -f ${split_feature} --dataset ${root_dir}/workspace/vmess_${model_feature}_bs_filter_strip_${vmess_coverage}
     python exp/dataset_process/dataset_split.py -f ${split_feature} --dataset ${root_dir}/workspace/vmess_${model_feature}_bs_filter_strip_${vmess_coverage}_aug_slope

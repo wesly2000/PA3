@@ -113,7 +113,7 @@ copy_npz_if_missing ${root_dir}/features/vmess/${file_feature}_bs_filter_strip_$
 copy_npz_if_missing ${root_dir}/features/trojan/${file_feature}_bs_filter_strip_${coverage}.npz ${root_dir}/workspace/trojan_${model_feature}_bs_filter_strip_${coverage}.npz
 
 # Merge VMess datasets
-python /home/lxyu/Reproduction/WFLib/exp/dataset_process/dataset_merge.py \
+python exp/dataset_process/dataset_merge.py \
 -i ${root_dir}/workspace/shadowsocks_${model_feature}_bs_filter_strip_${coverage}.npz \
 ${root_dir}/workspace/shadowsocks_${model_feature}_bs_filter_strip_${coverage}_aug_slope_vmess.npz \
 ${root_dir}/workspace/shadowsocks_${model_feature}_bs_filter_strip_${coverage}_aug_slope_trojan.npz \

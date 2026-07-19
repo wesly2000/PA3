@@ -5,7 +5,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 import numpy as np
 import argparse
 
-from WFlib.utils.statistics import compute_outgoing_cdfs
+from pa3.utils.statistics import compute_outgoing_cdfs
 import logging
 logger = logging.getLogger(__name__)
 

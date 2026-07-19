@@ -32,7 +32,7 @@ import logging
 import shutil
 import asyncio
 
-from WFlib.utils.config import get_config
+from pa3.utils.config import get_config
 
 PAGE_LOAD_TIMEOUT = 40  # A fixed limit for complete webpage loading 
 

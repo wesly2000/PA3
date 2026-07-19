@@ -1,12 +1,12 @@
 from pathlib import Path
 from typing import Optional
 from configparser import ConfigParser
-import WFlib
+import pa3
 
 SUPPORTED_BASE = ['tcp', 'tls']
 SUPPORTED_PROTOCOL = ['normal', 'vmess', 'shadowsocks', 'trojan']
 
-DEFAULT_CONFIG_PATH = Path(WFlib.__file__).parent / 'config.ini'
+DEFAULT_CONFIG_PATH = Path(pa3.__file__).parent / 'config.ini'
 
 COMMON_SOURCE_IP = ['58.206.207.126', '192.168.5.5', '10.4.0.3', '192.168.5.7', '192.168.4.1', '2001:da8:283:c004:8177:495b:d038:d48a']
 

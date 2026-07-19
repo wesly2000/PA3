@@ -13,7 +13,7 @@ from typing import Tuple
 import numpy as np
 import pandas as pd
 
-from WFlib.tools.extractor import (
+from pa3.tools.extractor import (
     array_path,
     identify_pcap_protocol_with_fallback,
     pcap_protocol_votes,

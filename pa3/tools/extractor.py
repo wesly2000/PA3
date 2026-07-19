@@ -12,8 +12,8 @@ import math
 
 from sklearn.metrics import mutual_info_score, precision_score, recall_score, mutual_info_score
 
-from WFlib.utils.statistics import greedy_mass_covering
-from WFlib.tools.augmentor import FlowAugmentor
+from pa3.utils.statistics import greedy_mass_covering
+from pa3.tools.augmentor import FlowAugmentor
 
 
 class StreamProcessingError(Exception):

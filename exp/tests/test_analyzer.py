@@ -1,12 +1,12 @@
 """
-This file covers tests for WFlib/tools/analyzer.py
+This file covers tests for pa3/tools/analyzer.py
 """
-from WFlib.tools.analyzer import *
+from pa3.tools.analyzer import *
 from pathlib import Path
 import pyshark
 import os
 import pytest
-from WFlib.utils.config import get_tshark_path
+from pa3.utils.config import get_tshark_path
 
 import nest_asyncio 
 nest_asyncio.apply()

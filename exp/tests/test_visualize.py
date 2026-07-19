@@ -1,7 +1,7 @@
-from WFlib.tools.analyzer import Cell, Line, Packet
-from WFlib.tools.visualize import *
-from WFlib.utils.statistics import *
-from WFlib.tools.extractor import NpzHSDBSExtractor
+from pa3.tools.analyzer import Cell, Line, Packet
+from pa3.tools.visualize import *
+from pa3.utils.statistics import *
+from pa3.tools.extractor import NpzHSDBSExtractor
 from exp.tests.fixture import npz_buffers
 
 import math

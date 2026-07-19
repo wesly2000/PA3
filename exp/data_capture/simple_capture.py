@@ -1,7 +1,7 @@
 '''
 This file is a test on using Selenium for automated website request
 '''
-from WFlib.tools.capture import batch_capture, decide_output_file_idx
+from pa3.tools.capture import batch_capture, decide_output_file_idx
 import argparse
 import os
 from pathlib import Path

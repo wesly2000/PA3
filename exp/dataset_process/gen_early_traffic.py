@@ -13,7 +13,7 @@ random.seed(fix_seed)
 np.random.seed(fix_seed)
 
 # Set up argument parser to get dataset name from command line arguments
-parser = argparse.ArgumentParser(description="WFlib")
+parser = argparse.ArgumentParser(description="pa3")
 parser.add_argument("--dataset", type=str, required=True, default="Undefended", help="Dataset name")
 
 args = parser.parse_args()

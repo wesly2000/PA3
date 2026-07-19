@@ -6,9 +6,9 @@ import torch
 import random
 import copy
 from math import ceil
-from WFlib.utils.statistics import sample
-from WFlib.tools.evaluator import measurement
-from WFlib.models.DF import ConvBlock
+from pa3.utils.statistics import sample
+from pa3.tools.evaluator import measurement
+from pa3.models.DF import ConvBlock
 
 
 class MetaReg():

@@ -2,8 +2,8 @@ import argparse
 import numpy as np
 import pandas as pd
 
-from WFlib.tools.capture import read_host_list
-from WFlib.tools.extractor import array_path
+from pa3.tools.capture import read_host_list
+from pa3.tools.extractor import array_path
 import logging
 logger = logging.getLogger(__name__)
 INTRINSIC_SNIS = ['firefox-settings-attachments.cdn.mozilla.net', 'firefox.settings.services.mozilla.com', 'content-signature-2.cdn.mozilla.net']

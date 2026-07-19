@@ -7,8 +7,8 @@ mainly through the domain nd-static.bdstatic.com. Therefore, for each file, we f
 HTTP/2 DATA frames.
 """
 import pyshark
-from WFlib.tools.capture import *
-from WFlib.tools.analyzer import *
+from pa3.tools.capture import *
+from pa3.tools.analyzer import *
 from pathlib import Path
 import json
 import argparse

@@ -5,8 +5,8 @@ import torch
 import random
 import argparse
 import numpy as np
-from WFlib import models
-from WFlib.tools import data_processor, model_utils, netclr_pretrain, netclr_augmentor
+from pa3 import models
+from pa3.tools import data_processor, model_utils, netclr_pretrain, netclr_augmentor
 
 # Set a fixed seed for reproducibility
 fix_seed = 2024
@@ -15,7 +15,7 @@ torch.manual_seed(fix_seed)
 np.random.seed(fix_seed)
 
 # Argument parser for command-line options, arguments, and sub-commands
-parser = argparse.ArgumentParser(description="WFlib")
+parser = argparse.ArgumentParser(description="pa3")
 parser.add_argument("--dataset", type=str, required=True, default="Undefended", help="Dataset name")
 parser.add_argument("--model", type=str, required=True, default="DF", help="Model name")
 parser.add_argument("--feature", type=str, default="DIR", help="Feature type, options=[DIR, DT, DT2, TAM, TAF]")

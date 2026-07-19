@@ -3,7 +3,7 @@ import numpy as np
 from typing import Any, List, Dict, Tuple
 
 import math
-from WFlib.utils.statistics import find_bursts, sample_from_cdf, empirical_cdf
+from pa3.utils.statistics import find_bursts, sample_from_cdf, empirical_cdf
 
 
 # ---------------------------------------------------------------------------
@@ -646,7 +646,7 @@ class RosettaAugmentor(FlowAugmentor):
 
     The public Rosetta code augments CSV packet-size sequences rather than
     emitting modified pcap/raw traces. This implementation adapts the same
-    packet aggregation and packet loss ideas to WFLib flow dictionaries while
+    packet aggregation and packet loss ideas to pa3 flow dictionaries while
     preserving aligned timestamp, direction, and length/size arrays.
     """
     EPSILON = 1e-9

@@ -5,8 +5,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 import random
 import numpy as np
 import pytest
-from WFlib.tools.augmentor import NetCLRAugmentor, SlopeAugmentor, RosettaAugmentor, dict_to_raw, DyWinAugmentor, dict_to_raw
-from WFlib.utils.statistics import find_bursts
+from pa3.tools.augmentor import NetCLRAugmentor, SlopeAugmentor, RosettaAugmentor, dict_to_raw, DyWinAugmentor, dict_to_raw
+from pa3.utils.statistics import find_bursts
 from fixture import (
     make_trace, make_short_trace, make_augmentor, assert_valid_result,
     make_slope_augmentor, make_flow,
@@ -1036,7 +1036,7 @@ class TestRosettaAugmentor:
         length = np.array([10, 20, 30, 40], dtype=np.int64)
         timestamp = np.array([0.0, 0.1, 0.2, 0.3], dtype=np.float64)
         draws = iter([0.5, 0.4, 0.6, 0.1])
-        monkeypatch.setattr("WFlib.tools.augmentor.random.random", lambda: next(draws))
+        monkeypatch.setattr("pa3.tools.augmentor.random.random", lambda: next(draws))
 
         result = aug._apply_packet_loss("length", direction, length, timestamp)
 
@@ -1047,7 +1047,7 @@ class TestRosettaAugmentor:
     def test_aggregation_does_not_cross_direction_changes(self, monkeypatch):
         aug = RosettaAugmentor(loss_rate_max=0.0, max_rtt=1.0, mss=1000, warmup_packets=0)
         flow = self._make_flow()
-        monkeypatch.setattr("WFlib.tools.augmentor.random.random", lambda: 1.0)
+        monkeypatch.setattr("pa3.tools.augmentor.random.random", lambda: 1.0)
 
         result = aug._apply_nagle(
             "length", flow["direction"], flow["length"], flow["timestamp"]
@@ -1062,7 +1062,7 @@ class TestRosettaAugmentor:
         direction = np.array([-1, -1, -1], dtype=np.int64)
         length = np.array([800, 800, 800], dtype=np.int64)
         timestamp = np.array([0.0, 0.01, 0.02], dtype=np.float64)
-        monkeypatch.setattr("WFlib.tools.augmentor.random.random", lambda: 1.0)
+        monkeypatch.setattr("pa3.tools.augmentor.random.random", lambda: 1.0)
 
         result = aug._apply_nagle("length", direction, length, timestamp)
 

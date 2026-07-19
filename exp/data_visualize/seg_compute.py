@@ -8,11 +8,11 @@ from tqdm import tqdm
 import time
 import logging
 
-from WFlib.tools.visualize import *
-from WFlib.tools.capture import *
-from WFlib.tools.analyzer import *
+from pa3.tools.visualize import *
+from pa3.tools.capture import *
+from pa3.tools.analyzer import *
 
-from WFlib.utils.config import SUPPORTED_BASE, SUPPORTED_PROTOCOL, default_override_prefs, get_tshark_path
+from pa3.utils.config import SUPPORTED_BASE, SUPPORTED_PROTOCOL, default_override_prefs, get_tshark_path
 
 DEBUG = False
 
