@@ -1,7 +1,14 @@
 #!/bin/bash
 
+_pa3_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${_pa3_script_dir}/_load_env.sh" ]]; then
+    source "${_pa3_script_dir}/_load_env.sh"
+else
+    source "${_pa3_script_dir}/../_load_env.sh"
+fi
+
 # Example usage:
-# gen_all_transforms /data/exp/lxyu/Dataset/WF/Reproduce/features/vmess/raw.npz
+# gen_all_transforms ${PA3_REPO_ROOT}/Reproduce/features/vmess/raw.npz
 # Function to generate size, dt, tsam versions from raw .npz input.
 # Replaces the leading "raw" in the basename (e.g. raw_bs_filter_4.npz -> size_bs_filter_4.npz).
 gen_all_transforms() {
@@ -28,8 +35,8 @@ gen_all_transforms() {
     done
 }
 
-root_dir="/data/exp/lxyu/Dataset/WF/Reproduce/features"
-cdf_dir="/data/exp/lxyu/Dataset/WF/VisualSeg/cdf"
+root_dir="${PA3_REPO_ROOT}/Reproduce/features"
+cdf_dir="${PA3_REPO_ROOT}/VisualSeg/cdf"
 
 protocols=(vmess shadowsocks trojan)
 

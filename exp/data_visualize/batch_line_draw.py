@@ -1,9 +1,11 @@
 import exp.data_visualize.line_draw as line_draw
 import json
 import logging
+import os
 
-input_root = "/data/exp/lxyu/Dataset/WF/Dataset"
-output_root = "/data/exp/lxyu/Dataset/WF/VisualSeg"
+pa3_repo_root = os.environ["PA3_REPO_ROOT"]
+input_root = os.path.join(pa3_repo_root, "Dataset")
+output_root = os.path.join(pa3_repo_root, "VisualSeg")
 base = 'tcp'
 
 logger = logging.getLogger(__name__)

@@ -1,8 +1,15 @@
 #!/bin/bash
+
+_pa3_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${_pa3_script_dir}/_load_env.sh" ]]; then
+    source "${_pa3_script_dir}/_load_env.sh"
+else
+    source "${_pa3_script_dir}/../_load_env.sh"
+fi
 # set -x
 
-root_dir="/data/exp/lxyu/Dataset/WF/Reproduce"
-csv_dir="/data/exp/lxyu/Dataset/WF/VisualSeg/csv_db_extract"
+root_dir="${PA3_REPO_ROOT}/Reproduce"
+csv_dir="${PA3_REPO_ROOT}/VisualSeg/csv_db_extract"
 
 coverage=0.4
 coverage_tag=4

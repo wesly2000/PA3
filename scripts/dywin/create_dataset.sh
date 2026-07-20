@@ -1,9 +1,16 @@
 #!/bin/bash
 
+_pa3_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${_pa3_script_dir}/_load_env.sh" ]]; then
+    source "${_pa3_script_dir}/_load_env.sh"
+else
+    source "${_pa3_script_dir}/../_load_env.sh"
+fi
+
 seq_len=10000
 
 # Example usage:
-# gen_all_transforms /data/exp/lxyu/Dataset/WF/Reproduce/features/vmess/raw.npz
+# gen_all_transforms ${PA3_REPO_ROOT}/Reproduce/features/vmess/raw.npz
 # Function to generate size, dt, tsam versions from raw .npz input.
 # Replaces the leading "raw" in the basename (e.g. raw_bs_filter_4.npz -> size_bs_filter_4.npz).
 gen_all_transforms() {
@@ -30,7 +37,7 @@ gen_all_transforms() {
     done
 }
 
-root_dir="/data/exp/lxyu/Dataset/WF/Reproduce/features"
+root_dir="${PA3_REPO_ROOT}/Reproduce/features"
 
 python exp/dataset_process/data_augmentation_dywin.py -i ${root_dir}/vmess/raw.npz -o ${root_dir}/vmess/raw_dywin.npz
 

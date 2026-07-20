@@ -1,6 +1,13 @@
 #!/bin/bash
 
-root_dir="/data/exp/lxyu/Dataset/WF/Reproduce"
+_pa3_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${_pa3_script_dir}/_load_env.sh" ]]; then
+    source "${_pa3_script_dir}/_load_env.sh"
+else
+    source "${_pa3_script_dir}/../_load_env.sh"
+fi
+
+root_dir="${PA3_REPO_ROOT}/Reproduce"
 iter_num=5
 device="cuda:0"
 protocols=(vmess shadowsocks trojan)
