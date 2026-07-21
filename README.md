@@ -22,11 +22,17 @@ For paper results reproduction purpose, we only need the Python repo, which shou
 *Other repoes are not provided now since we need to anonymize the repo information in paper submission stage. Providing a lot of links in the paper might make it cumbersome. Later they would be released together.*
 
 ## Installation
-Clone this repo, and in the repo root, execute:
+Clone this repo, and in the repo root, execute (conda or other venv manager is highly recommended):
 ```
 pip install --user .
 ```
-a Python >= 3.8 is required.
+a Python >= 3.8 is required. We've tested version 3.9.18 on `Debian GNU/Linux 10` and version 3.10.9 on `Windows 11`.
+
+After installation, in the repo root, run
+```
+pytest exp/tests
+```
+all tests should pass. It is normal that some tests are skipped since Wireshark plugins are not installed, so parsing and decrypting proxied traffic from `.pcap` is not possible. So, we don't need the corresponding tests. The parsing results are prepared in `VisualSeg`. After *de-anonymization*, these plugins would be released. Parsing from the source `.pcap` files would be valid at that time.
 
 If the `bash` scripts could not be executed normally, please use
 ```
@@ -35,6 +41,8 @@ chmod +x [script name].sh
 to allow execution.
 
 ## Dataset Preparation
+We upload the datasets to `storage.to` for anonymity, which includes 2 links: [VisualSeg](https://storage.to/c/GA8L6yRhs), which is used to reproduce the *structual fingerprinting* results, and [Reproduce](https://storage.to/c/524xauyCl), which is used to reproduce WF model performance with several drift mitigating methods, plus the ablation study.
+
 Please unzip all `.tar.gz` files under `Reproduce` and `VisualSeg`. Make `results` and `workspace` directories under `Reproduce`. The whole dataset directory structure should look like:
 
 ```
@@ -49,10 +57,10 @@ Please unzip all `.tar.gz` files under `Reproduce` and `VisualSeg`. Make `result
        
 ```
 
-Before reproduction, please create `.env` and configure `PA3_REPO_ROOT`. The whole repo relies this variable to locate the data. `.env.example` gives a default configuration.
+Before reproduction, please create `.env` and configure `PA3_REPO_ROOT`. The whole repo relies this variable to locate the data. `.env.example` gives an example configuration.
 
 ## Payload-Aware Analysis
-Most of the traffic analysis results could be reproduced using `exp/data_analysis/reproduction.ipynb`. Simply run the cells one by one.
+Most of the *structual fingerprinting* results could be reproduced using `exp/data_analysis/reproduction.ipynb`. Simply run the cells one by one.
 
 ## Drift Mitigation for WF models
 As described in the paper, we evaluate 6 WF models: `DF, BAPM, NetCLR, TF, TikTok` and `RF`. To mitigate the proxy-induced drift, we have 6 methods: `baseline, dywin, netclr (NetAugment), rosetta, netrand (NetRandAugment)` and `pa3`.
