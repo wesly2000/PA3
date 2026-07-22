@@ -22,6 +22,8 @@ setup(
         "captum",
         "scapy",
         "selenium",
-        "pyshark"
+        "pyshark",
+        "pytest",
+        "nest_asyncio"
     ],
 )
