@@ -8,7 +8,7 @@ setup(
     name='pa3',
     version='0.2',
     description='PA3: a framework for proxy-induced drift mitigation',
-    author='Linxiao Yu',
+    author='Anonymous Author',
     packages=find_packages(include=["pa3", "pa3.*"]),
     install_requires=[
         "tqdm",
