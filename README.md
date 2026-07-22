@@ -22,13 +22,21 @@ For paper results reproduction purpose, we only need the Python repo, which shou
 *Other repoes are not provided now since we need to anonymize the repo information in paper submission stage. Providing a lot of links in the paper might make it cumbersome. Later they would be released together.*
 
 ## Installation
+Please make sure you have [tshark](https://tshark.dev/setup/install/) installed, which is usually installed along with `Wireshark`.
+
 Clone this repo, and in the repo root, execute (conda or other venv manager is highly recommended):
 ```
 pip install --user .
 ```
 a Python >= 3.8 is required. We've tested version 3.9.18 on `Debian GNU/Linux 10` and version 3.10.9 on `Windows 11`.
 
-After installation, in the repo root, run
+After installation, you may need to modify the source code of `pyshark` library due to a [known bug](https://github.com/KimiNewt/pyshark/issues/648#issuecomment-1737362978). Locate to `pyshark/tshark/output_parser/tshark_xml.py`, and modify `Line 25`, change it to:
+
+```python
+if self._parse_summaries and self._psml_structure is None:
+```
+
+After fixing that issue, in the repo root, run
 ```
 pytest exp/tests
 ```
